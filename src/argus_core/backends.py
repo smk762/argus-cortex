@@ -50,8 +50,12 @@ def with_retries(
     """Call *fn*, retrying on *retry_on* with exponential backoff.
 
     Re-raises the last error after *attempts* tries. ``sleep`` is injectable so
-    tests exercise the backoff without wall-clock delay.
+    tests exercise the backoff without wall-clock delay. Narrow ``retry_on`` to
+    the transient failures you actually want retried — the default of
+    ``Exception`` also retries deterministic programming errors.
     """
+    if attempts < 1:
+        raise ValueError(f"attempts must be >= 1, got {attempts}")
     last: BaseException | None = None
     for attempt in range(attempts):
         try:
@@ -61,8 +65,7 @@ def with_retries(
             if attempt == attempts - 1:
                 break
             sleep(min(max_delay, base_delay * (2**attempt)))
-    assert last is not None
-    raise last
+    raise last  # type: ignore[misc]  # attempts >= 1, so a caught error was assigned
 
 
 def resolve_device(device: str = "auto") -> str:
@@ -75,14 +78,13 @@ def resolve_device(device: str = "auto") -> str:
         return device
     try:
         import torch
-
-        if torch.cuda.is_available():
-            return "cuda"
-        mps = getattr(torch.backends, "mps", None)
-        if mps is not None and mps.is_available():
-            return "mps"
-    except Exception:
-        pass
+    except ImportError:
+        return "cpu"  # no torch -> cpu; a real GPU-detection error below must surface
+    if torch.cuda.is_available():
+        return "cuda"
+    mps = getattr(torch.backends, "mps", None)
+    if mps is not None and mps.is_available():
+        return "mps"
     return "cpu"
 
 
@@ -188,7 +190,14 @@ class RemoteBackend(Backend):
 
     @classmethod
     def from_provider(cls, provider: RemoteProvider | str, **kwargs: object) -> RemoteBackend:
-        """Address a known hosted provider (its default base URL)."""
+        """Address a known hosted provider by its default base URL.
+
+        This wires up only the URL (and auth) — it does NOT adapt to a provider's
+        request/response protocol. Replicate's poll-based predictions, an
+        OpenAI-compatible ``/chat/completions`` shape, etc. are the concrete
+        subclass's job; the plain :meth:`post_json` / :meth:`get_json` here assume
+        a single synchronous JSON round-trip.
+        """
         provider = RemoteProvider(provider)
         base = REMOTE_PROVIDER_URLS[provider]
         if base is None and "base_url" not in kwargs:
@@ -213,16 +222,44 @@ class RemoteBackend(Backend):
         return self._http
 
     @staticmethod
-    def _http_errors() -> tuple[type[BaseException], ...]:
+    def _transient_errors() -> tuple[type[BaseException], ...]:
+        """Errors worth retrying: network/timeout blips, NOT 4xx/5xx responses.
+
+        ``httpx.TransportError`` covers connect/read/write/pool timeouts and
+        connection failures. A ``raise_for_status()`` 4xx/5xx (``HTTPStatusError``)
+        is deliberately excluded — a 401/404 never succeeds on retry, and a POST
+        that reached the server must not be blindly re-sent.
+        """
         try:
             import httpx
 
-            return (httpx.HTTPError,)
+            return (httpx.TransportError,)
         except ImportError:  # pragma: no cover
-            return (Exception,)
+            return (OSError,)
+
+    @staticmethod
+    def _wrap_errors() -> tuple[type[BaseException], ...]:
+        """Exception types to wrap as :class:`BackendError` (bad status, bad JSON)."""
+        try:
+            import httpx
+
+            return (httpx.HTTPError, ValueError)
+        except ImportError:  # pragma: no cover
+            return (ValueError, OSError)
+
+    def _send(self, call: Callable[[], dict], *, label: str, attempts: int) -> dict:
+        """Retry *call* on transient failures; wrap any failure in BackendError.
+
+        So callers catch one error type whether the endpoint was unreachable,
+        returned a bad status, or sent a non-JSON body.
+        """
+        try:
+            return with_retries(call, attempts=attempts, retry_on=self._transient_errors())
+        except self._wrap_errors() as exc:
+            raise BackendError(f"{label} failed: {exc}") from exc
 
     def post_json(self, path: str, payload: dict, *, attempts: int = 3) -> dict:
-        """POST JSON and return the JSON response, retrying transient failures."""
+        """POST JSON and return the JSON response; retries transient failures only."""
         client = self._client()
 
         def call() -> dict:
@@ -230,10 +267,10 @@ class RemoteBackend(Backend):
             resp.raise_for_status()
             return resp.json()
 
-        return with_retries(call, attempts=attempts, retry_on=self._http_errors())
+        return self._send(call, label=f"POST {path}", attempts=attempts)
 
     def get_json(self, path: str, *, attempts: int = 3) -> dict:
-        """GET and return the JSON response, retrying transient failures."""
+        """GET and return the JSON response; retries transient failures only."""
         client = self._client()
 
         def call() -> dict:
@@ -241,7 +278,7 @@ class RemoteBackend(Backend):
             resp.raise_for_status()
             return resp.json()
 
-        return with_retries(call, attempts=attempts, retry_on=self._http_errors())
+        return self._send(call, label=f"GET {path}", attempts=attempts)
 
     def unload(self) -> None:
         if self._http is not None:

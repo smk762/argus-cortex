@@ -59,6 +59,12 @@ def test_with_retries_does_not_catch_unlisted_exception() -> None:
         with_retries(boom, attempts=3, retry_on=(ValueError,), sleep=lambda _d: None)
 
 
+def test_with_retries_rejects_non_positive_attempts() -> None:
+    # attempts<1 must fail loudly, never `raise None` (which the old assert did under -O)
+    with pytest.raises(ValueError, match="attempts must be >= 1"):
+        with_retries(lambda: 1, attempts=0)
+
+
 # --------------------------------------------------------------------------
 # device
 # --------------------------------------------------------------------------
@@ -169,6 +175,17 @@ def test_remote_post_and_get_via_injected_client() -> None:
     assert b.post_json("/score", {"a": 1}) == {"echo": {"a": 1}}
     assert b.get_json("/health") == {"path": "/health"}
     assert fake.calls == [("/score", {"a": 1}), ("/health", None)]
+
+
+def test_remote_wraps_request_failures_in_backend_error() -> None:
+    class Failing(_FakeClient):
+        def post(self, path: str, json: dict) -> _FakeResp:
+            raise ValueError("bad json body")
+
+    b = RemoteBackend("http://host:1")
+    b._http = Failing()
+    with pytest.raises(BackendError, match="POST /score failed"):
+        b.post_json("/score", {"a": 1})
 
 
 def test_remote_unload_closes_client() -> None:
