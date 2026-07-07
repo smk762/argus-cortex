@@ -1,0 +1,20 @@
+# Managed by Copier — do not edit by hand.
+# Run `copier update` in this repo to pull template changes.
+_commit: be61abb
+_src_path: /home/smk/argus-pkg-template
+author: smk762
+description: 'Shared foundation for the Argus suite: taxonomy, versioned wire-schema
+    tooling, and the local/remote AI backend contract'
+dockerfile: Dockerfile
+github_owner: smk762
+has_cli: false
+has_server: false
+image_name: argus-core
+package_name: argus_core
+post_test: ''
+project_name: argus-core
+python_min: '3.11'
+ruff_pin: 0.15.16
+test_extras: dev
+version_build_arg: false
+
