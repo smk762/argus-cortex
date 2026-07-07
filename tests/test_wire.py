@@ -57,6 +57,27 @@ def test_versioned_base_refuses_incompatible_major() -> None:
         Model.model_validate({"proof_version": "2.0", "x": 3})
 
 
+def test_check_version_raises_custom_error_type() -> None:
+    class MyError(RuntimeError):
+        pass
+
+    with pytest.raises(MyError, match="not supported"):
+        check_version("2.0", ("1",), error=MyError)
+
+
+def test_versioned_base_raises_custom_error_type() -> None:
+    class MyError(RuntimeError):
+        pass
+
+    Base = make_versioned_base("proof_version", "1.0", ("1",), error=MyError)
+
+    class Model(Base):  # type: ignore[misc, valid-type]
+        x: int = 0
+
+    with pytest.raises(MyError):
+        Model.model_validate({"proof_version": "2.0"})
+
+
 def test_versioned_base_supports_custom_field_name() -> None:
     Base = make_versioned_base("manifest_version", "2.0", ("1", "2"))
 

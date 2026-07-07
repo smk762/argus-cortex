@@ -35,17 +35,23 @@ def schema_major(version: str) -> str:
     return version.split(".", 1)[0]
 
 
-def check_version(version: str, supported_majors: Sequence[str], *, label: str = "wire schema") -> None:
-    """Raise :class:`VersionError` if *version*'s major is not supported.
+def check_version(
+    version: str,
+    supported_majors: Sequence[str],
+    *,
+    label: str = "wire schema",
+    error: type[Exception] = VersionError,
+) -> None:
+    """Raise if *version*'s major is not supported.
 
     The single gate every deserialization path runs through, so an incompatible
-    payload is refused with a clear, consistent message across the suite.
+    payload is refused with a clear, consistent message across the suite. Pass
+    ``error`` to raise a package's own exception type (e.g. ``ProofError``) so
+    version failures fold into that package's error hierarchy.
     """
     if schema_major(version) not in tuple(supported_majors):
         understood = ", ".join(f"{m}.x" for m in supported_majors)
-        raise VersionError(
-            f"{label} {version} is not supported (this build understands {understood}) — upgrade or regenerate"
-        )
+        raise error(f"{label} {version} is not supported (this build understands {understood}) — upgrade or regenerate")
 
 
 def make_versioned_base(
@@ -55,6 +61,7 @@ def make_versioned_base(
     *,
     label: str | None = None,
     class_name: str = "VersionedBase",
+    error: type[Exception] = VersionError,
 ) -> type[BaseModel]:
     """Build a Pydantic base that stamps and version-checks *field_name*.
 
@@ -62,13 +69,13 @@ def make_versioned_base(
     *current*) and, on construction or ``model_validate``, refuse a payload
     whose major is not in *supported_majors*. Keeping the field name a parameter
     lets each package keep its readable name (``proof_version``, …) while sharing
-    the logic.
+    the logic; ``error`` selects the exception type raised on a mismatch.
     """
     majors = tuple(supported_majors)
     lbl = label or field_name
 
     def _check_wire_version(self: BaseModel) -> BaseModel:
-        check_version(getattr(self, field_name), majors, label=lbl)
+        check_version(getattr(self, field_name), majors, label=lbl, error=error)
         return self
 
     namespace = {
