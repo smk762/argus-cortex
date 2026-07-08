@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel
 
-from argus_core.wire import (
+from argus_cortex.wire import (
     VersionError,
     check_version,
     make_versioned_base,

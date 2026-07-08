@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import argus_core
+import argus_cortex
 
 
 def test_version_is_exposed() -> None:
-    assert isinstance(argus_core.__version__, str)
-    assert argus_core.__version__
+    assert isinstance(argus_cortex.__version__, str)
+    assert argus_cortex.__version__

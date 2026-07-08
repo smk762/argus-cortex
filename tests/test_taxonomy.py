@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from argus_core.taxonomy import TARGET_CATEGORIES, TARGET_STYLES, TargetProfile
+from argus_cortex.taxonomy import TARGET_CATEGORIES, TARGET_STYLES, TargetProfile
 
 
 def test_defaults() -> None:

@@ -9,10 +9,10 @@ dockerfile: Dockerfile
 github_owner: smk762
 has_cli: false
 has_server: false
-image_name: argus-core
-package_name: argus_core
+image_name: argus-cortex
+package_name: argus_cortex
 post_test: ''
-project_name: argus-core
+project_name: argus-cortex
 python_min: '3.11'
 ruff_pin: 0.15.16
 test_extras: dev

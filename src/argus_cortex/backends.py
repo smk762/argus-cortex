@@ -11,7 +11,7 @@ to point at a **hosted service by IP/port** instead of loading weights locally.
 * :class:`LocalBackend` — runs inference in-process on a resolved device.
 * :class:`RemoteBackend` — calls a hosted HTTP endpoint (``base_url`` or
   ``host``/``port``, or a known :class:`RemoteProvider`); httpx lives behind the
-  ``argus-core[remote]`` extra and is imported lazily.
+  ``argus-cortex[remote]`` extra and is imported lazily.
 
 Concrete, domain-specific adapters (a CLIP scorer, an OpenAI captioner) subclass
 these in the consuming package; this module stays domain-agnostic.
@@ -158,7 +158,7 @@ class RemoteBackend(Backend):
     Point it at a service by ``base_url``, by ``host``/``port`` via
     :meth:`from_host`, or at a known provider via :meth:`from_provider`. An
     ``api_key`` becomes a bearer ``Authorization`` header unless one is already
-    supplied. httpx is imported lazily (``argus-core[remote]``); an injected
+    supplied. httpx is imported lazily (``argus-cortex[remote]``); an injected
     ``_http`` client (tests) bypasses the import.
     """
 
@@ -215,7 +215,7 @@ class RemoteBackend(Backend):
             try:
                 import httpx
             except ImportError as exc:  # pragma: no cover - exercised only without the extra
-                raise BackendError("remote backends need: pip install argus-core[remote]") from exc
+                raise BackendError("remote backends need: pip install argus-cortex[remote]") from exc
             if not self.base_url:
                 raise BackendError("remote backend has no base_url")
             self._http = httpx.Client(base_url=self.base_url, timeout=self.timeout, headers=self.headers)
