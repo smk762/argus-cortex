@@ -1,19 +1,19 @@
-"""argus-core — Shared foundation for the Argus suite: taxonomy, versioned wire-schema tooling, and the local/remote AI backend contract"""
+"""argus-cortex — Shared foundation for the Argus suite: taxonomy, versioned wire-schema tooling, and the local/remote AI backend contract"""
 
 from __future__ import annotations
 
 try:
     # Written by hatch-vcs at build time (see pyproject [tool.hatch.build.hooks.vcs]).
-    from argus_core._version import __version__
+    from argus_cortex._version import __version__
 except ImportError:  # running from a source checkout that hasn't been built
     from importlib.metadata import PackageNotFoundError, version
 
     try:
-        __version__ = version("argus-core")
+        __version__ = version("argus-cortex")
     except PackageNotFoundError:
         __version__ = "0.0.0+unknown"
 
-from argus_core.backends import (
+from argus_cortex.backends import (
     Backend,
     BackendError,
     BackendKind,
@@ -23,8 +23,8 @@ from argus_core.backends import (
     resolve_device,
     with_retries,
 )
-from argus_core.taxonomy import TargetCategory, TargetProfile, TargetStyle
-from argus_core.wire import (
+from argus_cortex.taxonomy import TargetCategory, TargetProfile, TargetStyle
+from argus_cortex.wire import (
     VersionError,
     check_version,
     make_versioned_base,

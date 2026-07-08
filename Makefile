@@ -24,4 +24,4 @@ build:  ## Build sdist + wheel
 	$(UV) build
 
 clean:  ## Remove build + cache artifacts
-	rm -rf dist build .venv *.egg-info .pytest_cache .ruff_cache src/argus_core/_version.py
+	rm -rf dist build .venv *.egg-info .pytest_cache .ruff_cache src/argus_cortex/_version.py

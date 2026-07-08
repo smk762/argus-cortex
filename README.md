@@ -1,4 +1,4 @@
-# argus-core
+# argus-cortex
 
 Shared foundation for the Argus suite: taxonomy, versioned wire-schema tooling, and the local/remote AI backend contract.
 
@@ -6,13 +6,13 @@ Part of the [Argus suite](https://github.com/smk762?tab=repositories&q=argus) (q
 
 ## What's here
 
-- **`argus_core.taxonomy`** — `TargetProfile` / `TargetStyle` / `TargetCategory`, the "moat" types every stage inherits verbatim.
-- **`argus_core.wire`** — the versioned wire-schema toolkit: `check_version()` (major-compatibility gate), `make_versioned_base()` (a Pydantic base that stamps + checks a version field like `proof_version` / `manifest_version`), and `wire_schema()` / `render_schema()` for the committed-schema `schema --check` CLI pattern.
-- **`argus_core.backends`** — the AI-backend contract generalised from argus-lens: `Backend` / `LocalBackend` / `RemoteBackend` (point at a hosted service by `base_url`, `host`/`port`, or a known `RemoteProvider`), plus `with_retries()` and `resolve_device()`. httpx lives behind the `[remote]` extra.
+- **`argus_cortex.taxonomy`** — `TargetProfile` / `TargetStyle` / `TargetCategory`, the "moat" types every stage inherits verbatim.
+- **`argus_cortex.wire`** — the versioned wire-schema toolkit: `check_version()` (major-compatibility gate), `make_versioned_base()` (a Pydantic base that stamps + checks a version field like `proof_version` / `manifest_version`), and `wire_schema()` / `render_schema()` for the committed-schema `schema --check` CLI pattern.
+- **`argus_cortex.backends`** — the AI-backend contract generalised from argus-lens: `Backend` / `LocalBackend` / `RemoteBackend` (point at a hosted service by `base_url`, `host`/`port`, or a known `RemoteProvider`), plus `with_retries()` and `resolve_device()`. httpx lives behind the `[remote]` extra.
 
 ```python
-from argus_core.wire import make_versioned_base, render_schema
-from argus_core.backends import RemoteBackend, RemoteProvider
+from argus_cortex.wire import make_versioned_base, render_schema
+from argus_cortex.backends import RemoteBackend, RemoteProvider
 
 # per-package versioned base (readable field name kept local, logic shared)
 _Versioned = make_versioned_base("proof_version", "1.0", ("1",))
@@ -25,8 +25,8 @@ nim = RemoteBackend.from_provider(RemoteProvider.NVIDIA_NIM, api_key="…")
 ## Install
 
 ```bash
-uv pip install argus-core            # core (pydantic + structlog only)
-uv pip install "argus-core[remote]"  # + httpx for RemoteBackend
+uv pip install argus-cortex            # core (pydantic only)
+uv pip install "argus-cortex[remote]"  # + httpx for RemoteBackend
 ```
 
 ## Develop

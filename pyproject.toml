@@ -3,7 +3,7 @@ requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
-name = "argus-core"
+name = "argus-cortex"
 dynamic = ["version"]
 description = "Shared foundation for the Argus suite: taxonomy, versioned wire-schema tooling, and the local/remote AI backend contract"
 readme = "README.md"
@@ -28,16 +28,16 @@ remote = ["httpx>=0.27"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff==0.15.16"]
 
 [project.urls]
-Repository = "https://github.com/smk762/argus-core"
+Repository = "https://github.com/smk762/argus-cortex"
 
 [tool.hatch.version]
 source = "vcs"
 
 [tool.hatch.build.hooks.vcs]
-version-file = "src/argus_core/_version.py"
+version-file = "src/argus_cortex/_version.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/argus_core"]
+packages = ["src/argus_cortex"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -47,7 +47,7 @@ filterwarnings = ["ignore::DeprecationWarning"]
 [tool.ruff]
 target-version = "py311"
 line-length = 120
-extend-exclude = ["src/argus_core/_version.py"]
+extend-exclude = ["src/argus_cortex/_version.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]

@@ -4,7 +4,7 @@ import importlib.util
 
 import pytest
 
-from argus_core.backends import (
+from argus_cortex.backends import (
     Backend,
     BackendError,
     BackendKind,
@@ -76,7 +76,7 @@ def test_resolve_device_passes_explicit_through() -> None:
 
 
 def test_resolve_device_auto_falls_back_to_cpu_without_torch() -> None:
-    # torch isn't a dependency of argus-core, so "auto" resolves to cpu here.
+    # torch isn't a dependency of argus-cortex, so "auto" resolves to cpu here.
     if importlib.util.find_spec("torch") is None:
         assert resolve_device("auto") == "cpu"
 
@@ -199,5 +199,5 @@ def test_remote_unload_closes_client() -> None:
 
 @pytest.mark.skipif(_HAS_HTTPX, reason="httpx installed; the missing-extra path can't be exercised")
 def test_client_without_httpx_raises_helpful_error() -> None:
-    with pytest.raises(BackendError, match=r"argus-core\[remote\]"):
+    with pytest.raises(BackendError, match=r"argus-cortex\[remote\]"):
         RemoteBackend("http://host:1")._client()

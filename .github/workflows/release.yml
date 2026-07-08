@@ -45,7 +45,7 @@ jobs:
         run: |
           uv venv --python ${{ matrix.python-version }}
           uv pip install dist/*.whl
-          uv run --no-sync python -c "import argus_core; print(f'argus-core {argus_core.__version__} OK')"
+          uv run --no-sync python -c "import argus_cortex; print(f'argus-cortex {argus_cortex.__version__} OK')"
 
   publish-testpypi:
     runs-on: ubuntu-latest
