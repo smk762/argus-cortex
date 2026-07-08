@@ -23,6 +23,18 @@ from argus_cortex.backends import (
     resolve_device,
     with_retries,
 )
+from argus_cortex.store import (
+    Caption,
+    HumanEdit,
+    LineageStore,
+    NullLineageStore,
+    PostgresLineageStore,
+    SourceAsset,
+    StoreConfig,
+    StoreError,
+    TrainingRun,
+    open_lineage_store,
+)
 from argus_cortex.taxonomy import TargetCategory, TargetProfile, TargetStyle
 from argus_cortex.wire import (
     VersionError,
@@ -55,4 +67,15 @@ __all__ = [
     "RemoteProvider",
     "resolve_device",
     "with_retries",
+    # store (optional stateful services layer)
+    "StoreConfig",
+    "LineageStore",
+    "NullLineageStore",
+    "PostgresLineageStore",
+    "StoreError",
+    "open_lineage_store",
+    "Caption",
+    "HumanEdit",
+    "SourceAsset",
+    "TrainingRun",
 ]
