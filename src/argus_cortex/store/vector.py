@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 from pydantic import BaseModel, Field
 
 from argus_cortex.store.config import StoreConfig
-from argus_cortex.store.errors import require_extra, wrap_errors
+from argus_cortex.store.errors import require_extra, resolve_error_types, wrap_errors
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -65,30 +65,18 @@ def normalise_point_id(point_id: str | int) -> str | int:
 def _qdrant_error_types() -> tuple[type[BaseException], ...]:
     """qdrant-client's operational exceptions, so failures fold into StoreError.
 
-    Best-effort, cached once (the classes are process-global): qdrant-client's
-    exception names have shifted across versions and the transport (REST/httpx vs
-    gRPC) varies, so anything that can't be resolved is skipped — a raw error then
-    propagates rather than the wrapping itself crashing. Empty only when neither
+    Cached once (the classes are process-global). qdrant-client's exception names
+    have shifted across versions and the transport (REST/httpx vs gRPC) varies, so
+    any name that can't be resolved is skipped. Empty only when neither
     qdrant-client nor httpx is importable, in which case the missing-driver path
     has already raised StoreError before any operation runs.
     """
-    errs: list[type[BaseException]] = []
-    try:
-        from qdrant_client.http import exceptions as qe
-
-        for name in ("UnexpectedResponse", "ResponseHandlingException", "ApiException"):
-            cls = getattr(qe, name, None)
-            if isinstance(cls, type) and issubclass(cls, BaseException):
-                errs.append(cls)
-    except ImportError:  # pragma: no cover - no driver means no operational errors to wrap
-        pass
-    try:
-        import httpx
-
-        errs.append(httpx.HTTPError)
-    except ImportError:  # pragma: no cover
-        pass
-    return tuple(errs)
+    return resolve_error_types(
+        (
+            ("qdrant_client.http.exceptions", ("UnexpectedResponse", "ResponseHandlingException", "ApiException")),
+            ("httpx", "HTTPError"),
+        )
+    )
 
 
 class VectorHit(BaseModel):

@@ -29,11 +29,12 @@ from typing import Any, Protocol, runtime_checkable
 from urllib.parse import urlparse
 
 from argus_cortex.store.config import StoreConfig
-from argus_cortex.store.errors import require_extra, wrap_errors
+from argus_cortex.store.errors import StoreError, require_extra, resolve_error_types, wrap_errors
 
-# S3 error codes that mean "the object/bucket isn't there" — a normal absence
-# (return False/None), not an operational failure to wrap in StoreError.
-_NOT_FOUND_CODES = frozenset({"NoSuchKey", "NoSuchObject", "NoSuchObjectKey", "NoSuchBucket", "NoSuchUpload"})
+# S3 error codes that mean "the OBJECT isn't there" — a normal absence (get -> None,
+# exists -> False). A missing *bucket* (NoSuchBucket) is deliberately excluded: that
+# is a misconfiguration the caller must see as a StoreError, not silent emptiness.
+_NOT_FOUND_CODES = frozenset({"NoSuchKey", "NoSuchObject", "NoSuchObjectKey"})
 
 _DEFAULT_CONTENT_TYPE = "application/octet-stream"
 _DEFAULT_REGION = "us-east-1"
@@ -52,11 +53,18 @@ def _parse_endpoint(endpoint: str) -> tuple[str, bool]:
     """Split a ``CORTEX_S3_ENDPOINT`` into minio's ``(host:port, secure)`` form.
 
     ``http://host:9000`` → ``("host:9000", False)``; ``https://host`` →
-    ``("host", True)``; a bare ``host:9000`` (no scheme) → ``("host:9000", False)``.
+    ``("host", True)``. A **scheme-less** ``host:9000`` defaults to ``secure=True``
+    (TLS) so a missing scheme never silently sends credentials in cleartext — write
+    an explicit ``http://`` for a plaintext endpoint. Credentials embedded in the
+    URL are rejected (use ``CORTEX_S3_ACCESS_KEY`` / ``CORTEX_S3_SECRET_KEY``).
     """
     if "://" not in endpoint:
-        return endpoint, False
+        return endpoint, True
     parsed = urlparse(endpoint)
+    if "@" in parsed.netloc:
+        raise StoreError(
+            "CORTEX_S3_ENDPOINT must not embed credentials — set CORTEX_S3_ACCESS_KEY / CORTEX_S3_SECRET_KEY instead"
+        )
     return parsed.netloc, parsed.scheme == "https"
 
 
@@ -69,25 +77,14 @@ def _is_not_found(exc: BaseException) -> bool:
 def _s3_error_types() -> tuple[type[BaseException], ...]:
     """minio's operational exceptions, so failures fold into StoreError.
 
-    Cached once (classes are process-global) and imported lazily. ``S3Error``
-    (bad response) derives from ``MinioException``; ``urllib3.HTTPError`` covers
-    transport failures. Empty only when neither is importable, in which case the
-    missing-driver path has already raised StoreError before any operation runs.
+    Cached once (classes are process-global). ``S3Error`` (bad response) derives
+    from ``MinioException``; ``urllib3.HTTPError`` covers transport failures. Plain
+    ``ValueError`` is included because minio raises it for client-side validation
+    (out-of-range presign expiry, invalid bucket name, credentials in the endpoint)
+    — inside the store's ``op()`` closures the only ValueError source is a minio
+    call, so wrapping it keeps the single-StoreError contract without masking bugs.
     """
-    errs: list[type[BaseException]] = []
-    try:
-        from minio.error import MinioException
-
-        errs.append(MinioException)
-    except ImportError:  # pragma: no cover - no driver means no operational errors to wrap
-        pass
-    try:
-        import urllib3
-
-        errs.append(urllib3.exceptions.HTTPError)
-    except ImportError:  # pragma: no cover
-        pass
-    return tuple(errs)
+    return resolve_error_types((("minio.error", "MinioException"), ("urllib3.exceptions", "HTTPError"))) + (ValueError,)
 
 
 @runtime_checkable
@@ -211,11 +208,16 @@ class S3BlobStore:
                 return
             try:
                 client.make_bucket(self.bucket, location=self.region or _DEFAULT_REGION)
-            except Exception:
+            except _s3_error_types() as exc:
                 # make_bucket isn't idempotent; if a concurrent worker created the
-                # bucket, that's the outcome we wanted, otherwise the error is real.
-                if not client.bucket_exists(self.bucket):
-                    raise
+                # bucket, that's the outcome we wanted, otherwise re-raise the real
+                # error. Guard the re-check so a flaky re-check can't mask *exc*.
+                try:
+                    present = client.bucket_exists(self.bucket)
+                except _s3_error_types():
+                    present = False
+                if not present:
+                    raise exc
 
         wrap_errors(op, errors=_s3_error_types(), label="ensure_bucket")
 
@@ -278,7 +280,13 @@ class S3BlobStore:
         return key
 
     def close(self) -> None:
-        self._client_obj = None
+        # minio's client has no public close(), but an injected client (tests) may;
+        # call it if present, mirroring the vector store.
+        if self._client_obj is not None:
+            close = getattr(self._client_obj, "close", None)
+            if callable(close):
+                close()
+            self._client_obj = None
 
 
 def open_blob_store(config: StoreConfig | None = None) -> BlobStore:
@@ -297,5 +305,6 @@ def open_blob_store(config: StoreConfig | None = None) -> BlobStore:
             config.s3_bucket,
             access_key=config.s3_access_key,
             secret_key=config.s3_secret_key,
+            region=config.s3_region,
         )
     return NullBlobStore()

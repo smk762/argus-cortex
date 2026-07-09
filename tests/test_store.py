@@ -32,11 +32,13 @@ def test_store_config_from_env_reads_cortex_vars() -> None:
             "CORTEX_PG_URL": "postgresql://localhost/argus",
             "CORTEX_QDRANT_URL": "http://localhost:6333",
             "CORTEX_S3_BUCKET": "argus",
+            "CORTEX_S3_REGION": "eu-west-1",
         }
     )
     assert cfg.pg_url == "postgresql://localhost/argus"
     assert cfg.qdrant_url == "http://localhost:6333"
     assert cfg.s3_bucket == "argus"
+    assert cfg.s3_region == "eu-west-1"
     assert cfg.s3_endpoint is None
 
 

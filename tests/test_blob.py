@@ -57,6 +57,7 @@ class _FakeMinio:
         self.made: list[tuple[str, str]] = []
         self.puts: list[tuple[str, str]] = []
         self.presigned: list[tuple[str, str, object]] = []
+        self.last_response: _FakeResponse | None = None
 
     def bucket_exists(self, bucket: str) -> bool:
         return bucket in self.buckets
@@ -72,7 +73,8 @@ class _FakeMinio:
     def get_object(self, bucket: str, key: str) -> _FakeResponse:
         if (bucket, key) not in self.objects:
             raise _FakeS3Error("NoSuchKey")
-        return _FakeResponse(self.objects[(bucket, key)][0])
+        self.last_response = _FakeResponse(self.objects[(bucket, key)][0])
+        return self.last_response
 
     def stat_object(self, bucket: str, key: str) -> object:
         if (bucket, key) not in self.objects:
@@ -101,7 +103,13 @@ def test_content_key_is_sha256_hex() -> None:
 def test_parse_endpoint_forms() -> None:
     assert _parse_endpoint("http://localhost:9000") == ("localhost:9000", False)
     assert _parse_endpoint("https://minio.example.com") == ("minio.example.com", True)
-    assert _parse_endpoint("localhost:9000") == ("localhost:9000", False)  # bare host:port
+    # scheme-less defaults to TLS so a missing scheme never sends creds in cleartext
+    assert _parse_endpoint("minio.example.com:9000") == ("minio.example.com:9000", True)
+
+
+def test_parse_endpoint_rejects_embedded_credentials() -> None:
+    with pytest.raises(StoreError, match="must not embed credentials"):
+        _parse_endpoint("http://key:secret@minio:9000")
 
 
 # --------------------------------------------------------------------------
@@ -165,13 +173,11 @@ def test_get_releases_the_connection() -> None:
     client = _FakeMinio(buckets={"argus"})
     store = _store_with(client)
     store.put("k", b"data")
-    # read the response so we can assert it was closed/released
-    resp = client.get_object("argus", "k")
-    store.get("k")
-    # the store's own response is internal; assert our probe object is unaffected,
-    # and that a fresh get works repeatedly (no leaked/again-consumed stream)
-    assert resp.read() == b"data"
     assert store.get("k") == b"data"
+    # the exact response object the store used must have been closed + released
+    assert client.last_response is not None
+    assert client.last_response.closed is True
+    assert client.last_response.released is True
 
 
 def test_put_content_addressed_returns_sha_and_dedupes() -> None:
@@ -204,9 +210,12 @@ def test_ensure_bucket_creates_when_absent_and_skips_when_present() -> None:
     assert present.made == []  # idempotent: no create when it already exists
 
 
+@pytest.mark.skipif(not _HAS_MINIO, reason="needs a real minio/urllib3 error type in the narrow except tuple")
 def test_ensure_bucket_tolerates_lost_create_race() -> None:
+    import urllib3
+
     # make_bucket fails, but the bucket exists on re-check (a concurrent worker
-    # created it) -> ensure_bucket must not raise. Duck-typed, no real driver needed.
+    # created it) -> ensure_bucket must not raise.
     class _RaceMinio(_FakeMinio):
         def __init__(self) -> None:
             super().__init__(buckets=set())
@@ -217,9 +226,47 @@ def test_ensure_bucket_tolerates_lost_create_race() -> None:
             return self._checks > 1  # absent on pre-check, present on post-error re-check
 
         def make_bucket(self, bucket: str, location: str | None = None) -> None:
-            raise _FakeS3Error("BucketAlreadyOwnedByYou")
+            raise urllib3.exceptions.HTTPError("bucket already exists")
 
     _store_with(_RaceMinio()).ensure_bucket()  # must not raise
+
+
+@pytest.mark.skipif(not _HAS_MINIO, reason="needs a real minio/urllib3 error type in the narrow except tuple")
+def test_ensure_bucket_reraises_when_still_absent() -> None:
+    import urllib3
+
+    class _FailMinio(_FakeMinio):
+        def make_bucket(self, bucket: str, location: str | None = None) -> None:
+            raise urllib3.exceptions.HTTPError("boom")
+
+    # create fails and the bucket is still absent -> surfaces as StoreError
+    store = _store_with(_FailMinio(buckets=set()))
+    with pytest.raises(StoreError, match="ensure_bucket failed"):
+        store.ensure_bucket()
+
+
+def test_get_missing_bucket_is_not_masked_as_absent() -> None:
+    # A missing *bucket* (NoSuchBucket) must NOT be swallowed as an absent object;
+    # it is a misconfiguration the caller has to see (not returned as None).
+    class _NoBucket(_FakeMinio):
+        def get_object(self, bucket: str, key: str) -> _FakeResponse:
+            raise _FakeS3Error("NoSuchBucket")
+
+    store = _store_with(_NoBucket(buckets=set()))
+    with pytest.raises(_FakeS3Error):
+        store.get("k")
+
+
+def test_url_out_of_range_expires_wrapped_in_store_error() -> None:
+    # minio raises a bare ValueError for an out-of-range expiry; it must surface
+    # as StoreError, not leak raw (ValueError is in the S3 wrap set).
+    class _BadExpiry(_FakeMinio):
+        def presigned_get_object(self, bucket: str, key: str, expires: object = None) -> str:
+            raise ValueError("expires must be between 1 second to 7 days")
+
+    store = _store_with(_BadExpiry(buckets={"argus"}))
+    with pytest.raises(StoreError, match="url failed"):
+        store.url("k", expires=30 * 24 * 3600)
 
 
 def test_close_drops_client() -> None:

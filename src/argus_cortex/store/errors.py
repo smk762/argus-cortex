@@ -17,7 +17,7 @@ import importlib
 from typing import TYPE_CHECKING, TypeVar
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable
     from types import ModuleType
 
 T = TypeVar("T")
@@ -41,6 +41,30 @@ def require_extra(module: str, extra: str, *, feature: str) -> ModuleType:
         return importlib.import_module(module)
     except ImportError as exc:  # pragma: no cover - exercised only without the extra
         raise StoreError(f"{feature} needs: pip install argus-cortex[{extra}]") from exc
+
+
+def resolve_error_types(specs: Iterable[tuple[str, str | tuple[str, ...]]]) -> tuple[type[BaseException], ...]:
+    """Resolve a driver's operational exception classes, tolerating a missing driver.
+
+    Each spec is ``(module, attr)`` or ``(module, (attr, …))`` naming exception
+    classes to catch (e.g. ``("psycopg", "Error")``, ``("httpx", "HTTPError")``).
+    A module that isn't importable, or an attribute that isn't there, is skipped —
+    so the result is empty exactly when no driver is installed (the missing-driver
+    path has already raised :class:`StoreError` before any op runs). Shared by every
+    store's cached ``_<driver>_error_types()`` so the lazy-import discipline lives
+    in one place. Non-exception attributes are ignored defensively.
+    """
+    found: list[type[BaseException]] = []
+    for module, attrs in specs:
+        try:
+            mod = importlib.import_module(module)
+        except ImportError:  # pragma: no cover - exercised only without the extra
+            continue
+        for attr in (attrs,) if isinstance(attrs, str) else attrs:
+            cls = getattr(mod, attr, None)
+            if isinstance(cls, type) and issubclass(cls, BaseException):
+                found.append(cls)
+    return tuple(found)
 
 
 def wrap_errors(op: Callable[[], T], *, errors: tuple[type[BaseException], ...], label: str) -> T:
