@@ -19,7 +19,7 @@ import json
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from argus_cortex.store.config import StoreConfig
-from argus_cortex.store.errors import StoreError, require_extra, wrap_errors
+from argus_cortex.store.errors import StoreError, require_extra, resolve_error_types, wrap_errors
 from argus_cortex.store.schema import SCHEMA_STATEMENTS
 
 if TYPE_CHECKING:
@@ -162,16 +162,11 @@ class PostgresLineageStore:
     def _db_errors() -> tuple[type[BaseException], ...]:
         """psycopg's error hierarchy, so operational failures fold into StoreError.
 
-        Imported lazily (the driver is optional). Every psycopg exception derives
-        from ``psycopg.Error``; without the driver installed there is nothing to
-        wrap (the missing-driver path raises StoreError in :meth:`_connection`).
+        Every psycopg exception derives from ``psycopg.Error``; without the driver
+        installed there is nothing to wrap (the missing-driver path raises
+        StoreError in :meth:`_connection`).
         """
-        try:
-            import psycopg
-
-            return (psycopg.Error,)
-        except ImportError:  # pragma: no cover - no driver means no operational errors to wrap
-            return ()
+        return resolve_error_types((("psycopg", "Error"),))
 
     def _insert(self, sql: str, params: tuple[Any, ...]) -> str | None:
         """Run an ``INSERT … RETURNING id`` and return the id as a string."""
