@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import importlib.util
+from datetime import datetime
+
+import pytest
+
 from argus_cortex.store import (
     Caption,
     HumanEdit,
@@ -8,10 +13,13 @@ from argus_cortex.store import (
     PostgresLineageStore,
     SourceAsset,
     StoreConfig,
+    StoreError,
     TrainingRun,
     open_lineage_store,
 )
 from argus_cortex.store.schema import SCHEMA_STATEMENTS
+
+_HAS_PSYCOPG = importlib.util.find_spec("psycopg") is not None
 
 # --------------------------------------------------------------------------
 # config
@@ -106,6 +114,7 @@ def test_open_lineage_store_with_url_returns_postgres() -> None:
 class _FakeCursor:
     def __init__(self, conn: _FakeConn) -> None:
         self._conn = conn
+        self._last_sql = ""
 
     def __enter__(self) -> _FakeCursor:
         return self
@@ -115,8 +124,13 @@ class _FakeCursor:
 
     def execute(self, sql: str, params: tuple = ()) -> None:
         self._conn.executed.append((sql, params))
+        self._last_sql = sql
 
     def fetchone(self) -> tuple:
+        # Model psycopg: fetchone requires a result-producing statement, so a
+        # dropped RETURNING clause fails here instead of silently returning an id.
+        if "RETURNING" not in self._last_sql:
+            raise RuntimeError("the last operation didn't produce a result")
         return (self._conn.next_id,)
 
     def fetchall(self) -> list[tuple]:
@@ -149,8 +163,20 @@ def test_record_asset_returns_id_and_upserts_on_sha() -> None:
     sql, params = conn.executed[-1]
     assert "INSERT INTO source_asset" in sql
     assert "ON CONFLICT (sha256)" in sql
+    # on a dedup hit, uri/immich_id/metadata are all refreshed (not just uri)
+    assert "immich_id = EXCLUDED.immich_id" in sql
+    assert "metadata = EXCLUDED.metadata" in sql
     # metadata is serialised to a JSON string for the ::jsonb cast
     assert params == ("immich://1", "abc", None, '{"k": "v"}')
+
+
+def test_json_serialises_non_native_metadata_without_raising() -> None:
+    # A datetime (or UUID/Path/Decimal) in a metadata bag must not crash the write.
+    conn = _FakeConn(next_id="asset-1")
+    store = _store_with(conn)
+    store.record_asset(SourceAsset(uri="x", metadata={"imported_at": datetime(2026, 7, 8)}))
+    _sql, params = conn.executed[-1]
+    assert '"imported_at": "2026-07-08 00:00:00"' in params[-1]
 
 
 def test_record_caption_serialises_json_columns() -> None:
@@ -168,15 +194,38 @@ def test_record_caption_serialises_json_columns() -> None:
     assert '{"target_style": "photo"}' in params  # profile jsonb
 
 
-def test_record_edit_and_training_run_and_membership() -> None:
-    conn = _FakeConn(next_id="x")
+def test_record_edit_writes_caption_id_and_text() -> None:
+    conn = _FakeConn(next_id="edit-1")
     store = _store_with(conn)
-    assert store.record_edit("cap-7", HumanEdit(edited_caption="a smiling person", editor="alice")) == "x"
-    assert store.record_training_run(TrainingRun(dataset="lora-a", base_model="sdxl")) == "x"
-    assert store.add_to_dataset("lora-a", "cap-7", edit_id="e-1") == "x"
-    membership_sql = conn.executed[-1][0]
-    assert "INSERT INTO dataset_membership" in membership_sql
-    assert "ON CONFLICT (dataset, caption_id)" in membership_sql
+    assert store.record_edit("cap-7", HumanEdit(edited_caption="a smiling person", editor="alice")) == "edit-1"
+    sql, params = conn.executed[-1]
+    assert "INSERT INTO human_edit" in sql
+    assert params == ("cap-7", "a smiling person", "alice", None)
+
+
+def test_record_training_run_writes_dataset_and_model() -> None:
+    conn = _FakeConn(next_id="run-1")
+    store = _store_with(conn)
+    assert store.record_training_run(TrainingRun(dataset="lora-a", base_model="sdxl")) == "run-1"
+    sql, params = conn.executed[-1]
+    assert "INSERT INTO training_run" in sql
+    assert params[0] == "lora-a"
+    assert params[1] == "sdxl"
+
+
+def test_add_to_dataset_preserves_links_via_coalesce() -> None:
+    conn = _FakeConn(next_id="m-1")
+    store = _store_with(conn)
+    assert store.add_to_dataset("lora-a", "cap-7", edit_id="e-1") == "m-1"
+    sql, params = conn.executed[-1]
+    assert "INSERT INTO dataset_membership" in sql
+    assert "ON CONFLICT (dataset, caption_id)" in sql
+    # the passed edit_id reaches the query...
+    assert params == ("lora-a", "cap-7", "e-1", None)
+    # ...and a re-add with an arg omitted must NOT clobber a stored link to NULL:
+    # COALESCE(EXCLUDED.col, existing) keeps the previously-recorded lineage link.
+    assert "COALESCE(EXCLUDED.edit_id, dataset_membership.edit_id)" in sql
+    assert "COALESCE(EXCLUDED.training_run_id, dataset_membership.training_run_id)" in sql
 
 
 def test_caption_edit_pairs_all() -> None:
@@ -195,6 +244,9 @@ def test_caption_edit_pairs_scoped_to_dataset() -> None:
     assert pairs == [("a", "b")]
     sql, params = conn.executed[-1]
     assert "dataset_membership" in sql
+    # must join on the dataset's *selected* edit, not just the caption, so
+    # superseded edits don't leak into the feedback-loop training set.
+    assert "m.edit_id = e.id" in sql
     assert params == ("lora-a",)
 
 
@@ -226,3 +278,18 @@ def test_connection_is_reused_across_calls() -> None:
     store.record_asset(SourceAsset(uri="a"))
     store.record_asset(SourceAsset(uri="b"))
     assert calls["n"] == 1  # connected once, reused
+
+
+@pytest.mark.skipif(not _HAS_PSYCOPG, reason="psycopg not installed; can't construct a psycopg.Error")
+def test_operational_failure_wrapped_in_store_error() -> None:
+    # A raw psycopg error (dropped connection, bad DSN, constraint violation)
+    # must surface as StoreError, the type the docstring tells callers to catch.
+    import psycopg
+
+    class _Failing(_FakeConn):
+        def cursor(self) -> _FakeCursor:  # type: ignore[override]
+            raise psycopg.OperationalError("connection refused")
+
+    store = PostgresLineageStore("postgresql://localhost/argus", connect=lambda: _Failing())
+    with pytest.raises(StoreError, match="insert failed"):
+        store.record_asset(SourceAsset(uri="x"))

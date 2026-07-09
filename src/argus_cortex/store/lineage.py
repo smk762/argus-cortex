@@ -16,13 +16,17 @@ event loop isn't blocked.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
 from argus_cortex.store.schema import SCHEMA_STATEMENTS
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from argus_cortex.store.config import StoreConfig
     from argus_cortex.store.models import Caption, HumanEdit, SourceAsset, TrainingRun
+
+T = TypeVar("T")
 
 
 class StoreError(RuntimeError):
@@ -156,42 +160,87 @@ class PostgresLineageStore:
                 self._conn = psycopg.connect(self.dsn, autocommit=True)
         return self._conn
 
+    @staticmethod
+    def _db_errors() -> tuple[type[BaseException], ...]:
+        """psycopg's error hierarchy, so operational failures fold into StoreError.
+
+        Imported lazily (the driver is optional). Every psycopg exception derives
+        from ``psycopg.Error``; without the driver installed there is nothing to
+        wrap (the missing-driver path raises StoreError in :meth:`_connection`).
+        """
+        try:
+            import psycopg
+
+            return (psycopg.Error,)
+        except ImportError:  # pragma: no cover - no driver means no operational errors to wrap
+            return ()
+
+    def _run(self, op: Callable[[], T], *, label: str) -> T:
+        """Run a DB op, wrapping driver failures in StoreError so callers catch one type.
+
+        Mirrors ``backends._send``: a bad DSN, unreachable server, constraint
+        violation, or malformed cast surfaces as :class:`StoreError`, not a raw
+        psycopg exception the caller would have to ``import psycopg`` to name.
+        """
+        try:
+            return op()
+        except self._db_errors() as exc:
+            raise StoreError(f"{label} failed: {exc}") from exc
+
     def _insert(self, sql: str, params: tuple[Any, ...]) -> str | None:
         """Run an ``INSERT … RETURNING id`` and return the id as a string."""
-        conn = self._connection()
-        with conn.cursor() as cur:
-            cur.execute(sql, params)
-            row = cur.fetchone()
-        return str(row[0]) if row and row[0] is not None else None
+
+        def op() -> str | None:
+            conn = self._connection()
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                row = cur.fetchone()
+            return str(row[0]) if row and row[0] is not None else None
+
+        return self._run(op, label="insert")
 
     def _fetchall(self, sql: str, params: tuple[Any, ...]) -> list[tuple[Any, ...]]:
-        conn = self._connection()
-        with conn.cursor() as cur:
-            cur.execute(sql, params)
-            return list(cur.fetchall())
+        def op() -> list[tuple[Any, ...]]:
+            conn = self._connection()
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                return list(cur.fetchall())
+
+        return self._run(op, label="query")
 
     @staticmethod
     def _json(value: Any) -> str:
-        return json.dumps(value or {})
+        # default=str so a datetime / UUID / Path / Decimal in a metadata bag
+        # serialises instead of raising TypeError mid-write.
+        return json.dumps(value or {}, default=str)
 
     # -- schema ----------------------------------------------------------------
 
     def ensure_schema(self) -> None:
-        conn = self._connection()
-        with conn.cursor() as cur:
-            for statement in SCHEMA_STATEMENTS:
-                cur.execute(statement)
+        def op() -> None:
+            conn = self._connection()
+            with conn.cursor() as cur:
+                for statement in SCHEMA_STATEMENTS:
+                    cur.execute(statement)
+
+        self._run(op, label="ensure_schema")
 
     # -- writes ----------------------------------------------------------------
 
     def record_asset(self, asset: SourceAsset) -> str | None:
         # De-dupe on content hash: re-ingesting identical bytes returns the
-        # existing row (DO UPDATE ensures RETURNING fires even on conflict).
+        # existing row (DO UPDATE ensures RETURNING fires even on conflict) and
+        # refreshes uri/immich_id/metadata to the latest call (last-write-wins).
+        # NOTE: dedup only works when sha256 is set — NULLs are distinct under the
+        # UNIQUE index, so a hash-less asset inserts a fresh row every call.
         return self._insert(
             """
             INSERT INTO source_asset (uri, sha256, immich_id, metadata)
             VALUES (%s, %s, %s, %s::jsonb)
-            ON CONFLICT (sha256) DO UPDATE SET uri = EXCLUDED.uri
+            ON CONFLICT (sha256) DO UPDATE
+                SET uri = EXCLUDED.uri,
+                    immich_id = EXCLUDED.immich_id,
+                    metadata = EXCLUDED.metadata
             RETURNING id
             """,
             (asset.uri, asset.sha256, asset.immich_id, self._json(asset.metadata)),
@@ -248,14 +297,16 @@ class PostgresLineageStore:
         edit_id: str | None = None,
         training_run_id: str | None = None,
     ) -> str | None:
-        # Idempotent per (dataset, caption): re-adding refreshes the edit/run link.
+        # Idempotent per (dataset, caption): re-adding sets any link passed and
+        # PRESERVES a previously-stored one when the arg is omitted (COALESCE),
+        # so attaching the training_run later doesn't wipe the earlier edit_id.
         return self._insert(
             """
             INSERT INTO dataset_membership (dataset, caption_id, edit_id, training_run_id)
             VALUES (%s, %s::uuid, %s::uuid, %s::uuid)
             ON CONFLICT (dataset, caption_id) DO UPDATE
-                SET edit_id = EXCLUDED.edit_id,
-                    training_run_id = EXCLUDED.training_run_id
+                SET edit_id = COALESCE(EXCLUDED.edit_id, dataset_membership.edit_id),
+                    training_run_id = COALESCE(EXCLUDED.training_run_id, dataset_membership.training_run_id)
             RETURNING id
             """,
             (dataset, caption_id, edit_id, training_run_id),
@@ -268,29 +319,31 @@ class PostgresLineageStore:
 
         The training signal for the reconciliation summariser: what the model
         wrote vs. what a human corrected it to.
+
+        Unscoped, every human edit contributes a pair. Scoped to a *dataset*, only
+        the edit that dataset actually selected (``dataset_membership.edit_id``) is
+        returned — the join is on that specific edit, so superseded edits and
+        member captions with no pinned edit are excluded rather than polluting the
+        signal.
+        """
+        # One base query; the dataset scope adds a join+filter on the *selected*
+        # edit so the two forms can't drift in projection/ordering.
+        base = """
+            SELECT c.final_caption, e.edited_caption
+            FROM human_edit e
+            JOIN caption c ON c.id = e.caption_id
         """
         if dataset is None:
-            rows = self._fetchall(
-                """
-                SELECT c.final_caption, e.edited_caption
-                FROM human_edit e
-                JOIN caption c ON c.id = e.caption_id
-                ORDER BY e.created_at
-                """,
-                (),
-            )
+            sql = base + " ORDER BY e.created_at"
+            params: tuple[Any, ...] = ()
         else:
-            rows = self._fetchall(
-                """
-                SELECT c.final_caption, e.edited_caption
-                FROM human_edit e
-                JOIN caption c ON c.id = e.caption_id
-                JOIN dataset_membership m ON m.caption_id = c.id
-                WHERE m.dataset = %s
-                ORDER BY e.created_at
-                """,
-                (dataset,),
+            sql = (
+                base
+                + " JOIN dataset_membership m ON m.caption_id = c.id AND m.edit_id = e.id"
+                + " WHERE m.dataset = %s ORDER BY e.created_at"
             )
+            params = (dataset,)
+        rows = self._fetchall(sql, params)
         return [(str(a), str(b)) for a, b in rows]
 
     def close(self) -> None:
