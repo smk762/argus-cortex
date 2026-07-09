@@ -10,7 +10,7 @@ Part of the [Argus suite](https://github.com/smk762?tab=repositories&q=argus) (q
 - **`argus_cortex.wire`** — the versioned wire-schema toolkit: `check_version()` (major-compatibility gate), `make_versioned_base()` (a Pydantic base that stamps + checks a version field like `proof_version` / `manifest_version`), and `wire_schema()` / `render_schema()` for the committed-schema `schema --check` CLI pattern.
 - **`argus_cortex.backends`** — the AI-backend contract generalised from argus-lens: `Backend` / `LocalBackend` / `RemoteBackend` (point at a hosted service by `base_url`, `host`/`port`, or a known `RemoteProvider`), plus `with_retries()` and `resolve_device()`. httpx lives behind the `[remote]` extra.
 - **`argus_cortex.store`** — the optional **stateful services layer** (the suite's persistent "memory"). External and opt-in — every store is configured by `CORTEX_*` env vars and no-ops when its URL is unset.
-  - **Phase 1 — Postgres lineage store.** Persists the `source_asset → caption → human_edit → dataset_membership → training_run` DAG for LoRA reproducibility, edit capture, and the feedback loop. `open_lineage_store()` returns a no-op store when `CORTEX_PG_URL` is unset; psycopg lives behind the `[postgres]` extra.
+  - **Phase 1 — Postgres lineage store.** Persists the `source_asset → caption → human_edit → dataset_membership → training_run` DAG for LoRA reproducibility, edit capture, and the feedback loop. Backed by a psycopg connection **pool** (concurrent `asyncio.to_thread` calls are safe; a dropped connection is replaced), with a `transaction()` boundary for atomic multi-step writes. `open_lineage_store()` returns a no-op store when `CORTEX_PG_URL` is unset; psycopg lives behind the `[postgres]` extra.
   - **Phase 2 — Qdrant vector store.** Stores image + tag-set embeddings for retrieval-augmented few-shot and near-duplicate curation; put a `caption_id`/`asset_id` in a point's payload and a search hit joins straight back to the lineage. `open_vector_store()` no-ops when `CORTEX_QDRANT_URL` is unset; qdrant-client lives behind the `[qdrant]` extra. cortex stores vectors it's *handed* — computing embeddings is the caller's job.
   - **Phase 3 — MinIO/S3 blob store.** Owns image bytes when cortex can't rely on the filesystem/Immich (exported/selected training images). Blobs are content-addressed on sha256 (`content_key()` == `source_asset.sha256`), so storage, dedup, and lineage join share one identity. `open_blob_store()` no-ops when `CORTEX_S3_ENDPOINT`/`CORTEX_S3_BUCKET` are unset; the `minio` client lives behind the `[s3]` extra.
 
@@ -33,10 +33,12 @@ from argus_cortex.store import open_lineage_store, SourceAsset, Caption, HumanEd
 store = open_lineage_store()          # reads CORTEX_* from the environment
 store.ensure_schema()                 # idempotent bootstrap of the lineage tables
 
-asset_id = store.record_asset(SourceAsset(uri="immich://…", sha256="…"))
-# lens emits a CaptionResult; cortex ingests it (cortex never imports lens)
-cap_id = store.record_caption(asset_id, Caption.from_caption_result(result, profile={...}))
-store.record_edit(cap_id, HumanEdit(edited_caption="…", editor="alice"))
+# one atomic unit — the asset + caption + edit commit together or not at all
+with store.transaction():
+    asset_id = store.record_asset(SourceAsset(uri="immich://…", sha256="…"))
+    # lens emits a CaptionResult; cortex ingests it (cortex never imports lens)
+    cap_id = store.record_caption(asset_id, Caption.from_caption_result(result, profile={...}))
+    store.record_edit(cap_id, HumanEdit(edited_caption="…", editor="alice"))
 
 # the (model_caption, edited_caption) pairs the summariser feedback loop trains on
 pairs = store.caption_edit_pairs()
