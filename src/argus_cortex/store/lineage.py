@@ -8,14 +8,22 @@ switched on. When a URL *is* set, :class:`PostgresLineageStore` talks to Postgre
 via psycopg, which lives behind the ``argus-cortex[postgres]`` extra and is
 imported lazily (mirroring how ``backends`` treats httpx).
 
-Everything here is synchronous, matching the rest of cortex. From an async
-caller (e.g. a FastAPI handler) wrap a call in ``asyncio.to_thread(...)`` so the
-event loop isn't blocked.
+Everything here is synchronous, matching the rest of cortex. Writes go through a
+connection **pool**, so from an async caller you can fan out
+``asyncio.to_thread(store.record_*, …)`` concurrently — each call borrows its own
+connection. After a Postgres restart the pool replaces dropped connections, so a
+call may fail once (as :class:`StoreError`) and the next succeeds. Wrap a
+multi-step write in :meth:`PostgresLineageStore.transaction` to make it atomic;
+that block pins one connection and must run on a single thread (don't fan out
+``to_thread`` inside it).
 """
 
 from __future__ import annotations
 
 import json
+import threading
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from argus_cortex.store.config import StoreConfig
@@ -23,7 +31,16 @@ from argus_cortex.store.errors import StoreError, require_extra, resolve_error_t
 from argus_cortex.store.schema import SCHEMA_STATEMENTS
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from contextlib import AbstractContextManager
+
     from argus_cortex.store.models import Caption, HumanEdit, SourceAsset, TrainingRun
+
+# Maps id(store) -> the connection bound to that store's active transaction() in
+# the current context (per-context, so it survives asyncio.to_thread). Keyed by
+# store identity: a single shared value would let one store's transaction capture
+# a *different* store's writes onto the wrong connection/database.
+_ACTIVE_CONNS: ContextVar[dict[int, Any] | None] = ContextVar("_argus_lineage_conns", default=None)
 
 __all__ = [
     "StoreError",
@@ -83,8 +100,12 @@ class LineageStore(Protocol):
         """Return ``(model_caption, edited_caption)`` pairs for the feedback loop."""
         ...
 
+    def transaction(self) -> AbstractContextManager[None]:
+        """Run the enclosed writes as one atomic unit (a no-op on the null store)."""
+        ...
+
     def close(self) -> None:
-        """Release the connection."""
+        """Release the connection pool."""
         ...
 
 
@@ -126,45 +147,119 @@ class NullLineageStore:
     def caption_edit_pairs(self, dataset: str | None = None) -> list[tuple[str, str]]:
         return []
 
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        yield
+
     def close(self) -> None:
         return None
 
 
 class PostgresLineageStore:
-    """Persist the lineage DAG to PostgreSQL via psycopg.
+    """Persist the lineage DAG to PostgreSQL via a psycopg connection pool.
 
-    Point it at a database by DSN (``postgresql://…``). psycopg is imported
-    lazily on first connection (``argus-cortex[postgres]``); an injected ``_conn``
-    (tests) bypasses the import and the network entirely. jsonb columns are sent
-    as text with a ``::jsonb`` cast so no driver-specific adapters are needed at
-    call sites.
+    Point it at a database by DSN (``postgresql://…``). A
+    ``psycopg_pool.ConnectionPool`` is created lazily on first use
+    (``argus-cortex[postgres]``) and hands out an autocommit connection per
+    operation, so concurrent calls (e.g. several ``asyncio.to_thread(store.record_*,
+    …)``) are safe and a dropped connection (Postgres restart / idle timeout) is
+    transparently replaced — there's no single shared connection to brick. An
+    injected ``pool`` (tests) bypasses the driver and the network. jsonb columns
+    are sent as text with a ``::jsonb`` cast so no driver-specific adapters are
+    needed at call sites.
     """
 
     is_enabled = True
 
-    def __init__(self, dsn: str, *, connect: Any = None) -> None:
+    def __init__(self, dsn: str, *, min_size: int = 0, max_size: int = 8, pool: Any = None) -> None:
+        # Validate eagerly so a bad config fails at construction with a clear
+        # StoreError, not lazily with a raw ValueError from ConnectionPool().
+        if min_size < 0 or max_size < 1 or max_size < min_size:
+            raise StoreError(
+                f"invalid pool sizes min_size={min_size}, max_size={max_size} "
+                "(need 0 <= min_size <= max_size and max_size >= 1)"
+            )
         self.dsn = dsn
-        self._connect = connect  # injectable factory: () -> connection (tests)
-        self._conn: Any = None
+        self.min_size = min_size
+        self.max_size = max_size
+        self._pool = pool  # injectable pool (tests), or None -> lazily created
+        self._closed = False
+        self._lock = threading.Lock()
 
     # -- connection / execution ------------------------------------------------
 
-    def _connection(self) -> Any:
-        if self._conn is None:
-            if self._connect is not None:
-                self._conn = self._connect()
-            else:
-                psycopg = require_extra("psycopg", "postgres", feature="postgres lineage")
-                self._conn = psycopg.connect(self.dsn, autocommit=True)
-        return self._conn
+    def _get_pool(self) -> Any:
+        if self._closed:
+            raise StoreError("lineage store is closed")
+        # Double-checked locking so a concurrent first call can't open two pools.
+        if self._pool is None:
+            with self._lock:
+                if self._closed:
+                    raise StoreError("lineage store is closed")
+                if self._pool is None:
+                    pool_mod = require_extra("psycopg_pool", "postgres", feature="postgres lineage")
+                    # min_size=0 holds no idle connection; the pool opens on demand
+                    # and, on a dropped connection, discards it and reconnects (a
+                    # single call may fail as StoreError before the replacement).
+                    self._pool = pool_mod.ConnectionPool(
+                        self.dsn,
+                        min_size=self.min_size,
+                        max_size=self.max_size,
+                        kwargs={"autocommit": True},
+                        open=True,
+                    )
+        return self._pool
+
+    @contextmanager
+    def _acquire(self) -> Iterator[Any]:
+        # Inside this store's transaction(), reuse its ambient connection; otherwise
+        # borrow one from the pool for a single op and return it (the pool owns
+        # concurrency and reconnection).
+        conn = (_ACTIVE_CONNS.get() or {}).get(id(self))
+        if conn is not None:
+            yield conn
+        else:
+            with self._get_pool().connection() as conn:
+                yield conn
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        """Run the enclosed ``record_*`` / ``add_to_dataset`` calls atomically.
+
+        Every write in the block shares one pooled connection and commits together
+        on a clean exit, or rolls back as a unit on error — so a torn DAG (an asset
+        with no caption, a caption in no dataset) is never committed. Run it on a
+        **single thread** (e.g. ``await asyncio.to_thread(do_writes)``); do not fan
+        out ``to_thread`` inside the block, since all the writes share one
+        connection. Nested calls on the same store become savepoints.
+        """
+        conns = _ACTIVE_CONNS.get() or {}
+        existing = conns.get(id(self))
+        try:
+            if existing is not None:
+                with existing.transaction():  # nested -> savepoint within the outer tx
+                    yield
+                return
+            with self._get_pool().connection() as conn, conn.transaction():
+                token = _ACTIVE_CONNS.set({**conns, id(self): conn})
+                try:
+                    yield
+                finally:
+                    _ACTIVE_CONNS.reset(token)
+        except self._db_errors() as exc:
+            # Pool acquisition / savepoint / commit failures become StoreError. An
+            # inner write's StoreError is a RuntimeError, not a psycopg error, so it
+            # isn't caught here — it propagates as-is (after the block rolls back)
+            # rather than being double-wrapped.
+            raise StoreError(f"transaction failed: {exc}") from exc
 
     @staticmethod
     def _db_errors() -> tuple[type[BaseException], ...]:
         """psycopg's error hierarchy, so operational failures fold into StoreError.
 
-        Every psycopg exception derives from ``psycopg.Error``; without the driver
-        installed there is nothing to wrap (the missing-driver path raises
-        StoreError in :meth:`_connection`).
+        Every psycopg exception (including ``psycopg_pool`` timeouts) derives from
+        ``psycopg.Error``; without the driver installed there is nothing to wrap
+        (the missing-driver path raises StoreError in :meth:`_get_pool`).
         """
         return resolve_error_types((("psycopg", "Error"),))
 
@@ -172,8 +267,7 @@ class PostgresLineageStore:
         """Run an ``INSERT … RETURNING id`` and return the id as a string."""
 
         def op() -> str | None:
-            conn = self._connection()
-            with conn.cursor() as cur:
+            with self._acquire() as conn, conn.cursor() as cur:
                 cur.execute(sql, params)
                 row = cur.fetchone()
             return str(row[0]) if row and row[0] is not None else None
@@ -182,8 +276,7 @@ class PostgresLineageStore:
 
     def _fetchall(self, sql: str, params: tuple[Any, ...]) -> list[tuple[Any, ...]]:
         def op() -> list[tuple[Any, ...]]:
-            conn = self._connection()
-            with conn.cursor() as cur:
+            with self._acquire() as conn, conn.cursor() as cur:
                 cur.execute(sql, params)
                 return list(cur.fetchall())
 
@@ -199,8 +292,7 @@ class PostgresLineageStore:
 
     def ensure_schema(self) -> None:
         def op() -> None:
-            conn = self._connection()
-            with conn.cursor() as cur:
+            with self._acquire() as conn, conn.cursor() as cur:
                 for statement in SCHEMA_STATEMENTS:
                     cur.execute(statement)
 
@@ -328,9 +420,12 @@ class PostgresLineageStore:
         return [(str(a), str(b)) for a, b in rows]
 
     def close(self) -> None:
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
+        # Mark closed first so a racing/later op raises instead of silently
+        # rebuilding a fresh pool (which would leak connections past shutdown).
+        self._closed = True
+        if self._pool is not None:
+            self._pool.close()
+            self._pool = None
 
 
 def open_lineage_store(config: StoreConfig | None = None) -> LineageStore:
@@ -344,5 +439,9 @@ def open_lineage_store(config: StoreConfig | None = None) -> LineageStore:
     if config is None:
         config = StoreConfig.from_env()
     if config.pg_url:
-        return PostgresLineageStore(config.pg_url)
+        return PostgresLineageStore(
+            config.pg_url,
+            min_size=config.pg_pool_min_size,
+            max_size=config.pg_pool_max_size,
+        )
     return NullLineageStore()
