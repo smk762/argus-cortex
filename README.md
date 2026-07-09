@@ -9,6 +9,7 @@ Part of the [Argus suite](https://github.com/smk762?tab=repositories&q=argus) (q
 - **`argus_cortex.taxonomy`** — `TargetProfile` / `TargetStyle` / `TargetCategory`, the "moat" types every stage inherits verbatim.
 - **`argus_cortex.wire`** — the versioned wire-schema toolkit: `check_version()` (major-compatibility gate), `make_versioned_base()` (a Pydantic base that stamps + checks a version field like `proof_version` / `manifest_version`), and `wire_schema()` / `render_schema()` for the committed-schema `schema --check` CLI pattern.
 - **`argus_cortex.backends`** — the AI-backend contract generalised from argus-lens: `Backend` / `LocalBackend` / `RemoteBackend` (point at a hosted service by `base_url`, `host`/`port`, or a known `RemoteProvider`), plus `with_retries()` and `resolve_device()`. httpx lives behind the `[remote]` extra.
+- **`argus_cortex.store`** — the optional **stateful services layer** (the suite's persistent "memory"). Phase 1 is the Postgres **lineage store**: it persists the `source_asset → caption → human_edit → dataset_membership → training_run` DAG for LoRA reproducibility, edit capture, and the feedback loop. External and opt-in — configured by `CORTEX_*` env vars, and `open_lineage_store()` returns a no-op store when `CORTEX_PG_URL` is unset. psycopg lives behind the `[postgres]` extra.
 
 ```python
 from argus_cortex.wire import make_versioned_base, render_schema
@@ -22,12 +23,31 @@ scorer = RemoteBackend.from_host("192.168.1.20", 9000, api_key="…")
 nim = RemoteBackend.from_provider(RemoteProvider.NVIDIA_NIM, api_key="…")
 ```
 
+```python
+from argus_cortex.store import open_lineage_store, SourceAsset, Caption, HumanEdit
+
+# no-op if CORTEX_PG_URL is unset; PostgresLineageStore if it's set
+store = open_lineage_store()          # reads CORTEX_* from the environment
+store.ensure_schema()                 # idempotent bootstrap of the lineage tables
+
+asset_id = store.record_asset(SourceAsset(uri="immich://…", sha256="…"))
+# lens emits a CaptionResult; cortex ingests it (cortex never imports lens)
+cap_id = store.record_caption(asset_id, Caption.from_caption_result(result, profile={...}))
+store.record_edit(cap_id, HumanEdit(edited_caption="…", editor="alice"))
+
+# the (model_caption, edited_caption) pairs the summariser feedback loop trains on
+pairs = store.caption_edit_pairs()
+```
+
 ## Install
 
 ```bash
-uv pip install argus-cortex            # core (pydantic only)
-uv pip install "argus-cortex[remote]"  # + httpx for RemoteBackend
+uv pip install argus-cortex              # core (pydantic only)
+uv pip install "argus-cortex[remote]"    # + httpx for RemoteBackend
+uv pip install "argus-cortex[postgres]"  # + psycopg for the lineage store
 ```
+
+The stateful services are configured via `CORTEX_*` env vars — see [`.env.example`](.env.example). Each is optional: leave a URL unset and that feature degrades to a no-op.
 
 ## Develop
 
