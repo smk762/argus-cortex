@@ -12,6 +12,7 @@ Part of the [Argus suite](https://github.com/smk762?tab=repositories&q=argus) (q
 - **`argus_cortex.store`** — the optional **stateful services layer** (the suite's persistent "memory"). External and opt-in — every store is configured by `CORTEX_*` env vars and no-ops when its URL is unset.
   - **Phase 1 — Postgres lineage store.** Persists the `source_asset → caption → human_edit → dataset_membership → training_run` DAG for LoRA reproducibility, edit capture, and the feedback loop. `open_lineage_store()` returns a no-op store when `CORTEX_PG_URL` is unset; psycopg lives behind the `[postgres]` extra.
   - **Phase 2 — Qdrant vector store.** Stores image + tag-set embeddings for retrieval-augmented few-shot and near-duplicate curation; put a `caption_id`/`asset_id` in a point's payload and a search hit joins straight back to the lineage. `open_vector_store()` no-ops when `CORTEX_QDRANT_URL` is unset; qdrant-client lives behind the `[qdrant]` extra. cortex stores vectors it's *handed* — computing embeddings is the caller's job.
+  - **Phase 3 — MinIO/S3 blob store.** Owns image bytes when cortex can't rely on the filesystem/Immich (exported/selected training images). Blobs are content-addressed on sha256 (`content_key()` == `source_asset.sha256`), so storage, dedup, and lineage join share one identity. `open_blob_store()` no-ops when `CORTEX_S3_ENDPOINT`/`CORTEX_S3_BUCKET` are unset; the `minio` client lives behind the `[s3]` extra.
 
 ```python
 from argus_cortex.wire import make_versioned_base, render_schema
@@ -56,6 +57,19 @@ hits = vec.search(IMAGE_COLLECTION, vector=query_embedding, top_k=5)
 similar_caption_ids = [h.payload["caption_id"] for h in hits]   # join back to Postgres
 ```
 
+```python
+from argus_cortex.store import open_blob_store
+
+# no-op if CORTEX_S3_ENDPOINT / CORTEX_S3_BUCKET are unset; S3BlobStore if set
+blobs = open_blob_store()
+blobs.ensure_bucket()
+
+# content-addressed: the returned key IS the sha256 (== source_asset.sha256)
+sha = blobs.put_content_addressed(image_bytes, content_type="image/jpeg")
+data = blobs.get(sha)                    # bytes, or None if absent
+link = blobs.url(sha, expires=3600)      # presigned GET URL
+```
+
 ## Install
 
 ```bash
@@ -63,6 +77,7 @@ uv pip install argus-cortex              # core (pydantic only)
 uv pip install "argus-cortex[remote]"    # + httpx for RemoteBackend
 uv pip install "argus-cortex[postgres]"  # + psycopg for the lineage store
 uv pip install "argus-cortex[qdrant]"    # + qdrant-client for the vector store
+uv pip install "argus-cortex[s3]"        # + minio for the blob store
 ```
 
 The stateful services are configured via `CORTEX_*` env vars — see [`.env.example`](.env.example). Each is optional: leave a URL unset and that feature degrades to a no-op.
