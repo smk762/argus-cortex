@@ -36,6 +36,7 @@ class StoreConfig(BaseModel):
     s3_access_key: str | None = None
     s3_secret_key: str | None = None
     s3_bucket: str | None = None
+    s3_region: str | None = None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> StoreConfig:
@@ -56,4 +57,5 @@ class StoreConfig(BaseModel):
             s3_access_key=get("CORTEX_S3_ACCESS_KEY"),
             s3_secret_key=get("CORTEX_S3_SECRET_KEY"),
             s3_bucket=get("CORTEX_S3_BUCKET"),
+            s3_region=get("CORTEX_S3_REGION"),
         )

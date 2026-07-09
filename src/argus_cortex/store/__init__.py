@@ -2,8 +2,8 @@
 
 External and opt-in: each store is addressed by a ``CORTEX_*`` URL in the
 environment and no-ops when unset (see :class:`~argus_cortex.store.config.StoreConfig`).
-Phase 1 ships the Postgres lineage store, phase 2 the Qdrant vector store; MinIO
-blobs slot in later without reshaping this package.
+Phase 1 ships the Postgres lineage store, phase 2 the Qdrant vector store, and
+phase 3 the MinIO/S3 blob store.
 
 The dependency direction is ``cortex → lens``: cortex defines the lineage
 entities in :mod:`~argus_cortex.store.models` and the embedding model is the
@@ -12,6 +12,13 @@ caller's concern, so lens never imports cortex and stays DB-free.
 
 from __future__ import annotations
 
+from argus_cortex.store.blob import (
+    BlobStore,
+    NullBlobStore,
+    S3BlobStore,
+    content_key,
+    open_blob_store,
+)
 from argus_cortex.store.config import StoreConfig
 from argus_cortex.store.errors import StoreError
 from argus_cortex.store.lineage import (
@@ -56,4 +63,10 @@ __all__ = [
     "open_vector_store",
     "IMAGE_COLLECTION",
     "TAGSET_COLLECTION",
+    # blob (phase 3: MinIO/S3)
+    "BlobStore",
+    "NullBlobStore",
+    "S3BlobStore",
+    "open_blob_store",
+    "content_key",
 ]
