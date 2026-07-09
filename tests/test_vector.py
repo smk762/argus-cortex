@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import uuid
 
 import pytest
 
@@ -14,6 +15,7 @@ from argus_cortex.store import (
     VectorStore,
     open_vector_store,
 )
+from argus_cortex.store.vector import VectorDistance, normalise_point_id
 
 _HAS_QDRANT = importlib.util.find_spec("qdrant_client") is not None
 
@@ -90,16 +92,13 @@ class _FakeQdrant:
     def upsert(self, collection_name: str, points: list) -> None:
         self.upserts.append((collection_name, points))
 
-    def query_points(
-        self, collection_name: str, query: list, limit: int, query_filter: object, with_payload: bool
-    ) -> _FakeQueryResponse:
+    def query_points(self, collection_name: str, query: list, limit: int, query_filter: object) -> _FakeQueryResponse:
         self.searches.append(
             {
                 "collection": collection_name,
                 "query": query,
                 "limit": limit,
                 "filter": query_filter,
-                "with_payload": with_payload,
             }
         )
         return _FakeQueryResponse(self.hits)
@@ -168,20 +167,42 @@ def test_ensure_collection_skips_when_present() -> None:
     assert client.created == []  # idempotent: no create when it already exists
 
 
-def test_upsert_builds_point_with_id_vector_payload() -> None:
+def test_upsert_passes_uuid_point_id_through() -> None:
     client = _FakeQdrant()
     store = _store_with(client)
-    store.upsert(IMAGE_COLLECTION, point_id="cap-1", vector=[0.1, 0.2, 0.3], payload={"caption_id": "cap-1"})
+    uid = "eb49211d-ac1c-49e9-aae3-e40ecc0a00dd"  # a Postgres caption_id is a UUID
+    store.upsert(IMAGE_COLLECTION, point_id=uid, vector=[0.1, 0.2, 0.3], payload={"caption_id": uid})
     coll, points = client.upserts[-1]
     assert coll == IMAGE_COLLECTION
-    assert points[0].kw == {"id": "cap-1", "vector": [0.1, 0.2, 0.3], "payload": {"caption_id": "cap-1"}}
+    assert points[0].kw == {"id": uid, "vector": [0.1, 0.2, 0.3], "payload": {"caption_id": uid}}
 
 
-def test_upsert_defaults_payload_to_empty_dict() -> None:
+def test_upsert_maps_non_uuid_key_to_stable_uuid5() -> None:
+    # Qdrant rejects arbitrary string ids, so a non-UUID key is normalised to a
+    # deterministic UUID5; the original key belongs in the payload for join-back.
+    client = _FakeQdrant()
+    store = _store_with(client)
+    store.upsert(IMAGE_COLLECTION, point_id="cap-1", vector=[0.1], payload={"caption_id": "cap-1"})
+    stored_id = client.upserts[-1][1][0].kw["id"]
+    assert stored_id == normalise_point_id("cap-1")  # deterministic
+    assert uuid.UUID(stored_id)  # a valid UUID Qdrant will accept
+    assert stored_id != "cap-1"
+
+
+def test_upsert_passes_int_point_id_through() -> None:
     client = _FakeQdrant()
     store = _store_with(client)
     store.upsert(IMAGE_COLLECTION, point_id=7, vector=[0.0])
+    assert client.upserts[-1][1][0].kw["id"] == 7  # ints are valid Qdrant ids
     assert client.upserts[-1][1][0].kw["payload"] == {}
+
+
+def test_normalise_point_id_forms() -> None:
+    uid = "eb49211d-ac1c-49e9-aae3-e40ecc0a00dd"
+    assert normalise_point_id(7) == 7
+    assert normalise_point_id(uid) == uid  # already valid -> pass through
+    assert normalise_point_id("cap-1") == normalise_point_id("cap-1")  # stable
+    assert normalise_point_id("cap-1") != normalise_point_id("cap-2")
 
 
 def test_search_returns_hits_and_passes_filter() -> None:
@@ -191,7 +212,6 @@ def test_search_returns_hits_and_passes_filter() -> None:
     assert hits == [VectorHit(id="cap-2", score=0.91, payload={"caption_id": "cap-2"})]
     call = client.searches[-1]
     assert call["limit"] == 3
-    assert call["with_payload"] is True
     # the where-mapping became an exact-match Filter
     flt = call["filter"]
     assert flt.must[0].key == "target_style"
@@ -208,7 +228,7 @@ def test_search_without_where_sends_no_filter() -> None:
 def test_search_tolerates_bare_list_response() -> None:
     # older qdrant-client returned a bare list from search(); getattr(resp,"points",resp) covers it
     class _ListClient(_FakeQdrant):
-        def query_points(self, collection_name, query, limit, query_filter, with_payload):  # type: ignore[override]
+        def query_points(self, collection_name, query, limit, query_filter):  # type: ignore[override]
             return [_FakeScored("x", 0.5, {})]
 
     store = _store_with(_ListClient())
@@ -216,11 +236,21 @@ def test_search_tolerates_bare_list_response() -> None:
     assert hits == [VectorHit(id="x", score=0.5, payload={})]
 
 
-def test_search_coerces_non_str_id_and_null_payload() -> None:
-    client = _FakeQdrant(hits=[_FakeScored(42, 0.5, None)])  # type: ignore[arg-type]
+def test_search_tolerates_none_points() -> None:
+    # a QueryResponse whose .points is None (empty/error variant) -> no hits, no crash
+    class _NoneClient(_FakeQdrant):
+        def query_points(self, collection_name, query, limit, query_filter):  # type: ignore[override]
+            return _FakeQueryResponse(None)  # type: ignore[arg-type]
+
+    assert _store_with(_NoneClient()).search(IMAGE_COLLECTION, vector=[0.1]) == []
+
+
+def test_search_coerces_non_str_id_null_payload_and_null_score() -> None:
+    # int id -> str, None payload -> {}, and a None score -> 0.0 (must not raise)
+    client = _FakeQdrant(hits=[_FakeScored(42, None, None)])  # type: ignore[arg-type]
     store = _store_with(client)
     hits = store.search(IMAGE_COLLECTION, vector=[0.1])
-    assert hits == [VectorHit(id="42", score=0.5, payload={})]
+    assert hits == [VectorHit(id="42", score=0.0, payload={})]
 
 
 def test_close_closes_client() -> None:
@@ -236,3 +266,70 @@ def test_close_closes_client() -> None:
 def test_client_without_qdrant_raises_helpful_error() -> None:
     with pytest.raises(StoreError, match=r"argus-cortex\[qdrant\]"):
         QdrantVectorStore("http://qdrant:6333")._client()
+
+
+# --------------------------------------------------------------------------
+# ensure_collection race tolerance (needs a real driver-error type to catch)
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not _HAS_QDRANT, reason="needs a real qdrant/httpx error type to exercise the race path")
+def test_ensure_collection_tolerates_lost_create_race() -> None:
+    import httpx
+
+    class _RaceClient(_FakeQdrant):
+        def __init__(self) -> None:
+            super().__init__(exists=False)
+            self._checks = 0
+
+        def collection_exists(self, name: str) -> bool:
+            # absent on the pre-check, present on the post-error re-check (a
+            # concurrent worker created it) -> ensure_collection must not raise.
+            self._checks += 1
+            return self._checks > 1
+
+        def create_collection(self, collection_name: str, vectors_config: object) -> None:
+            raise httpx.HTTPError("collection already exists")
+
+    _store_with(_RaceClient()).ensure_collection(IMAGE_COLLECTION, dim=4)  # must not raise
+
+
+@pytest.mark.skipif(not _HAS_QDRANT, reason="needs a real qdrant/httpx error type to exercise the raise path")
+def test_ensure_collection_reraises_when_still_absent() -> None:
+    import httpx
+
+    class _FailClient(_FakeQdrant):
+        def create_collection(self, collection_name: str, vectors_config: object) -> None:
+            raise httpx.HTTPError("boom")
+
+    # create fails and the collection is still absent -> surfaces as StoreError
+    store = _store_with(_FailClient())  # collection_exists stays False
+    with pytest.raises(StoreError, match="ensure_collection failed"):
+        store.ensure_collection(IMAGE_COLLECTION, dim=4)
+
+
+# --------------------------------------------------------------------------
+# Real qdrant-client contract checks (catch enum/param drift; no live server)
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not _HAS_QDRANT, reason="qdrant-client not installed")
+def test_vector_distance_literals_are_valid_qdrant_enum_members() -> None:
+    from typing import get_args
+
+    from qdrant_client import models
+
+    for value in get_args(VectorDistance):
+        assert models.Distance(value)  # construct-by-value must not raise
+
+
+@pytest.mark.skipif(not _HAS_QDRANT, reason="qdrant-client not installed")
+def test_real_client_construction_uses_models_and_client() -> None:
+    from qdrant_client import QdrantClient
+
+    store = QdrantVectorStore("http://localhost:6333")
+    # QdrantClient construction is lazy (no connection), so this exercises the
+    # real _client()/_models() import paths without needing a live server.
+    assert isinstance(store._client(), QdrantClient)
+    assert store._models() is not None
+    store.close()
