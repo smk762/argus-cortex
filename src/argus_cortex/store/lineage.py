@@ -16,21 +16,22 @@ event loop isn't blocked.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from argus_cortex.store.config import StoreConfig
+from argus_cortex.store.errors import StoreError, require_extra, wrap_errors
 from argus_cortex.store.schema import SCHEMA_STATEMENTS
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from argus_cortex.store.config import StoreConfig
     from argus_cortex.store.models import Caption, HumanEdit, SourceAsset, TrainingRun
 
-T = TypeVar("T")
-
-
-class StoreError(RuntimeError):
-    """A persistence failure: driver missing, or the database is unreachable."""
+__all__ = [
+    "StoreError",
+    "LineageStore",
+    "NullLineageStore",
+    "PostgresLineageStore",
+    "open_lineage_store",
+]
 
 
 @runtime_checkable
@@ -153,10 +154,7 @@ class PostgresLineageStore:
             if self._connect is not None:
                 self._conn = self._connect()
             else:
-                try:
-                    import psycopg
-                except ImportError as exc:  # pragma: no cover - exercised only without the extra
-                    raise StoreError("postgres lineage needs: pip install argus-cortex[postgres]") from exc
+                psycopg = require_extra("psycopg", "postgres", feature="postgres lineage")
                 self._conn = psycopg.connect(self.dsn, autocommit=True)
         return self._conn
 
@@ -175,18 +173,6 @@ class PostgresLineageStore:
         except ImportError:  # pragma: no cover - no driver means no operational errors to wrap
             return ()
 
-    def _run(self, op: Callable[[], T], *, label: str) -> T:
-        """Run a DB op, wrapping driver failures in StoreError so callers catch one type.
-
-        Mirrors ``backends._send``: a bad DSN, unreachable server, constraint
-        violation, or malformed cast surfaces as :class:`StoreError`, not a raw
-        psycopg exception the caller would have to ``import psycopg`` to name.
-        """
-        try:
-            return op()
-        except self._db_errors() as exc:
-            raise StoreError(f"{label} failed: {exc}") from exc
-
     def _insert(self, sql: str, params: tuple[Any, ...]) -> str | None:
         """Run an ``INSERT … RETURNING id`` and return the id as a string."""
 
@@ -197,7 +183,7 @@ class PostgresLineageStore:
                 row = cur.fetchone()
             return str(row[0]) if row and row[0] is not None else None
 
-        return self._run(op, label="insert")
+        return wrap_errors(op, errors=self._db_errors(), label="insert")
 
     def _fetchall(self, sql: str, params: tuple[Any, ...]) -> list[tuple[Any, ...]]:
         def op() -> list[tuple[Any, ...]]:
@@ -206,7 +192,7 @@ class PostgresLineageStore:
                 cur.execute(sql, params)
                 return list(cur.fetchall())
 
-        return self._run(op, label="query")
+        return wrap_errors(op, errors=self._db_errors(), label="query")
 
     @staticmethod
     def _json(value: Any) -> str:
@@ -223,7 +209,7 @@ class PostgresLineageStore:
                 for statement in SCHEMA_STATEMENTS:
                     cur.execute(statement)
 
-        self._run(op, label="ensure_schema")
+        wrap_errors(op, errors=self._db_errors(), label="ensure_schema")
 
     # -- writes ----------------------------------------------------------------
 
@@ -361,8 +347,6 @@ def open_lineage_store(config: StoreConfig | None = None) -> LineageStore:
     by simply setting ``CORTEX_PG_URL``.
     """
     if config is None:
-        from argus_cortex.store.config import StoreConfig
-
         config = StoreConfig.from_env()
     if config.pg_url:
         return PostgresLineageStore(config.pg_url)
