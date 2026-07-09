@@ -9,7 +9,9 @@ Part of the [Argus suite](https://github.com/smk762?tab=repositories&q=argus) (q
 - **`argus_cortex.taxonomy`** — `TargetProfile` / `TargetStyle` / `TargetCategory`, the "moat" types every stage inherits verbatim.
 - **`argus_cortex.wire`** — the versioned wire-schema toolkit: `check_version()` (major-compatibility gate), `make_versioned_base()` (a Pydantic base that stamps + checks a version field like `proof_version` / `manifest_version`), and `wire_schema()` / `render_schema()` for the committed-schema `schema --check` CLI pattern.
 - **`argus_cortex.backends`** — the AI-backend contract generalised from argus-lens: `Backend` / `LocalBackend` / `RemoteBackend` (point at a hosted service by `base_url`, `host`/`port`, or a known `RemoteProvider`), plus `with_retries()` and `resolve_device()`. httpx lives behind the `[remote]` extra.
-- **`argus_cortex.store`** — the optional **stateful services layer** (the suite's persistent "memory"). Phase 1 is the Postgres **lineage store**: it persists the `source_asset → caption → human_edit → dataset_membership → training_run` DAG for LoRA reproducibility, edit capture, and the feedback loop. External and opt-in — configured by `CORTEX_*` env vars, and `open_lineage_store()` returns a no-op store when `CORTEX_PG_URL` is unset. psycopg lives behind the `[postgres]` extra.
+- **`argus_cortex.store`** — the optional **stateful services layer** (the suite's persistent "memory"). External and opt-in — every store is configured by `CORTEX_*` env vars and no-ops when its URL is unset.
+  - **Phase 1 — Postgres lineage store.** Persists the `source_asset → caption → human_edit → dataset_membership → training_run` DAG for LoRA reproducibility, edit capture, and the feedback loop. `open_lineage_store()` returns a no-op store when `CORTEX_PG_URL` is unset; psycopg lives behind the `[postgres]` extra.
+  - **Phase 2 — Qdrant vector store.** Stores image + tag-set embeddings for retrieval-augmented few-shot and near-duplicate curation; put a `caption_id`/`asset_id` in a point's payload and a search hit joins straight back to the lineage. `open_vector_store()` no-ops when `CORTEX_QDRANT_URL` is unset; qdrant-client lives behind the `[qdrant]` extra. cortex stores vectors it's *handed* — computing embeddings is the caller's job.
 
 ```python
 from argus_cortex.wire import make_versioned_base, render_schema
@@ -39,12 +41,28 @@ store.record_edit(cap_id, HumanEdit(edited_caption="…", editor="alice"))
 pairs = store.caption_edit_pairs()
 ```
 
+```python
+from argus_cortex.store import open_vector_store, IMAGE_COLLECTION
+
+# no-op if CORTEX_QDRANT_URL is unset; QdrantVectorStore if it's set
+vec = open_vector_store()
+vec.ensure_collection(IMAGE_COLLECTION, dim=512)   # idempotent
+
+# store an embedding you computed, tagged with its lineage id
+vec.upsert(IMAGE_COLLECTION, point_id=cap_id, vector=embedding, payload={"caption_id": cap_id})
+
+# retrieve similar past captions to steer the summariser (few-shot)
+hits = vec.search(IMAGE_COLLECTION, vector=query_embedding, top_k=5)
+similar_caption_ids = [h.payload["caption_id"] for h in hits]   # join back to Postgres
+```
+
 ## Install
 
 ```bash
 uv pip install argus-cortex              # core (pydantic only)
 uv pip install "argus-cortex[remote]"    # + httpx for RemoteBackend
 uv pip install "argus-cortex[postgres]"  # + psycopg for the lineage store
+uv pip install "argus-cortex[qdrant]"    # + qdrant-client for the vector store
 ```
 
 The stateful services are configured via `CORTEX_*` env vars — see [`.env.example`](.env.example). Each is optional: leave a URL unset and that feature degrades to a no-op.
