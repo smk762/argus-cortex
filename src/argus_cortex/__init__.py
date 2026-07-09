@@ -24,16 +24,23 @@ from argus_cortex.backends import (
     with_retries,
 )
 from argus_cortex.store import (
+    IMAGE_COLLECTION,
+    TAGSET_COLLECTION,
     Caption,
     HumanEdit,
     LineageStore,
     NullLineageStore,
+    NullVectorStore,
     PostgresLineageStore,
+    QdrantVectorStore,
     SourceAsset,
     StoreConfig,
     StoreError,
     TrainingRun,
+    VectorHit,
+    VectorStore,
     open_lineage_store,
+    open_vector_store,
 )
 from argus_cortex.taxonomy import TargetCategory, TargetProfile, TargetStyle
 from argus_cortex.wire import (
@@ -69,13 +76,20 @@ __all__ = [
     "with_retries",
     # store (optional stateful services layer)
     "StoreConfig",
+    "StoreError",
     "LineageStore",
     "NullLineageStore",
     "PostgresLineageStore",
-    "StoreError",
     "open_lineage_store",
     "Caption",
     "HumanEdit",
     "SourceAsset",
     "TrainingRun",
+    "VectorStore",
+    "NullVectorStore",
+    "QdrantVectorStore",
+    "VectorHit",
+    "open_vector_store",
+    "IMAGE_COLLECTION",
+    "TAGSET_COLLECTION",
 ]
