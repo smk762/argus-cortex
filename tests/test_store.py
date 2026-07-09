@@ -44,7 +44,7 @@ def test_store_config_from_env_reads_cortex_vars() -> None:
     assert cfg.s3_region == "eu-west-1"
     assert cfg.s3_endpoint is None
     # pool sizes default when unset
-    assert cfg.pg_pool_min_size == 1
+    assert cfg.pg_pool_min_size == 0
     assert cfg.pg_pool_max_size == 8
 
 
@@ -52,6 +52,12 @@ def test_store_config_reads_pool_sizes() -> None:
     cfg = StoreConfig.from_env({"CORTEX_PG_POOL_MIN_SIZE": "2", "CORTEX_PG_POOL_MAX_SIZE": "20"})
     assert cfg.pg_pool_min_size == 2
     assert cfg.pg_pool_max_size == 20
+
+
+def test_store_config_non_numeric_pool_size_falls_back_to_default() -> None:
+    # a typo'd value must not crash from_env(); it falls back to the default
+    cfg = StoreConfig.from_env({"CORTEX_PG_POOL_MAX_SIZE": "abc"})
+    assert cfg.pg_pool_max_size == 8
 
 
 def test_store_config_empty_string_is_unset() -> None:
@@ -305,15 +311,41 @@ def test_close_closes_pool() -> None:
     assert store._pool is None
 
 
-def test_each_op_borrows_a_pooled_connection() -> None:
-    # Without a transaction, every op borrows its own connection from the pool
-    # (that's what makes concurrent asyncio.to_thread calls safe).
+def test_each_op_borrows_from_the_pool() -> None:
+    # Without a transaction, every op borrows from the pool (one .connection() per
+    # op); the pool — not this store — is what isolates concurrent callers. Real
+    # per-connection isolation across threads is covered by the gated integration
+    # test (test_store_pg_integration.py).
     conn = _FakeConn()
     pool = _FakePool(conn)
     store = PostgresLineageStore("postgresql://localhost/argus", pool=pool)
     store.record_asset(SourceAsset(uri="a"))
     store.record_asset(SourceAsset(uri="b"))
     assert pool.connection_calls == 2
+
+
+def test_transaction_is_isolated_per_store() -> None:
+    # An ambient transaction on one store must NOT capture another store's writes:
+    # storeB borrows its own pooled connection even inside storeA's transaction().
+    conn_a, conn_b = _FakeConn(), _FakeConn()
+    pool_a, pool_b = _FakePool(conn_a), _FakePool(conn_b)
+    store_a = PostgresLineageStore("postgresql://localhost/a", pool=pool_a)
+    store_b = PostgresLineageStore("postgresql://localhost/b", pool=pool_b)
+    with store_a.transaction():
+        store_b.record_asset(SourceAsset(uri="x", sha256="h"))
+    assert pool_b.connection_calls == 1  # borrowed its own connection
+    assert any("source_asset" in sql for sql, _ in conn_b.executed)
+    assert conn_a.executed == []  # storeA's connection ran nothing
+
+
+def test_nested_transaction_opens_a_savepoint() -> None:
+    conn = _FakeConn()
+    store = PostgresLineageStore("postgresql://localhost/argus", pool=_FakePool(conn))
+    with store.transaction():
+        store.record_asset(SourceAsset(uri="a", sha256="h"))
+        with store.transaction():  # nested -> savepoint on the same connection
+            store.record_caption("aid", Caption(final_caption="c"))
+    assert conn.tx_entered == 2  # outer transaction + one savepoint
 
 
 def test_transaction_shares_one_connection_and_enters_one_tx() -> None:
@@ -331,12 +363,31 @@ def test_transaction_shares_one_connection_and_enters_one_tx() -> None:
     assert sum("INSERT INTO caption" in sql for sql, _ in conn.executed) == 1
 
 
-def test_transaction_propagates_error_for_rollback() -> None:
+def test_transaction_propagates_error() -> None:
+    # An error inside the block propagates (real conn.transaction() rolls back the
+    # batch — actual rollback is asserted in the gated integration test).
     conn = _FakeConn()
     store = PostgresLineageStore("postgresql://localhost/argus", pool=_FakePool(conn))
     with pytest.raises(ValueError, match="boom"), store.transaction():
         store.record_asset(SourceAsset(uri="a", sha256="h"))
-        raise ValueError("boom")  # real conn.transaction() would roll back the batch
+        raise ValueError("boom")
+
+
+def test_invalid_pool_sizes_raise_store_error() -> None:
+    with pytest.raises(StoreError, match="invalid pool sizes"):
+        PostgresLineageStore("postgresql://localhost/argus", min_size=5, max_size=2)
+    with pytest.raises(StoreError, match="invalid pool sizes"):
+        PostgresLineageStore("postgresql://localhost/argus", max_size=0)
+
+
+def test_use_after_close_raises() -> None:
+    conn = _FakeConn()
+    store = PostgresLineageStore("postgresql://localhost/argus", pool=_FakePool(conn))
+    store.ensure_schema()
+    store.close()
+    # a closed store must refuse to silently rebuild a fresh pool
+    with pytest.raises(StoreError, match="closed"):
+        store.record_asset(SourceAsset(uri="x"))
 
 
 @pytest.mark.skipif(not _HAS_PSYCOPG, reason="psycopg not installed; can't construct a psycopg.Error")
@@ -358,9 +409,9 @@ def test_operational_failure_wrapped_in_store_error() -> None:
 def test_lazy_pool_is_a_real_connection_pool() -> None:
     import psycopg_pool
 
-    # Unreachable DSN: the pool opens in the background (non-blocking) and is torn
-    # down immediately, so no live server is needed to exercise the real path.
-    store = PostgresLineageStore("postgresql://localhost:1/none", min_size=1, max_size=2)
+    # Unreachable DSN with min_size=0: nothing is opened eagerly (no background
+    # connect / warning), so this exercises the real construction path offline.
+    store = PostgresLineageStore("postgresql://localhost:1/none", min_size=0, max_size=2)
     try:
         assert isinstance(store._get_pool(), psycopg_pool.ConnectionPool)
     finally:

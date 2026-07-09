@@ -31,7 +31,7 @@ class StoreConfig(BaseModel):
     """
 
     pg_url: str | None = None
-    pg_pool_min_size: int = 1
+    pg_pool_min_size: int = 0
     pg_pool_max_size: int = 8
     qdrant_url: str | None = None
     s3_endpoint: str | None = None
@@ -54,11 +54,18 @@ class StoreConfig(BaseModel):
 
         def get_int(key: str, default: int) -> int:
             value = env.get(key)
-            return int(value) if value else default
+            if not value:
+                return default
+            try:
+                return int(value)
+            except ValueError:
+                # A non-numeric value falls back to the default rather than
+                # crashing from_env() (which every store reads, even the null one).
+                return default
 
         return cls(
             pg_url=get("CORTEX_PG_URL"),
-            pg_pool_min_size=get_int("CORTEX_PG_POOL_MIN_SIZE", 1),
+            pg_pool_min_size=get_int("CORTEX_PG_POOL_MIN_SIZE", 0),
             pg_pool_max_size=get_int("CORTEX_PG_POOL_MAX_SIZE", 8),
             qdrant_url=get("CORTEX_QDRANT_URL"),
             s3_endpoint=get("CORTEX_S3_ENDPOINT"),
