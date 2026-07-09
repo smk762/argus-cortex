@@ -18,11 +18,11 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from argus_cortex.store.config import StoreConfig
 from argus_cortex.store.errors import StoreError, require_extra, wrap_errors
 from argus_cortex.store.schema import SCHEMA_STATEMENTS
 
 if TYPE_CHECKING:
-    from argus_cortex.store.config import StoreConfig
     from argus_cortex.store.models import Caption, HumanEdit, SourceAsset, TrainingRun
 
 __all__ = [
@@ -347,8 +347,6 @@ def open_lineage_store(config: StoreConfig | None = None) -> LineageStore:
     by simply setting ``CORTEX_PG_URL``.
     """
     if config is None:
-        from argus_cortex.store.config import StoreConfig
-
         config = StoreConfig.from_env()
     if config.pg_url:
         return PostgresLineageStore(config.pg_url)

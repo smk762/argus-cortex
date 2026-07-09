@@ -20,16 +20,17 @@ call in ``asyncio.to_thread(...)``.
 
 from __future__ import annotations
 
+import functools
+import uuid
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
+from argus_cortex.store.config import StoreConfig
 from argus_cortex.store.errors import require_extra, wrap_errors
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
-
-    from argus_cortex.store.config import StoreConfig
 
 # Canonical collection names for the two embedding kinds (callers may use others).
 IMAGE_COLLECTION = "image_embeddings"
@@ -38,12 +39,66 @@ TAGSET_COLLECTION = "tagset_embeddings"
 # Qdrant distance metrics, by their Qdrant enum value.
 VectorDistance = Literal["Cosine", "Euclid", "Dot", "Manhattan"]
 
+# Fixed namespace for deriving a Qdrant-valid UUID from an arbitrary string key.
+_POINT_ID_NAMESPACE = uuid.UUID("a5c0ffee-0000-4000-8000-000000000001")
+
+
+def normalise_point_id(point_id: str | int) -> str | int:
+    """Return a point id Qdrant accepts (an unsigned int or a UUID string).
+
+    Qdrant only allows an integer or a UUID as a point id, so an arbitrary string
+    key (e.g. a lineage ``caption_id`` that happens not to be a UUID) is mapped
+    **deterministically** to a UUID5 in :data:`_POINT_ID_NAMESPACE`. The mapping is
+    stable, so re-upserting the same key overwrites the same point. Carry the
+    original key in the payload if you need to read it back — the returned/searched
+    ``VectorHit.id`` is this normalised id, not the original string.
+    """
+    if isinstance(point_id, int):
+        return point_id
+    try:
+        return str(uuid.UUID(point_id))  # already a UUID -> pass through, normalised
+    except (ValueError, AttributeError, TypeError):
+        return str(uuid.uuid5(_POINT_ID_NAMESPACE, point_id))
+
+
+@functools.lru_cache(maxsize=1)
+def _qdrant_error_types() -> tuple[type[BaseException], ...]:
+    """qdrant-client's operational exceptions, so failures fold into StoreError.
+
+    Best-effort, cached once (the classes are process-global): qdrant-client's
+    exception names have shifted across versions and the transport (REST/httpx vs
+    gRPC) varies, so anything that can't be resolved is skipped — a raw error then
+    propagates rather than the wrapping itself crashing. Empty only when neither
+    qdrant-client nor httpx is importable, in which case the missing-driver path
+    has already raised StoreError before any operation runs.
+    """
+    errs: list[type[BaseException]] = []
+    try:
+        from qdrant_client.http import exceptions as qe
+
+        for name in ("UnexpectedResponse", "ResponseHandlingException", "ApiException"):
+            cls = getattr(qe, name, None)
+            if isinstance(cls, type) and issubclass(cls, BaseException):
+                errs.append(cls)
+    except ImportError:  # pragma: no cover - no driver means no operational errors to wrap
+        pass
+    try:
+        import httpx
+
+        errs.append(httpx.HTTPError)
+    except ImportError:  # pragma: no cover
+        pass
+    return tuple(errs)
+
 
 class VectorHit(BaseModel):
     """One search result: the point id, its similarity score, and its payload.
 
     ``payload`` is where the lineage ids live, so a hit joins back to the phase-1
-    Postgres rows (``caption_id`` → caption, ``asset_id`` → source_asset).
+    Postgres rows (``caption_id`` → caption, ``asset_id`` → source_asset). Prefer
+    joining on a payload id over ``id``: ``id`` is the string form of the Qdrant
+    point id (an int comes back stringified, and a non-UUID key was normalised to
+    a UUID5 at upsert), so it may not equal the key you passed.
     """
 
     id: str
@@ -171,33 +226,6 @@ class QdrantVectorStore:
             self._models_obj = require_extra("qdrant_client.models", "qdrant", feature="qdrant vector store")
         return self._models_obj
 
-    @staticmethod
-    def _client_errors() -> tuple[type[BaseException], ...]:
-        """qdrant-client's operational exceptions, so failures fold into StoreError.
-
-        Best-effort and defensive: qdrant-client's exception names have shifted
-        across versions and the transport (REST/httpx vs gRPC) varies, so anything
-        that can't be resolved is simply skipped — a raw error then propagates
-        rather than the wrapping itself crashing.
-        """
-        errs: list[type[BaseException]] = []
-        try:
-            from qdrant_client.http import exceptions as qe
-
-            for name in ("UnexpectedResponse", "ResponseHandlingException", "ApiException"):
-                cls = getattr(qe, name, None)
-                if isinstance(cls, type) and issubclass(cls, BaseException):
-                    errs.append(cls)
-        except ImportError:  # pragma: no cover - no driver means no operational errors to wrap
-            pass
-        try:
-            import httpx
-
-            errs.append(httpx.HTTPError)
-        except ImportError:  # pragma: no cover
-            pass
-        return tuple(errs)
-
     def _to_filter(self, where: Mapping[str, Any] | None) -> Any:
         """Turn a ``{field: value}`` exact-match mapping into a Qdrant Filter (or None)."""
         if not where:
@@ -213,12 +241,20 @@ class QdrantVectorStore:
             if client.collection_exists(name):
                 return
             m = self._models()
-            client.create_collection(
-                collection_name=name,
-                vectors_config=m.VectorParams(size=dim, distance=m.Distance(distance)),
-            )
+            try:
+                client.create_collection(
+                    collection_name=name,
+                    vectors_config=m.VectorParams(size=dim, distance=m.Distance(distance)),
+                )
+            except _qdrant_error_types() as exc:
+                # Qdrant's create_collection isn't idempotent: lose a concurrent
+                # create race and it errors. If the collection exists now, that's
+                # the outcome we wanted; otherwise the failure is real — re-raise
+                # (wrap_errors turns it into StoreError).
+                if not client.collection_exists(name):
+                    raise exc
 
-        wrap_errors(op, errors=self._client_errors(), label="ensure_collection")
+        wrap_errors(op, errors=_qdrant_error_types(), label="ensure_collection")
 
     def upsert(
         self,
@@ -228,13 +264,16 @@ class QdrantVectorStore:
         vector: Sequence[float],
         payload: Mapping[str, Any] | None = None,
     ) -> None:
+        # Qdrant only accepts an int or UUID id; map any other string key to a
+        # stable UUID5 so a lineage caption_id/asset_id "just works" (see
+        # normalise_point_id). Carry the original key in payload to read it back.
         def op() -> None:
             client = self._client()
             m = self._models()
-            point = m.PointStruct(id=point_id, vector=list(vector), payload=dict(payload or {}))
+            point = m.PointStruct(id=normalise_point_id(point_id), vector=list(vector), payload=dict(payload or {}))
             client.upsert(collection_name=collection, points=[point])
 
-        wrap_errors(op, errors=self._client_errors(), label="upsert")
+        wrap_errors(op, errors=_qdrant_error_types(), label="upsert")
 
     def search(
         self,
@@ -251,13 +290,20 @@ class QdrantVectorStore:
                 query=list(vector),
                 limit=top_k,
                 query_filter=self._to_filter(where),
-                with_payload=True,
             )
-            # query_points returns a QueryResponse(.points); tolerate a bare list.
-            points = getattr(resp, "points", resp)
-            return [VectorHit(id=str(p.id), score=float(p.score), payload=dict(p.payload or {})) for p in points]
+            # query_points returns a QueryResponse(.points); tolerate a bare list,
+            # and a None .points (empty/error variant) collapses to no hits.
+            points = getattr(resp, "points", resp) or []
+            return [
+                VectorHit(
+                    id=str(p.id),
+                    score=float(p.score) if p.score is not None else 0.0,
+                    payload=dict(p.payload or {}),
+                )
+                for p in points
+            ]
 
-        return wrap_errors(op, errors=self._client_errors(), label="search")
+        return wrap_errors(op, errors=_qdrant_error_types(), label="search")
 
     def close(self) -> None:
         if self._client_obj is not None:
@@ -276,8 +322,6 @@ def open_vector_store(config: StoreConfig | None = None) -> VectorStore:
     by simply setting ``CORTEX_QDRANT_URL``.
     """
     if config is None:
-        from argus_cortex.store.config import StoreConfig
-
         config = StoreConfig.from_env()
     if config.qdrant_url:
         return QdrantVectorStore(config.qdrant_url)
