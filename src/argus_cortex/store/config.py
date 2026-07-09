@@ -31,6 +31,8 @@ class StoreConfig(BaseModel):
     """
 
     pg_url: str | None = None
+    pg_pool_min_size: int = 1
+    pg_pool_max_size: int = 8
     qdrant_url: str | None = None
     s3_endpoint: str | None = None
     s3_access_key: str | None = None
@@ -50,8 +52,14 @@ class StoreConfig(BaseModel):
         def get(key: str) -> str | None:
             return env.get(key) or None
 
+        def get_int(key: str, default: int) -> int:
+            value = env.get(key)
+            return int(value) if value else default
+
         return cls(
             pg_url=get("CORTEX_PG_URL"),
+            pg_pool_min_size=get_int("CORTEX_PG_POOL_MIN_SIZE", 1),
+            pg_pool_max_size=get_int("CORTEX_PG_POOL_MAX_SIZE", 8),
             qdrant_url=get("CORTEX_QDRANT_URL"),
             s3_endpoint=get("CORTEX_S3_ENDPOINT"),
             s3_access_key=get("CORTEX_S3_ACCESS_KEY"),
