@@ -44,6 +44,7 @@ dev = [
     "minio>=7.2",
     "starlette>=0.37",
     "httpx>=0.27",
+    "httpx2>=2.7",
 ]
 
 [project.urls]
