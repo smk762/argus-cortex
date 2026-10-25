@@ -10,6 +10,7 @@ Part of the [Argus suite](https://github.com/smk762?tab=repositories&q=argus) (q
 - **`argus_cortex.wire`** — the versioned wire-schema toolkit: `check_version()` (major-compatibility gate), `make_versioned_base()` (a Pydantic base that stamps + checks a version field like `proof_version` / `manifest_version`), and `wire_schema()` / `render_schema()` for the committed-schema `schema --check` CLI pattern.
 - **`argus_cortex.backends`** — the AI-backend contract generalised from argus-lens: `Backend` / `LocalBackend` / `RemoteBackend` (point at a hosted service by `base_url`, `host`/`port`, or a known `RemoteProvider`), plus `with_retries()` and `resolve_device()`. httpx lives behind the `[remote]` extra.
 - **`argus_cortex.server`** — shared write-guard + env-flag scaffolding for the suite's FastAPI micro-servers: `WriteGuard` (a pure-ASGI method-gate that never buffers streaming responses), the `constant_refuse()` / `cross_site_refuse()` predicates (read-only/replay mode and cross-site-write protection are two configs of the one guard), the `UNSAFE_METHODS` / `TRUTHY` / `FALSY` constants, and `env_flag()` (warns on a mistyped protection flag rather than silently disabling it). Starlette lives behind the `[server]` extra.
+- **`argus_cortex.xmp`** — the suite's one XMP sidecar implementation (hoisted from argus-lens): `write_xmp()` / `read_xmp()` / `merge_xmp()` / `parse_xmp()` over an `XmpData` model covering `dc` (keywords, description), `xmp` (Rating, Label), `lr` (hierarchical keywords), `Iptc4xmpExt` (PersonInImage), `mwg-rs` face/pet regions, and `argus:ContentRating`. Writes **merge**: each property you set replaces that property (latest write wins), everything else in the sidecar — Lightroom develop settings, GPS, another stage's fields — is preserved. `None` leaves a property alone, an empty value removes it. Writes are atomic; an unparseable existing sidecar raises `XmpError` instead of being clobbered. Stdlib only.
 - **`argus_cortex.store`** — the optional **stateful services layer** (the suite's persistent "memory"). External and opt-in — every store is configured by `CORTEX_*` env vars and no-ops when its URL is unset.
   - **Phase 1 — Postgres lineage store.** Persists the `source_asset → caption → human_edit → dataset_membership → training_run` DAG for LoRA reproducibility, edit capture, and the feedback loop. Backed by a psycopg connection **pool** (concurrent `asyncio.to_thread` calls are safe; a dropped connection is replaced), with a `transaction()` boundary for atomic multi-step writes. `open_lineage_store()` returns a no-op store when `CORTEX_PG_URL` is unset; psycopg lives behind the `[postgres]` extra.
   - **Phase 2 — Qdrant vector store.** Stores image + tag-set embeddings for retrieval-augmented few-shot and near-duplicate curation; put a `caption_id`/`asset_id` in a point's payload and a search hit joins straight back to the lineage. `open_vector_store()` no-ops when `CORTEX_QDRANT_URL` is unset; qdrant-client lives behind the `[qdrant]` extra. cortex stores vectors it's *handed* — computing embeddings is the caller's job.
@@ -25,6 +26,22 @@ _Versioned = make_versioned_base("proof_version", "1.0", ("1",))
 # reach a hosted scorer by IP/port, or a known provider
 scorer = RemoteBackend.from_host("192.168.1.20", 9000, api_key="…")
 nim = RemoteBackend.from_provider(RemoteProvider.NVIDIA_NIM, api_key="…")
+```
+
+```python
+from argus_cortex.xmp import XmpData, XmpRegion, XmpRegions, write_xmp
+
+# lens writes captions/keywords …
+write_xmp("pics/beach.jpg", XmpData(keywords=["beach", "sunset"], description="a beach at sunset"))
+# … curator later adds faces + a content rating to the same sidecar; lens's fields survive
+write_xmp(
+    "pics/beach.jpg",
+    XmpData(
+        persons=["Ada"],
+        regions=XmpRegions(width=4000, height=3000, regions=[XmpRegion(x=0.52, y=0.4, w=0.1, h=0.18, name="Ada")]),
+        content_rating="safe",
+    ),
+)
 ```
 
 ```python

@@ -56,6 +56,18 @@ from argus_cortex.wire import (
     schema_major,
     wire_schema,
 )
+from argus_cortex.xmp import (
+    XmpData,
+    XmpError,
+    XmpRegion,
+    XmpRegions,
+    merge_xmp,
+    parse_xmp,
+    read_xmp,
+    render_xmp,
+    sidecar_path,
+    write_xmp,
+)
 
 __all__ = [
     "__version__",
@@ -70,6 +82,17 @@ __all__ = [
     "render_schema",
     "schema_major",
     "wire_schema",
+    # xmp sidecars
+    "XmpData",
+    "XmpError",
+    "XmpRegion",
+    "XmpRegions",
+    "merge_xmp",
+    "parse_xmp",
+    "read_xmp",
+    "render_xmp",
+    "sidecar_path",
+    "write_xmp",
     # backends
     "Backend",
     "BackendError",
