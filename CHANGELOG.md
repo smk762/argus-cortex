@@ -34,6 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     pydantic-only.
 - `CLAUDE.md` agent guide.
 
+### Security
+- **eMudhra/emSign CA incident.** The extras that make outbound TLS
+  connections (`[remote]` httpx, `[qdrant]`, `[s3]`) now require
+  `certifi>=2026.10.19`, which no longer trusts the compromised emSign
+  intermediates. See https://discuss.python.org/t/109576.
+
 ## [0.2.0] - 2026-07-21
 
 ### Added
