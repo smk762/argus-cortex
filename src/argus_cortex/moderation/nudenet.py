@@ -13,7 +13,8 @@ belly, armpits or male chest are detected too but do not count towards
 API: ``POST /infer`` with each image as a multipart field ``f1``, ``f2``, …,
 answered by ``{"prediction": [[{"class", "score", "box"}, ...], ...],
 "success": true}`` in field order. ``box`` is ``[x, y, w, h]`` in source
-pixels, and the server drops detections scoring under 0.2.
+pixels, and the server drops detections scoring under
+:data:`MIN_REPORTED_SCORE` (as does :func:`to_result`, whatever the server).
 
 Note: the upstream ``ghcr.io/notai-tech/nudenet`` image reports ``y`` offset by
 the letterbox padding on non-square images (scores are unaffected).
@@ -21,6 +22,7 @@ the letterbox padding on non-square images (scores are unaffected).
 
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from typing import Literal
@@ -74,8 +76,8 @@ class NsfwDetection(BaseModel):
 class NsfwResult(BaseModel):
     """NudeNet's view of one image.
 
-    The server reports only detections scoring >= 0.2, so a class missing from
-    ``labels`` scored below that. ``exposed_score`` is the highest score among
+    Only detections scoring >= :data:`MIN_REPORTED_SCORE` are kept, so a class
+    missing from ``labels`` scored below that. ``exposed_score`` is the highest score among
     :data:`DEFAULT_EXPOSED_LABELS`; filters can recompute it over another set.
     """
 
@@ -95,7 +97,9 @@ def exposed_score(labels: dict[str, float], exposed: tuple[str, ...] | list[str]
 
 
 def _is_number(value: object) -> bool:
-    return isinstance(value, int | float) and not isinstance(value, bool)
+    # json.loads accepts bare NaN/Infinity; a NaN score would compare False
+    # against every threshold and pass the image as safe.
+    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def to_result(raw: list) -> NsfwResult:
@@ -107,8 +111,10 @@ def to_result(raw: list) -> NsfwResult:
             continue
         label, score, box = d.get("class"), d.get("score"), d.get("box")
         if (
-            label not in known
+            not isinstance(label, str)
+            or label not in known
             or not _is_number(score)
+            or score < MIN_REPORTED_SCORE
             or not isinstance(box, list)
             or len(box) != 4
             or not all(_is_number(v) for v in box)
