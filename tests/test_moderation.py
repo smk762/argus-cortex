@@ -93,7 +93,7 @@ class _NudeNet(_Fake):
         red = _red(part.get_content())
         type(self).seen.append(
             {"path": self.path, "field": part.get_param("name", header="content-disposition"),
-             "filename": part.get_filename()}
+             "filename": part.get_filename(), "auth": self.headers["Authorization"]}
         )  # fmt: skip
         if red == _FAIL:
             self._send(500)
@@ -145,6 +145,15 @@ def test_nudenet_url() -> None:
     with pytest.raises(ModerationConfigError) as exc:
         NudeNetClient("ftp://user:secret@nudenet")
     assert "secret" not in str(exc.value)  # callers surface this message
+    # A host named like the path is still a host, and a query stays a query.
+    assert NudeNetClient("http://infer").url == "http://infer/infer"
+    assert NudeNetClient("http://h:8080?token=x").url == "http://h:8080/infer?token=x"
+
+
+def test_credentials_in_the_url_become_basic_auth(nudenet_server) -> None:
+    fake, url = nudenet_server
+    NudeNetClient(url.replace("http://", "http://us%40er:p%3Aw@"), timeout=5).check(_png(10))
+    assert fake.seen[0]["auth"] == "Basic " + base64.b64encode(b"us@er:p:w").decode()
 
 
 def test_nudenet_check(nudenet_server) -> None:
@@ -171,6 +180,11 @@ def test_nudenet_parsing_ignores_malformed_entries() -> None:
             {"class": "ANUS_EXPOSED", "score": "high", "box": [0, 0, 1, 1]},
             {"class": "ANUS_EXPOSED", "score": True, "box": [0, 0, 1, 1]},
             {"class": "ANUS_EXPOSED", "score": 0.9, "box": [0, 0, 1]},
+            {"class": "ANUS_EXPOSED", "score": float("nan"), "box": [0, 0, 1, 1]},
+            {"class": "ANUS_EXPOSED", "score": 0.9, "box": [0, 0, float("inf"), 1]},
+            {"class": "ANUS_EXPOSED", "score": nudenet.MIN_REPORTED_SCORE / 2, "box": [0, 0, 1, 1]},
+            {"class": ["ANUS_EXPOSED"], "score": 0.9, "box": [0, 0, 1, 1]},
+            {"class": {"x": 1}, "score": 0.9, "box": [0, 0, 1, 1]},
             "not a detection",
         ]
     )
@@ -223,6 +237,7 @@ def test_singguard_config() -> None:
     assert client.policy is None and client.policy_name == "default" and client.thinking == "fast"
     custom = SingGuardClient("http://g", policy="  ### A. Minors\n")
     assert custom.policy == "### A. Minors" and custom.policy_name == policy_name("### A. Minors")
+    assert custom.policy_name == policy_name("  ### A. Minors\n")  # a policy read from a file matches
     assert custom.policy_name.startswith("custom-") and len(custom.policy_name) == len("custom-") + 12
     for kwargs in ({"thinking": "slow"}, {"policy": " \n"}):
         with pytest.raises(ModerationConfigError):
@@ -273,6 +288,23 @@ def test_singguard_downscales_large_images(singguard_server) -> None:
     assert Image.open(io.BytesIO(singguard.downscale(buf.getvalue()))).size == (1152, 1536)  # upright
     with pytest.raises(GuardCheckFailed, match="prepared"):
         singguard.downscale(b"not an image")
+
+
+def test_downscale_enforces_the_byte_limit() -> None:
+    noisy = Image.effect_noise((1200, 900), 100).convert("RGB")
+    buf = io.BytesIO()
+    noisy.save(buf, "PNG")
+    out = singguard.downscale(buf.getvalue(), max_bytes=100_000)
+    assert len(out) <= 100_000 and max(Image.open(io.BytesIO(out)).size) < 1200
+    with pytest.raises(GuardCheckFailed, match="size limit"):
+        singguard.downscale(buf.getvalue(), max_bytes=100)
+
+
+def test_singguard_without_pillow_fails_at_construction(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(singguard.importlib.util, "find_spec", lambda name: None)
+    with pytest.raises(ModerationConfigError, match="images"):
+        SingGuardClient("http://g")
+    assert SingGuardClient("http://g", downscale=False).downscale is False
 
 
 @pytest.mark.parametrize(

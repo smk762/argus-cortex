@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib.util
 import io
 import json
 
@@ -31,6 +32,8 @@ THINKING_MODES = ("fast", "fast-slow")
 # JSON inflates every byte by 4/3.
 MAX_EDGE = 1536
 MAX_BYTES = 4 * 1024 * 1024
+_MIN_EDGE = 256  # below this, give up rather than send SingGuard a postage stamp
+_NEEDS_PILLOW = "downscaling images needs: pip install argus-cortex[images] (or pass downscale=False)"
 _EXPLANATION_MAX = 4000
 _FIELD_MAX = 200
 
@@ -55,8 +58,11 @@ class GuardCheckFailed(CheckFailed):
 
 
 def policy_name(text: str | None) -> str:
-    """How a result records the policy: ``default``, or ``custom-`` + a sha256 prefix of *text*."""
-    return "default" if text is None else f"custom-{hashlib.sha256(text.encode()).hexdigest()[:12]}"
+    """How a result records the policy: ``default``, or ``custom-`` + a sha256 prefix of *text*.
+
+    *text* is stripped first, as :class:`SingGuardClient` strips the policy it sends.
+    """
+    return "default" if text is None else f"custom-{hashlib.sha256(text.strip().encode()).hexdigest()[:12]}"
 
 
 def rule_letter(rule: str) -> str:
@@ -102,31 +108,46 @@ def to_result(payload: object, policy: str = "default") -> GuardResult:
 
 
 def downscale(data: bytes, max_edge: int = MAX_EDGE, max_bytes: int = MAX_BYTES) -> bytes:
-    """*data* as is when small enough, else downscaled to a JPEG (a PNG when it has alpha).
+    """*data* as is when small enough, else downscaled to a JPEG (a PNG when it
+    has alpha) of at most *max_edge* px and *max_bytes*, shrinking further if
+    the first encoding is still too large.
 
-    Raises :class:`GuardCheckFailed` for an image Pillow cannot read.
+    Raises :class:`GuardCheckFailed` for an image Pillow cannot read or shrink
+    under *max_bytes*.
     """
     try:
         from PIL import Image, ImageOps
     except ImportError as exc:  # pragma: no cover - exercised only without the extra
-        raise ModerationConfigError("downscaling images needs: pip install argus-cortex[images]") from exc
+        raise ModerationConfigError(_NEEDS_PILLOW) from exc
     try:
         with Image.open(io.BytesIO(data)) as im:
             if max(im.size) <= max_edge and len(data) <= max_bytes:
                 return data
+            # Shrink first, so a JPEG decodes at reduced scale (draft mode);
+            # the box is square, so transposing after gives the same size.
+            im.thumbnail((max_edge, max_edge))
             # Upright, as a viewer would see it: re-encoding drops the EXIF tag.
             out = ImageOps.exif_transpose(im)
-            out.thumbnail((max_edge, max_edge))
-            buf = io.BytesIO()
-            if out.mode in ("RGBA", "LA", "PA") or (out.mode == "P" and "transparency" in out.info):
-                # Flattening onto black would hide dark content drawn on a
-                # transparent background; keep the alpha, as a small PNG goes.
-                out.save(buf, "PNG", optimize=True)
-            else:
-                out.convert("RGB").save(buf, "JPEG", quality=90)
+            alpha = out.mode in ("RGBA", "LA", "PA") or (out.mode == "P" and "transparency" in out.info)
+            if not alpha:
+                out = out.convert("RGB")
+            edge = max(out.size)
+            while True:
+                buf = io.BytesIO()
+                if alpha:
+                    # Flattening onto black would hide dark content drawn on a
+                    # transparent background; keep the alpha, as a small PNG goes.
+                    out.save(buf, "PNG", optimize=True)
+                else:
+                    out.save(buf, "JPEG", quality=90)
+                if buf.tell() <= max_bytes:
+                    return buf.getvalue()
+                if edge <= _MIN_EDGE:
+                    raise GuardCheckFailed("image could not be shrunk under the SingGuard size limit")
+                edge = max(_MIN_EDGE, edge * 3 // 4)
+                out.thumbnail((edge, edge))
     except (OSError, ValueError, Image.DecompressionBombError) as exc:
         raise GuardCheckFailed(f"image could not be prepared for SingGuard: {exc}") from exc
-    return buf.getvalue()
 
 
 class SingGuardClient:
@@ -151,6 +172,9 @@ class SingGuardClient:
             raise ModerationConfigError(f"SingGuard thinking must be one of {', '.join(THINKING_MODES)}")
         if policy is not None and not policy.strip():
             raise ModerationConfigError("the SingGuard policy is empty (pass None for the default rules)")
+        if downscale and importlib.util.find_spec("PIL") is None:
+            # Fail at startup, not as a config error out of every check().
+            raise ModerationConfigError(_NEEDS_PILLOW)
         self.url = service_url(base_url, "/api/guard/check", "SingGuard")
         self.timeout = timeout
         self.thinking = thinking
