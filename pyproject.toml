@@ -32,6 +32,9 @@ s3 = ["minio>=7.2", "certifi>=2026.10.19"]
 # (argus_cortex.server). Starlette ships with FastAPI, so consumers already have
 # it via their own [server] extra.
 server = ["starlette>=0.37"]
+# Pillow, for SingGuardClient's downscaling of large images
+# (argus_cortex.moderation.singguard), imported only when it downscales.
+images = ["pillow>=10.0"]
 # The store drivers are in dev so each store's real client path (pool/enum/client
 # construction, error wrapping) is exercised in CI, not just via fakes.
 # starlette + httpx power the pure-ASGI guard tests (Starlette TestClient).
@@ -45,6 +48,7 @@ dev = [
     "starlette>=0.37",
     "httpx>=0.27",
     "httpx2>=2.7",
+    "pillow>=10.0",
     "certifi>=2026.10.19",
 ]
 
