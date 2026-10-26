@@ -212,7 +212,7 @@ _GUARD_ANSWERS: dict[int, dict] = {
         "explanation": f"Triggered rule: {_CRIME}.",
         "categories": [{"code": _CRIME, "label": _CRIME, "why": "-"}, {"code": _GORE, "label": _GORE, "why": "-"}],
     },
-    30: {"safe": False, "verdict": "unsafe", "rule": _GORE, "explanation": "", "categories": None},
+    30: {"safe": False, "verdict": "unsafe", "rule": _GORE, "explanation": "", "categories": 5},  # malformed
     40: {"verdict": "safe"},  # no boolean verdict: a failed check, not a pass
 }
 
@@ -266,6 +266,11 @@ def test_singguard_downscales_large_images(singguard_server) -> None:
     ]
     small = _png(10)
     assert singguard.downscale(small) is small
+    exif = Image.Exif()
+    exif[0x0112] = 6  # rotate 90 degrees to view
+    buf = io.BytesIO()
+    Image.new("RGB", (4000, 3000)).save(buf, "JPEG", exif=exif)
+    assert Image.open(io.BytesIO(singguard.downscale(buf.getvalue()))).size == (1152, 1536)  # upright
     with pytest.raises(GuardCheckFailed, match="prepared"):
         singguard.downscale(b"not an image")
 
