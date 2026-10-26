@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-26
+
 ### Added
 - **`argus_cortex.moderation`** — content-moderation clients shared by the
   stages, hoisted from argus-curator. Both talk HTTP to a server the deployer
@@ -24,9 +26,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     letter or full name; `policy_name()` names a custom policy by a sha256
     prefix.
   - Proxies in the environment are ignored: images go only to the configured
-    server. Config errors (`ModerationConfigError`) never echo the URL.
+    server. Config errors (`ModerationConfigError`) never echo the URL. A
+    `user:password@` in the URL is sent as HTTP Basic auth.
 - `[images]` extra (Pillow), for `SingGuardClient`'s downscaling of images
-  over 1536 px / 4 MB; imported only when it downscales.
+  over 1536 px / 4 MB; imported only when it downscales. Downscaling is on by
+  default, so without the extra `SingGuardClient(...)` raises
+  `ModerationConfigError` at construction unless given `downscale=False`.
+
+### Changed
+- `release.yml` now creates the **GitHub Release** for each `v*` tag once the
+  version is on PyPI, with that version's `CHANGELOG.md` section as notes and
+  the built sdist/wheel attached (a missing section fails the job; a re-run
+  edits the Release). Tags with `-`, `rc`, `a<n>` or `b<n>` are pre-releases.
 
 ## [0.3.0] - 2026-10-25
 
@@ -92,7 +103,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/smk762/argus-cortex/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/smk762/argus-cortex/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/smk762/argus-cortex/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/smk762/argus-cortex/releases/tag/v0.1.0
