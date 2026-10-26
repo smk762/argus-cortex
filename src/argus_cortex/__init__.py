@@ -23,6 +23,14 @@ from argus_cortex.backends import (
     resolve_device,
     with_retries,
 )
+from argus_cortex.moderation import (
+    CheckFailed,
+    GuardResult,
+    ModerationConfigError,
+    NsfwResult,
+    NudeNetClient,
+    SingGuardClient,
+)
 from argus_cortex.store import (
     IMAGE_COLLECTION,
     TAGSET_COLLECTION,
@@ -102,6 +110,13 @@ __all__ = [
     "RemoteProvider",
     "resolve_device",
     "with_retries",
+    # moderation clients (NudeNet, SingGuard over HTTP)
+    "CheckFailed",
+    "GuardResult",
+    "ModerationConfigError",
+    "NsfwResult",
+    "NudeNetClient",
+    "SingGuardClient",
     # store (optional stateful services layer)
     "StoreConfig",
     "StoreError",

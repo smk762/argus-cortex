@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`argus_cortex.moderation`** — content-moderation clients shared by the
+  stages, hoisted from argus-curator. Both talk HTTP to a server the deployer
+  runs; nothing imports a detector.
+  - `NudeNetClient(base_url, timeout)` — a NudeNet server's `/infer`, returning
+    `NsfwResult` (detections, highest score per class, exposed score) and
+    raising `NudeNetCheckFailed` per image. `NudeNetLabel` / `NUDENET_LABELS`
+    are NudeNet's 18 classes; `DEFAULT_EXPOSED_LABELS` (the five exposed
+    buttocks/breast/genitalia/anus classes) and `exposed_score()` are the
+    suite's one definition of nudity.
+  - `SingGuardClient(base_url, timeout, thinking, policy, downscale)` — a
+    SingGuard server's `/api/guard/check`, returning `GuardResult` (verdict,
+    the rules that fired, explanation, model, policy name) and raising
+    `GuardCheckFailed`. `rule_matches()` / `rule_letter()` match rules by
+    letter or full name; `policy_name()` names a custom policy by a sha256
+    prefix.
+  - Proxies in the environment are ignored: images go only to the configured
+    server. Config errors (`ModerationConfigError`) never echo the URL.
+- `[images]` extra (Pillow), for `SingGuardClient`'s downscaling of images
+  over 1536 px / 4 MB; imported only when it downscales.
+
 ## [0.3.0] - 2026-10-25
 
 ### Added
