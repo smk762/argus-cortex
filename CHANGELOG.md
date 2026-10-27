@@ -8,11 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- `SingGuardClient(thinking="slow")`: the argus-cull `singguard` service's
-  reasoning mode with no fast first-line verdict, so the reasoning is not
-  anchored to a verdict made before it. `THINKING_MODES` lists it. A SingGuard
-  server without that mode answers HTTP 400, raised as `GuardCheckFailed` per
-  check.
+- `SingGuardClient(thinking="slow")` and `thinking="cascade"`: the argus-cull
+  `singguard` service's modes. `slow` reasons with no fast first-line verdict,
+  so the reasoning is not anchored to a verdict made before it; `cascade` runs
+  `fast` on every image and `slow` only on the ones fast flags, and slow's
+  verdict stands. `THINKING_MODES` lists them. A SingGuard server without a
+  mode answers HTTP 400, raised as `GuardCheckFailed` per check.
 - `GuardResult.thinking`: the mode the server says it judged in (`None` from a
   server that does not say). The argus-cull service can be forced server-side
   to a mode other than the one asked for, and this records which it used.

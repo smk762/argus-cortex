@@ -15,9 +15,11 @@ its ``SINGGUARD_FORCE_THINKING`` can make differ from the one asked for.
 
 ``thinking`` is ``fast`` (a verdict and rule), ``fast-slow`` (SingGuard's own
 reasoning mode: a fast first-line verdict, then the reasoning and a final
-answer) or ``slow`` (the argus-cull service's variant with no first-line
-verdict, so the reasoning is not anchored to a verdict made before it; older
-servers answer HTTP 400 to it).
+answer), ``slow`` (the argus-cull service's variant with no first-line
+verdict, so the reasoning is not anchored to a verdict made before it) or
+``cascade`` (that service's ``fast`` for every image and ``slow`` for the ones
+fast flags, slow's verdict standing). Servers without ``slow`` and ``cascade``
+answer HTTP 400 to them.
 
 Large images are downscaled before sending (Pillow, from the ``[images]``
 extra, imported only when downscaling is on).
@@ -35,7 +37,7 @@ from pydantic import BaseModel, Field
 
 from argus_cortex.moderation._http import CheckFailed, ModerationConfigError, post_json, service_url
 
-THINKING_MODES = ("fast", "fast-slow", "slow")
+THINKING_MODES = ("fast", "fast-slow", "slow", "cascade")
 # The guard model sees far fewer pixels than a camera original, and base64
 # JSON inflates every byte by 4/3.
 MAX_EDGE = 1536
@@ -167,8 +169,9 @@ class SingGuardClient:
 
     *policy* is the policy text (``None`` = SingGuard's default rules);
     *thinking* is one of :data:`THINKING_MODES`: ``fast`` (verdict and rule),
-    ``fast-slow`` (also writes why) or ``slow`` (writes why, with no fast
-    verdict ahead of the reasoning; needs the argus-cull ``singguard`` service).
+    ``fast-slow`` (also writes why), ``slow`` (writes why, with no fast
+    verdict ahead of the reasoning) or ``cascade`` (fast, then slow only for
+    what fast flagged); the last two need the argus-cull ``singguard`` service.
     With *downscale* on (the default, needs ``[images]``), images over
     :data:`MAX_EDGE` px or :data:`MAX_BYTES` are shrunk before sending.
     Thread-safe: :meth:`check` holds no state.
