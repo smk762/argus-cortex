@@ -102,7 +102,7 @@ class _NudeNet(_Fake):
 
 
 class _SingGuard(_Fake):
-    answers: dict[int, dict] = {}
+    answers: dict[int, dict] = {}  # a test's overrides of _GUARD_ANSWERS, by red value
 
     def do_POST(self) -> None:
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
@@ -115,7 +115,8 @@ class _SingGuard(_Fake):
         if red == _FAIL:
             self._send(500)
         else:
-            self._send(200, {**_GUARD_ANSWERS.get(red, _GUARD_ANSWERS[10]), "model": "SingGuard-4b", "elapsed_ms": 5})
+            answer = self.answers.get(red) or _GUARD_ANSWERS.get(red, _GUARD_ANSWERS[10])
+            self._send(200, {**answer, "model": "SingGuard-4b", "elapsed_ms": 5})
 
 
 def _serve(handler: type[_Fake]) -> Iterator[tuple[type[_Fake], str]]:
@@ -239,7 +240,8 @@ def test_singguard_config() -> None:
     assert custom.policy == "### A. Minors" and custom.policy_name == policy_name("### A. Minors")
     assert custom.policy_name == policy_name("  ### A. Minors\n")  # a policy read from a file matches
     assert custom.policy_name.startswith("custom-") and len(custom.policy_name) == len("custom-") + 12
-    for kwargs in ({"thinking": "slow"}, {"policy": " \n"}):
+    assert [SingGuardClient("http://g", thinking=m).thinking for m in ("slow", "cascade")] == ["slow", "cascade"]
+    for kwargs in ({"thinking": "slower"}, {"thinking": "FAST"}, {"policy": " \n"}):
         with pytest.raises(ModerationConfigError):
             SingGuardClient("http://g", **kwargs)
     with pytest.raises(ModerationConfigError):
@@ -267,6 +269,21 @@ def test_singguard_default_policy_is_not_sent(singguard_server) -> None:
     fake, url = singguard_server
     SingGuardClient(url).check(_png(10))
     assert "policy" not in fake.seen[0]
+
+
+def test_singguard_slow_is_sent_and_the_mode_used_is_recorded(singguard_server) -> None:
+    """The argus-cull service answers with the mode it judged in, which a
+    server-side force can make differ from the request; it is recorded as sent.
+    A server that says nothing leaves it None."""
+    fake, url = singguard_server
+    client = SingGuardClient(url, timeout=5, thinking="slow")
+    assert client.check(_png(10)).thinking is None
+    fake.answers = {10: {**_GUARD_ANSWERS[10], "thinking": "fast-slow"}}
+    try:
+        assert client.check(_png(10)).thinking == "fast-slow"
+    finally:
+        fake.answers = {}
+    assert {s["thinking"] for s in fake.seen} == {"slow"}
 
 
 def test_singguard_downscales_large_images(singguard_server) -> None:
