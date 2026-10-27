@@ -240,7 +240,7 @@ def test_singguard_config() -> None:
     assert custom.policy == "### A. Minors" and custom.policy_name == policy_name("### A. Minors")
     assert custom.policy_name == policy_name("  ### A. Minors\n")  # a policy read from a file matches
     assert custom.policy_name.startswith("custom-") and len(custom.policy_name) == len("custom-") + 12
-    assert SingGuardClient("http://g", thinking="slow").thinking == "slow"
+    assert [SingGuardClient("http://g", thinking=m).thinking for m in ("slow", "cascade")] == ["slow", "cascade"]
     for kwargs in ({"thinking": "slower"}, {"thinking": "FAST"}, {"policy": " \n"}):
         with pytest.raises(ModerationConfigError):
             SingGuardClient("http://g", **kwargs)
