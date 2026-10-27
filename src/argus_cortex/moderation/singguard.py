@@ -9,7 +9,17 @@ Animal Abuse. A custom policy text replaces them. It gives no scores.
 
 API: ``POST /api/guard/check`` with JSON ``{input, image_base64, policy,
 thinking}``, answered by ``{safe, verdict, rule, explanation, categories:
-[{code, label, why}], model, elapsed_ms}``.
+[{code, label, why}], model, elapsed_ms}`` and, from the argus-cull
+``singguard`` service, ``thinking``: the mode the server judged in, which
+its ``SINGGUARD_FORCE_THINKING`` can make differ from the one asked for.
+
+``thinking`` is ``fast`` (a verdict and rule), ``fast-slow`` (SingGuard's own
+reasoning mode: a fast first-line verdict, then the reasoning and a final
+answer), ``slow`` (the argus-cull service's variant with no first-line
+verdict, so the reasoning is not anchored to a verdict made before it) or
+``cascade`` (that service's ``fast`` for every image and ``slow`` for the ones
+fast flags, slow's verdict standing). Servers without ``slow`` and ``cascade``
+answer HTTP 400 to them.
 
 Large images are downscaled before sending (Pillow, from the ``[images]``
 extra, imported only when downscaling is on).
@@ -27,7 +37,7 @@ from pydantic import BaseModel, Field
 
 from argus_cortex.moderation._http import CheckFailed, ModerationConfigError, post_json, service_url
 
-THINKING_MODES = ("fast", "fast-slow")
+THINKING_MODES = ("fast", "fast-slow", "slow", "cascade")
 # The guard model sees far fewer pixels than a camera original, and base64
 # JSON inflates every byte by 4/3.
 MAX_EDGE = 1536
@@ -51,6 +61,9 @@ class GuardResult(BaseModel):
     # own rules) or "custom-<sha256 prefix>" of the policy text.
     model: str | None = None
     policy: str = "default"
+    # The thinking mode the server judged in, when it says (the argus-cull
+    # service does; it can be forced server-side to differ from the request).
+    thinking: str | None = None
 
 
 class GuardCheckFailed(CheckFailed):
@@ -104,6 +117,7 @@ def to_result(payload: object, policy: str = "default") -> GuardResult:
         explanation=_clip(payload.get("explanation"), _EXPLANATION_MAX),
         model=_clip(payload.get("model"), _FIELD_MAX),
         policy=policy,
+        thinking=_clip(payload.get("thinking"), _FIELD_MAX),
     )
 
 
@@ -154,7 +168,10 @@ class SingGuardClient:
     """A SingGuard server at *base_url* (its origin, e.g. ``http://guard:9150``).
 
     *policy* is the policy text (``None`` = SingGuard's default rules);
-    *thinking* is ``fast`` (verdict and rule) or ``fast-slow`` (also writes why).
+    *thinking* is one of :data:`THINKING_MODES`: ``fast`` (verdict and rule),
+    ``fast-slow`` (also writes why), ``slow`` (writes why, with no fast
+    verdict ahead of the reasoning) or ``cascade`` (fast, then slow only for
+    what fast flagged); the last two need the argus-cull ``singguard`` service.
     With *downscale* on (the default, needs ``[images]``), images over
     :data:`MAX_EDGE` px or :data:`MAX_BYTES` are shrunk before sending.
     Thread-safe: :meth:`check` holds no state.

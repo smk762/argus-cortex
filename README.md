@@ -53,6 +53,9 @@ result = nudenet.check(image_bytes, "beach.jpg")
 result.exposed_score    # 0.0-1.0 over DEFAULT_EXPOSED_LABELS; result.labels = per-class maxima
 
 guard = SingGuardClient("http://guard:9150", policy=None)  # None = SingGuard's default rules
+# thinking="fast" (default) is a verdict and rule; "fast-slow" also writes why; "slow" writes why
+# with no fast verdict ahead of the reasoning; "cascade" is fast, then slow only for what fast
+# flagged (the last two: argus-cull's singguard service only).
 verdict = guard.check(image_bytes, text="the prompt, if any")
 verdict.safe, verdict.rules   # False, ["B. Real-World Crimes & Public Safety"]
 any(rule_matches(r, "B") for r in verdict.rules)   # match a rule by letter or full name
