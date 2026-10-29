@@ -106,10 +106,14 @@ class _SingGuard(_Fake):
 
     def do_POST(self) -> None:
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        image = Image.open(io.BytesIO(base64.b64decode(body["image_base64"])))
-        red = image.convert("RGB").getpixel((0, 0))[0]
+        if "image_base64" in body:
+            image = Image.open(io.BytesIO(base64.b64decode(body["image_base64"])))
+            red = image.convert("RGB").getpixel((0, 0))[0]
+            size, fmt = image.size, image.format
+        else:  # a text-only check: the text picks the answer
+            red, size, fmt = _TEXT_ANSWERS.get(body["input"], 10), None, None
         type(self).seen.append(
-            {"path": self.path, "size": image.size, "format": image.format,
+            {"path": self.path, "size": size, "format": fmt,
              **{k: v for k, v in body.items() if k != "image_base64"}}
         )  # fmt: skip
         if red == _FAIL:
@@ -230,6 +234,7 @@ _GUARD_ANSWERS: dict[int, dict] = {
     30: {"safe": False, "verdict": "unsafe", "rule": _GORE, "explanation": "", "categories": 5},  # malformed
     40: {"verdict": "safe"},  # no boolean verdict: a failed check, not a pass
 }
+_TEXT_ANSWERS = {"rob a bank": 20, "fail": _FAIL}  # a text-only check's input -> the red value it answers as
 
 
 def test_singguard_config() -> None:
@@ -263,6 +268,23 @@ def test_singguard_check(singguard_server) -> None:
     assert {s["path"] for s in fake.seen} == {"/api/guard/check"}
     assert fake.seen[0]["input"] == "a cat on a sofa" and fake.seen[1]["input"] == ""
     assert {s["thinking"] for s in fake.seen} == {"fast-slow"} and {s["policy"] for s in fake.seen} == {"### A. Minors"}
+
+
+def test_singguard_check_text(singguard_server) -> None:
+    """A text-only check sends no image, says whose text it is, and keeps the client's policy and mode."""
+    fake, url = singguard_server
+    client = SingGuardClient(url, timeout=5, thinking="cascade", policy="### A. Minors")
+    assert client.check_text("a cat on a sofa").safe
+    assert client.check_text("rob a bank", role="assistant").rules == [_CRIME, _GORE]
+    with pytest.raises(GuardCheckFailed, match="HTTP 500"):
+        client.check_text("fail")
+    assert all("image_base64" not in s and s["size"] is None for s in fake.seen)
+    assert [s["input_role"] for s in fake.seen] == ["user", "assistant", "user"]
+    assert {s["thinking"] for s in fake.seen} == {"cascade"} and {s["policy"] for s in fake.seen} == {"### A. Minors"}
+    for text, role in (("", "user"), (" \n", "user"), ("hi", "system")):
+        with pytest.raises(ValueError):
+            client.check_text(text, role=role)
+    assert len(fake.seen) == 3  # a bad argument never reaches the server
 
 
 def test_singguard_default_policy_is_not_sent(singguard_server) -> None:
