@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `SingGuardClient.check_text(text, role="user")`: a text-only check, with no
+  image, for judging a prompt before it is run (or, with `role="assistant"`, a
+  model's reply). It sends `input_role` and keeps the client's policy and
+  thinking mode. It needs a server that takes a check without `image_base64`:
+  agent-composer's guard router does, while argus-cull's `singguard` service
+  answers HTTP 422, raised as `GuardCheckFailed`. `INPUT_ROLES` lists the roles.
+- **`argus_cortex.moderation.policies`**: the named SingGuard policies the
+  stages share, moved from argus-curator's `guard.py` with their texts
+  unchanged. `POLICIES` / `PolicyName` (`default`, `adult`, `adult-granular`,
+  `adult-cautious`) and `policy_text(name)` (`None` for SingGuard's own rules).
+  - `illegal_rules(name)` / `is_illegal(name, rule)`: the rule letters whose
+    firing means illegal content, per policy. `adult-granular` is A, H and I;
+    `adult` and `adult-cautious` are A. `default` has none, because its A
+    covers consensual adult nudity too. B (crime) and G (animal abuse) are
+    never illegal.
+  - `mode(name)`: `sfw` for `default` and any `sfw-*` name (the prefix is
+    reserved for SFW policies added later), `nsfw` for every other policy.
+  - An unknown name raises `ModerationConfigError`.
+
 ## [0.4.1] - 2026-10-27
 
 ### Added
