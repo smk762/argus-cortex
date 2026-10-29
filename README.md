@@ -57,9 +57,21 @@ guard = SingGuardClient("http://guard:9150", policy=None)  # None = SingGuard's 
 # with no fast verdict ahead of the reasoning; "cascade" is fast, then slow only for what fast
 # flagged (the last two: argus-cull's singguard service only).
 verdict = guard.check(image_bytes, text="the prompt, if any")
+preflight = guard.check_text("the prompt")    # no image: judge a prompt before it is run
 verdict.safe, verdict.rules   # False, ["B. Real-World Crimes & Public Safety"]
 any(rule_matches(r, "B") for r in verdict.rules)   # match a rule by letter or full name
 ```
+
+```python
+from argus_cortex.moderation import SingGuardClient, policies
+
+guard = SingGuardClient("http://guard:9150", policy=policies.policy_text("adult-granular"))
+verdict = guard.check(image_bytes)
+illegal = [r for r in verdict.rules if policies.is_illegal("adult-granular", r)]   # A, H or I
+policies.mode("adult-granular"), policies.mode("default")   # "nsfw", "sfw"
+```
+
+Stages ask for a policy by name; `policies` holds each one's text, the rules that mean illegal content under it, and its SFW/NSFW mode (`default` and `sfw-*` are SFW).
 
 Each `check()` raises `CheckFailed` (`NudeNetCheckFailed` / `GuardCheckFailed`) for a network error or an unusable answer, so a caller checking many images can record "unchecked" against the one image — and should treat unchecked as *not* safe. Bad configuration raises `ModerationConfigError`, whose message never echoes the URL.
 
