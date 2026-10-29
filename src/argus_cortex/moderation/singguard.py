@@ -8,7 +8,8 @@ gore), D. Cybersecurity, E. Agent Safety, F. Politically Sensitive and G.
 Animal Abuse. A custom policy text replaces them. It gives no scores.
 
 API: ``POST /api/guard/check`` with JSON ``{input, image_base64, policy,
-thinking}``, answered by ``{safe, verdict, rule, explanation, categories:
+thinking}`` (or ``{input, input_role, policy, thinking}`` for a text-only
+check, which not every server takes), answered by ``{safe, verdict, rule, explanation, categories:
 [{code, label, why}], model, elapsed_ms}`` and, from the argus-cull
 ``singguard`` service, ``thinking``: the mode the server judged in, which
 its ``SINGGUARD_FORCE_THINKING`` can make differ from the one asked for.
@@ -38,6 +39,8 @@ from pydantic import BaseModel, Field
 from argus_cortex.moderation._http import CheckFailed, ModerationConfigError, post_json, service_url
 
 THINKING_MODES = ("fast", "fast-slow", "slow", "cascade")
+# Who wrote the text of a text-only check: the person asking, or a model answering.
+INPUT_ROLES = ("user", "assistant")
 # The guard model sees far fewer pixels than a camera original, and base64
 # JSON inflates every byte by 4/3.
 MAX_EDGE = 1536
@@ -205,11 +208,23 @@ class SingGuardClient:
         Raises :class:`GuardCheckFailed`.
         """
         image = downscale(data) if self.downscale else data
-        body: dict[str, str] = {
-            "input": text,
-            "image_base64": base64.b64encode(image).decode("ascii"),
-            "thinking": self.thinking,
-        }
+        return self._post({"input": text, "image_base64": base64.b64encode(image).decode("ascii")})
+
+    def check_text(self, text: str, role: str = "user") -> GuardResult:
+        """Judge *text* with no image: a prompt before it is run (``role="user"``), or a model's reply
+        (``"assistant"``).
+
+        Needs a server that takes a check without ``image_base64``: agent-composer's guard router
+        does; argus-cull's ``singguard`` service answers HTTP 422, raised as :class:`GuardCheckFailed`.
+        """
+        if role not in INPUT_ROLES:
+            raise ValueError(f"role must be one of {', '.join(INPUT_ROLES)}")
+        if not text.strip():
+            raise ValueError("there is no text to check")
+        return self._post({"input": text, "input_role": role})
+
+    def _post(self, body: dict[str, str]) -> GuardResult:
+        body["thinking"] = self.thinking
         if self.policy is not None:
             body["policy"] = self.policy
         payload = post_json(

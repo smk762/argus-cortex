@@ -20,6 +20,7 @@ from argus_cortex.moderation.nudenet import (
     exposed_score,
 )
 from argus_cortex.moderation.singguard import (
+    INPUT_ROLES,
     THINKING_MODES,
     GuardCheckFailed,
     GuardResult,
@@ -31,6 +32,7 @@ from argus_cortex.moderation.singguard import (
 
 __all__ = [
     "DEFAULT_EXPOSED_LABELS",
+    "INPUT_ROLES",
     "NUDENET_LABELS",
     "THINKING_MODES",
     "CheckFailed",
