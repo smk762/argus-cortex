@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Re-recording an asset no longer erases what another stage recorded on it.** `record_asset`'s
+  upsert on `sha256` replaced `immich_id` and `metadata` outright, so argus-lens recording a caption
+  for an image argus-quarry had already recorded (licence, author, source) wiped that provenance,
+  and a call without an `immich_id` cleared the stored one. `metadata` now merges key by key
+  (`jsonb ||`: the new call's keys win, others are kept) and a `NULL` `immich_id` keeps the stored
+  one. `uri` is still last-write-wins: it is the asset's latest location. A caller that needs to
+  remove a metadata key can no longer do it through `record_asset`.
+
 ## [0.4.3] - 2026-10-30
 
 ### Added

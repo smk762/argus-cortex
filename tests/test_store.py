@@ -206,9 +206,11 @@ def test_record_asset_returns_id_and_upserts_on_sha() -> None:
     sql, params = conn.executed[-1]
     assert "INSERT INTO source_asset" in sql
     assert "ON CONFLICT (sha256)" in sql
-    # on a dedup hit, uri/immich_id/metadata are all refreshed (not just uri)
-    assert "immich_id = EXCLUDED.immich_id" in sql
-    assert "metadata = EXCLUDED.metadata" in sql
+    # on a dedup hit uri is refreshed, but a call without an immich_id or a
+    # metadata key keeps the stored one (another stage may have recorded it)
+    assert "uri = EXCLUDED.uri" in sql
+    assert "immich_id = COALESCE(EXCLUDED.immich_id, source_asset.immich_id)" in sql
+    assert "metadata = source_asset.metadata || EXCLUDED.metadata" in sql
     # metadata is serialised to a JSON string for the ::jsonb cast
     assert params == ("immich://1", "abc", None, '{"k": "v"}')
 
