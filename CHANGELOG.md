@@ -27,7 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     unusable number logs a warning and falls back to the default.
   - The default lock is `<tempdir>/argus-gpu.lock`. Containers have their own
     `/tmp`, so a shared lock needs `ARGUS_GPU_LEASE_PATH` on a volume every
-    GPU service mounts.
+    GPU service mounts. The lock file is `chmod 0o666` after create so a
+    restrictive umask does not block other container UIDs from opening it.
 - `[gpu]` extra: `nvidia-ml-py`, imported only when probed.
 
 ## [0.4.2] - 2026-10-29
