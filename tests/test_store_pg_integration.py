@@ -81,6 +81,20 @@ def test_transaction_rolls_back_on_error(store: PostgresLineageStore) -> None:
     assert reused is not None
 
 
+def test_reupsert_merges_metadata_and_keeps_immich_id(store: PostgresLineageStore) -> None:
+    # quarry records provenance first; lens later records the same bytes with
+    # none: the provenance and immich id survive, the uri moves, shared keys update.
+    sha = uuid.uuid4().hex
+    first = store.record_asset(
+        SourceAsset(uri="quarry://a", sha256=sha, immich_id="im-1", metadata={"license": "cc0", "seen": 1})
+    )
+    again = store.record_asset(SourceAsset(uri="/data/images/a.png", sha256=sha, metadata={"seen": 2}))
+    assert again == first
+    with store._acquire() as conn:
+        row = conn.execute("SELECT uri, immich_id, metadata FROM source_asset WHERE id = %s", (first,)).fetchone()
+    assert row == ("/data/images/a.png", "im-1", {"license": "cc0", "seen": 2})
+
+
 def test_concurrent_writes_are_isolated(store: PostgresLineageStore) -> None:
     # Many concurrent record_asset calls each borrow their own pooled connection;
     # all succeed with distinct ids (no "another operation in progress").
