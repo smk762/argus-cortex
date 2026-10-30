@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import builtins
+import os
 import threading
 from pathlib import Path
 
 import pytest
 
 from argus_cortex import gpu
+
+
+@pytest.fixture(autouse=True)
+def _reset_nvml_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gpu, "_nvml_ready", None)
 
 
 def _lease(tmp_path: Path, probe=lambda device: None, timeout_s: float = 5.0) -> gpu.LeaseCoordinator:  # noqa: ANN001
@@ -21,6 +27,30 @@ def test_null_coordinator_grants_at_once() -> None:
     coordinator = gpu.NullCoordinator()
     assert isinstance(coordinator, gpu.GpuCoordinator)
     with coordinator.lease(caller="t", min_vram_mb=10**9):
+        pass
+
+
+def test_lock_file_is_world_writable_despite_umask(tmp_path: Path) -> None:
+    """os.open's mode is umask-masked; without fchmod the next container UID cannot open the lock."""
+    path = tmp_path / "locks" / "gpu.lock"
+    previous = os.umask(0o077)
+    try:
+        with gpu.LeaseCoordinator(lock_path=str(path), timeout_s=1, probe=lambda device: None).lease(
+            caller="a", min_vram_mb=0
+        ):
+            mode = path.stat().st_mode & 0o777
+    finally:
+        os.umask(previous)
+    assert mode == 0o666
+
+
+def test_lease_released_when_the_body_raises(tmp_path: Path) -> None:
+    with (
+        pytest.raises(RuntimeError, match="boom"),
+        _lease(tmp_path).lease(caller="a", min_vram_mb=0),
+    ):
+        raise RuntimeError("boom")
+    with _lease(tmp_path, timeout_s=0.05).lease(caller="b", min_vram_mb=0):
         pass
 
 
@@ -97,6 +127,32 @@ def test_lease_proceeds_when_vram_cannot_be_read_or_is_not_needed(tmp_path: Path
         pass
 
 
+def test_free_vram_reads_bytes_for_the_asked_device(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+    import types
+
+    fake = types.ModuleType("pynvml")
+    seen: list[int] = []
+
+    class _Info:
+        free = 3 * 1024 * 1024 * 1024
+
+    def handle(index: int) -> str:
+        seen.append(index)
+        return f"dev{index}"
+
+    def memory_info(dev: str) -> _Info:
+        assert dev == "dev2"
+        return _Info()
+
+    fake.nvmlInit = lambda: None  # type: ignore[attr-defined]
+    fake.nvmlDeviceGetHandleByIndex = handle  # type: ignore[attr-defined]
+    fake.nvmlDeviceGetMemoryInfo = memory_info  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "pynvml", fake)
+    assert gpu.free_vram_mb(2) == 3072
+    assert seen == [2]
+
+
 def test_free_vram_is_none_without_nvml(monkeypatch: pytest.MonkeyPatch) -> None:
     real_import = builtins.__import__
 
@@ -137,6 +193,10 @@ def test_build_coordinator() -> None:
     assert gpu.build_coordinator("lease").lock_path == gpu.default_lock_path()
     with pytest.raises(ValueError, match="none, lease"):
         gpu.build_coordinator("gothmog")
+    with pytest.raises(ValueError, match="finite"):
+        gpu.LeaseCoordinator(timeout_s=float("inf"))
+    with pytest.raises(ValueError, match="finite"):
+        gpu.LeaseCoordinator(timeout_s=float("nan"))
 
 
 def test_coordinator_from_env(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
@@ -155,3 +215,13 @@ def test_coordinator_from_env(monkeypatch: pytest.MonkeyPatch, caplog: pytest.Lo
         lease = gpu.coordinator_from_env()
     assert (lease.timeout_s, lease.device) == (gpu.DEFAULT_TIMEOUT_S, 0)
     assert "ARGUS_GPU_LEASE_TIMEOUT_S" in caplog.text and "ARGUS_GPU_DEVICE" in caplog.text
+    caplog.clear()
+    monkeypatch.setenv("ARGUS_GPU_LEASE_TIMEOUT_S", "inf")
+    with caplog.at_level("WARNING"):
+        assert gpu.coordinator_from_env().timeout_s == gpu.DEFAULT_TIMEOUT_S
+    assert "ARGUS_GPU_LEASE_TIMEOUT_S" in caplog.text
+    caplog.clear()
+    monkeypatch.setenv("ARGUS_GPU_LEASE_TIMEOUT_S", "nan")
+    with caplog.at_level("WARNING"):
+        assert gpu.coordinator_from_env().timeout_s == gpu.DEFAULT_TIMEOUT_S
+    assert "ARGUS_GPU_LEASE_TIMEOUT_S" in caplog.text

@@ -16,6 +16,8 @@ and an Ollama-backed SingGuard) takes the same lease.
 * :func:`coordinator_from_env`: ``ARGUS_GPU_COORDINATOR`` (``none``/``lease``),
   ``ARGUS_GPU_LEASE_PATH``, ``ARGUS_GPU_LEASE_TIMEOUT_S``, ``ARGUS_GPU_DEVICE``.
   The names are host-wide, not per stage: every process must agree on them.
+  One lock serialises every argus GPU job on the host; ``ARGUS_GPU_DEVICE``
+  only selects which card NVML probes.
 
 The VRAM check is a snapshot, not a reservation: a tenant outside the lock can
 still allocate between the check and the job. Each stage owns its footprint
@@ -32,6 +34,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import math
 import os
 import tempfile
 import threading
@@ -131,6 +134,8 @@ class LeaseCoordinator:
         device: int = 0,
         probe: Callable[[int], int | None] = free_vram_mb,
     ) -> None:
+        if not math.isfinite(timeout_s):
+            raise ValueError("timeout_s must be a finite number")
         self.lock_path = lock_path or default_lock_path()
         self.timeout_s = max(0.0, timeout_s)
         self.poll_s = poll_s
@@ -149,13 +154,17 @@ class LeaseCoordinator:
         if directory:
             os.makedirs(directory, exist_ok=True)
         # 0o666: services in different containers may run as different users.
+        # os.open's mode is masked by umask, so chmod the fd or the file is
+        # 0644/0600 and the next UID cannot open it.
         fd = os.open(self.lock_path, os.O_CREAT | os.O_RDWR, 0o666)
         try:
+            with contextlib.suppress(OSError):
+                os.fchmod(fd, 0o666)
             while True:
                 try:
                     fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     break
-                except OSError:
+                except BlockingIOError:
                     if time.monotonic() >= deadline:
                         raise GpuLeaseTimeout(
                             f"GPU lease not acquired within {self.timeout_s:g}s ({self.lock_path})"
@@ -211,7 +220,10 @@ def _env_number(name: str, kind: type[float] | type[int]) -> float | int | None:
         return None
     try:
         value = kind(raw)
-    except ValueError:
+    except (ValueError, OverflowError):
+        value = -1
+    # inf/nan parse as float and never compare < 0, so the deadline never fires.
+    if isinstance(value, float) and not math.isfinite(value):
         value = -1
     if value < 0:
         _log.warning("%s set to an unusable value %r; using the default", name, raw)
