@@ -35,6 +35,9 @@ server = ["starlette>=0.37"]
 # Pillow, for SingGuardClient's downscaling of large images
 # (argus_cortex.moderation.singguard), imported only when it downscales.
 images = ["pillow>=10.0"]
+# NVML (nvidia-ml-py, imported as pynvml), for argus_cortex.gpu's free-VRAM probe;
+# imported only when probed. Without it the lease skips the VRAM wait.
+gpu = ["nvidia-ml-py>=12.535"]
 # The store drivers are in dev so each store's real client path (pool/enum/client
 # construction, error wrapping) is exercised in CI, not just via fakes.
 # starlette + httpx power the pure-ASGI guard tests (Starlette TestClient).
@@ -49,6 +52,7 @@ dev = [
     "httpx>=0.27",
     "httpx2>=2.7",
     "pillow>=10.0",
+    "nvidia-ml-py>=12.535",
     "certifi>=2026.10.19",
 ]
 

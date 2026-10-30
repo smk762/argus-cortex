@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`argus_cortex.gpu`**: GPU tenancy shared across the stages, generalised
+  from argus-lens's `gpu` coordinator.
+  - `GpuCoordinator`: the protocol. `lease(caller=, min_vram_mb=)` is a
+    context manager that holds a GPU slot for its body. `GpuLeaseTimeout` is a
+    `TimeoutError`.
+  - `NullCoordinator`: no gating, and the default.
+  - `LeaseCoordinator`: an exclusive `flock` that every argus process on the
+    host takes, then, while still holding it, a wait until `free_vram_mb()`
+    reports `min_vram_mb`. Unlike lens's lease, `min_vram_mb` is honoured. NVML
+    counts every process on the card, so ComfyUI and Ollama are accounted for
+    without taking part. One deadline covers both waits. A probe that cannot
+    run (no driver, no `[gpu]` extra, a CPU host) lets the lease through.
+  - `free_vram_mb(device)`: NVML free memory in MB, or `None`.
+  - `build_coordinator()` / `coordinator_from_env()`: `ARGUS_GPU_COORDINATOR`
+    (`none` / `lease`), `ARGUS_GPU_LEASE_PATH`, `ARGUS_GPU_LEASE_TIMEOUT_S`
+    (300 s) and `ARGUS_GPU_DEVICE`. These are the names lens already reads. An
+    unusable number logs a warning and falls back to the default.
+  - The default lock is `<tempdir>/argus-gpu.lock`. Containers have their own
+    `/tmp`, so a shared lock needs `ARGUS_GPU_LEASE_PATH` on a volume every
+    GPU service mounts. The lock file is `chmod 0o666` after create so a
+    restrictive umask does not block other container UIDs from opening it.
+- `[gpu]` extra: `nvidia-ml-py`, imported only when probed.
+
 ## [0.4.2] - 2026-10-29
 
 ### Added
