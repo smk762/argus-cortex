@@ -70,7 +70,13 @@ class LineageStore(Protocol):
         ...
 
     def record_asset(self, asset: SourceAsset) -> str | None:
-        """Insert (or reuse, by ``sha256``) a source asset; return its id."""
+        """Insert (or reuse, by ``sha256``) a source asset; return its id.
+
+        On reuse, ``uri`` becomes this call's; ``metadata`` merges into the
+        stored bag (this call's keys win); a ``None`` ``immich_id`` keeps the
+        stored one. So stages recording the same bytes add to the row rather
+        than erase each other's fields.
+        """
         ...
 
     def record_caption(self, asset_id: str, caption: Caption) -> str | None:
@@ -302,8 +308,12 @@ class PostgresLineageStore:
 
     def record_asset(self, asset: SourceAsset) -> str | None:
         # De-dupe on content hash: re-ingesting identical bytes returns the
-        # existing row (DO UPDATE ensures RETURNING fires even on conflict) and
-        # refreshes uri/immich_id/metadata to the latest call (last-write-wins).
+        # existing row (DO UPDATE ensures RETURNING fires even on conflict).
+        # Several stages record the same asset (quarry with provenance, lens
+        # with a caption), so a later call must not erase what an earlier one
+        # knew: uri is the latest location (last-write-wins), immich_id keeps
+        # the stored id when this call has none, and metadata merges key by
+        # key (jsonb ||: this call's keys win, the others are kept).
         # NOTE: dedup only works when sha256 is set — NULLs are distinct under the
         # UNIQUE index, so a hash-less asset inserts a fresh row every call.
         return self._insert(
@@ -312,8 +322,8 @@ class PostgresLineageStore:
             VALUES (%s, %s, %s, %s::jsonb)
             ON CONFLICT (sha256) DO UPDATE
                 SET uri = EXCLUDED.uri,
-                    immich_id = EXCLUDED.immich_id,
-                    metadata = EXCLUDED.metadata
+                    immich_id = COALESCE(EXCLUDED.immich_id, source_asset.immich_id),
+                    metadata = source_asset.metadata || EXCLUDED.metadata
             RETURNING id
             """,
             (asset.uri, asset.sha256, asset.immich_id, self._json(asset.metadata)),
