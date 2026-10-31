@@ -256,11 +256,19 @@ def test_singguard_config() -> None:
 def test_to_result_keeps_a_long_explanation() -> None:
     writeup = "Cascade: fast flagged this; the slow pass is the verdict.\n\n" + ("A posed adult. " * 400)
     writeup = writeup.strip()
-    assert len(writeup) > 4000
+    assert 4000 < len(writeup) < singguard._EXPLANATION_MAX
     result = singguard.to_result(
         {"safe": True, "verdict": "safe", "rule": "Safe", "explanation": writeup, "categories": []}
     )
     assert result.explanation == writeup
+
+
+def test_to_result_clips_explanation_at_max() -> None:
+    exact = "y" * singguard._EXPLANATION_MAX
+    over = exact + "z"
+    payload = {"safe": True, "verdict": "safe", "rule": "Safe", "categories": []}
+    assert singguard.to_result({**payload, "explanation": exact}).explanation == exact
+    assert singguard.to_result({**payload, "explanation": over}).explanation == exact
 
 
 def test_singguard_check(singguard_server) -> None:
