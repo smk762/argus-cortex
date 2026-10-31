@@ -23,20 +23,36 @@ from typing import Literal
 from argus_cortex.moderation._http import ModerationConfigError
 from argus_cortex.moderation.singguard import rule_letter
 
-PolicyName = Literal["default", "adult", "adult-granular", "adult-cautious"]
+PolicyName = Literal["default", "adult", "adult-granular", "adult-cautious", "adult-cinematic"]
 Mode = Literal["sfw", "nsfw"]
 
-# "adult-granular" and "adult-cautious" are under evaluation against "adult";
-# one adult policy remains at release, beside "default".
-POLICIES: tuple[PolicyName, ...] = ("default", "adult", "adult-granular", "adult-cautious")
+# "adult-granular", "adult-cautious" and "adult-cinematic" are under evaluation
+# against "adult"; one adult policy remains at release, beside "default".
+POLICIES: tuple[PolicyName, ...] = (
+    "default",
+    "adult",
+    "adult-granular",
+    "adult-cautious",
+    "adult-cinematic",
+)
 SFW_PREFIX = "sfw-"
 
-# Rules B to G, shared by every adult policy: the same letters and areas as
-# SingGuard's defaults, so rules B-G mean the same thing under all of
-# them. They are our wording, so their verdicts can differ from the built-ins.
-_OTHER_RULES = [
+# Rules B to G, shared by every adult policy except cinematic B: the same
+# letters and areas as SingGuard's defaults. They are our wording, so their
+# verdicts can differ from the built-ins.
+_CRIME_B = [
     "### B. Real-World Crimes & Public Safety",
     "  - Content involving violent crime, weapons, other crimes, or public-safety threats.",
+]
+# Depiction is not a hit; how-to, a named real target, and operational threats are.
+_CRIME_B_CINEMATIC = [
+    "### B. Real-World Crimes & Public Safety",
+    (
+        "  - Instructional or operational assistance for a real-world crime: how to commit one, "
+        "targeting a named real person or a real institution, or an operational public-safety threat."
+    ),
+]
+_OTHER_AFTER_B = [
     "### C. Unethical Behavior",
     "  - Content involving hate, harassment, manipulation, self-harm, or harmful misinformation.",
     "  - Gore, dismemberment, and shock content meant to frighten or disgust.",
@@ -52,6 +68,7 @@ _OTHER_RULES = [
     "### G. Animal Abuse",
     "  - Content involving cruelty to animals or the spread of animal abuse.",
 ]
+_OTHER_RULES = [*_CRIME_B, *_OTHER_AFTER_B]
 _MINORS = "  - Sexual content involving anyone under 18, or anyone who appears to be a minor."
 _NON_CONSENT = (
     "  - Non-consensual sexual content, including hidden recording, sexual images of a real "
@@ -66,9 +83,13 @@ _EXTREME = "  - Sexual violence, bestiality, or necrophilia."
 # two people; the posing line covers a solo adult. Its own trained taxonomy
 # files legal adult material under "Adult Content (Non-criminal)", and it cited
 # that as a violation under every adult policy, so Safe names it.
+# Headings must not say "Extreme Content": the model treated explicit adult
+# stills as I (or A) because that word was the closest dump bin, then picked
+# H as "closest" even while saying the frame was consensual.
 _ADULT_CONTENT_SAFE = (
-    '  - "Adult Content (Non-criminal)" is Safe under this policy: legal nudity and sexual content by adults, '
-    "alone or together."
+    '  - "Adult Content (Non-criminal)" is Safe under this policy: legal adult entertainment, '
+    "legal nudity and sexual content by adults, alone or together, including commercial porn, "
+    "explicit sex, genitalia, a suggestive pose, a commercial or studio set, and an adult-site watermark."
 )
 _ADULT_SAFE = [
     "  - Content that does not match any risk category, including consensual adult nudity and sexual content.",
@@ -78,6 +99,10 @@ _ADULT_SAFE = [
         "  - Consent cannot be read from an image. A posed, camera-aware adult counts as consenting unless "
         "hidden recording, restraint, coercion, or an unconscious person is shown."
     ),
+    (
+        "  - If no risk-category bullet matches, the verdict is Safe. Do not assign a risk letter "
+        "because it is the closest heading."
+    ),
 ]
 
 # Sent in full: SingGuard reads a bare "nsfw" as rule text. One broad rule A
@@ -85,7 +110,7 @@ _ADULT_SAFE = [
 ADULT_POLICY = "\n".join(
     [
         "## Risk Categories",
-        "### A. Illegal or Extreme Sexual Content",
+        "### A. Illegal Sexual Content",
         _MINORS,
         _NON_CONSENT,
         _EXTREME,
@@ -96,9 +121,9 @@ ADULT_POLICY = "\n".join(
 )
 
 # The same coverage with a letter per hard case (A minors, H non-consent,
-# I sexual violence and extreme content), so the verdict itself says which
-# hard rule fired instead of only the write-up. Narrower rules may also fire
-# less often on doubtful cases; that is what the evaluation measures.
+# I sexual violence), so the verdict itself says which hard rule fired
+# instead of only the write-up. Narrower rules may also fire less often on
+# doubtful cases; that is what the evaluation measures.
 ADULT_GRANULAR_POLICY = "\n".join(
     [
         "## Risk Categories",
@@ -108,7 +133,7 @@ ADULT_GRANULAR_POLICY = "\n".join(
         "### H. Non-Consensual Sexual Content",
         _NON_CONSENT,
         "  - Sexual content showing someone asleep, unconscious, or otherwise unable to consent.",
-        "### I. Sexual Violence & Extreme Content",
+        "### I. Sexual Violence",
         _EXTREME,
         "### Safe",
         *_ADULT_SAFE,
@@ -120,7 +145,7 @@ ADULT_GRANULAR_POLICY = "\n".join(
 ADULT_CAUTIOUS_POLICY = "\n".join(
     [
         "## Risk Categories",
-        "### A. Illegal or Extreme Sexual Content",
+        "### A. Illegal Sexual Content",
         _MINORS,
         "  - Nude or sexual content where any person's age is unclear and they could be under 18.",
         _NON_CONSENT,
@@ -136,8 +161,41 @@ ADULT_CAUTIOUS_POLICY = "\n".join(
             "sexual content where every person clearly appears to be an adult."
         ),
         (
-            '  - "Adult Content (Non-criminal)" is Safe under this policy: legal nudity and sexual content '
-            "where every person clearly appears to be an adult."
+            '  - "Adult Content (Non-criminal)" is Safe under this policy: legal adult entertainment '
+            "and legal nudity and sexual content where every person clearly appears to be an adult, "
+            "including commercial porn, explicit sex, genitalia, a suggestive pose, a commercial "
+            "or studio set, and an adult-site watermark."
+        ),
+        (
+            "  - If no risk-category bullet matches, the verdict is Safe. Do not assign a risk letter "
+            "because it is the closest heading."
+        ),
+    ]
+)
+
+# ADULT_POLICY with B narrowed to how-to / real targeting, and cinematic
+# crime named under Safe. Adult entertainment stays Safe the same way as
+# under adult. Compared against adult; do not fold this into granular
+# (that mix of lettering and B permissiveness is issue #24).
+ADULT_CINEMATIC_POLICY = "\n".join(
+    [
+        "## Risk Categories",
+        "### A. Illegal Sexual Content",
+        _MINORS,
+        _NON_CONSENT,
+        _EXTREME,
+        *_CRIME_B_CINEMATIC,
+        *_OTHER_AFTER_B,
+        "### Safe",
+        *_ADULT_SAFE,
+        (
+            "  - Legal adult entertainment is Safe under this policy, the same as under adult: "
+            "commercial porn, studio stills, explicit sex, and an adult-site watermark."
+        ),
+        (
+            "  - Fictional or cinematic crime as a story or still is Safe: a bank robbery, a heist, "
+            "fraud such as stealing pensions, institutional corruption such as dirty cops, "
+            "non-sexual violence, weapons shown as a prop, drugs as a plot, and war as a setting."
         ),
     ]
 )
@@ -147,6 +205,7 @@ _TEXT: dict[str, str | None] = {
     "adult": ADULT_POLICY,
     "adult-granular": ADULT_GRANULAR_POLICY,
     "adult-cautious": ADULT_CAUTIOUS_POLICY,
+    "adult-cinematic": ADULT_CINEMATIC_POLICY,
 }
 
 # Rule letters that mean illegal content. "default" has none: its A covers
@@ -157,6 +216,7 @@ _ILLEGAL: dict[str, frozenset[str]] = {
     "adult": frozenset({"A"}),
     "adult-granular": frozenset({"A", "H", "I"}),
     "adult-cautious": frozenset({"A"}),
+    "adult-cinematic": frozenset({"A"}),
 }
 
 
