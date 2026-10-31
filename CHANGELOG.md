@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`adult-cinematic`**: `adult` with B narrowed to how-to / real targeting, and
+  Safe naming fictional crime (heist, fraud, dirty cops, war as setting, weapons
+  as a prop, drugs as a plot). Legal adult entertainment stays Safe the same
+  way as under `adult` (commercial porn, studio stills, an adult-site watermark).
+  Under evaluation against `adult` (#24). Letters and illegal A are unchanged.
+
+### Fixed
+- **Adult policies no longer invite a "closest" H/I dump-bin.** Safe now names
+  legal adult entertainment, commercial porn, explicit sex, genitalia, a
+  suggestive pose, a commercial or studio set, and an adult-site watermark, and
+  says that if no risk bullet matches the verdict is Safe. Headings dropped the
+  word "Extreme" (`A. Illegal Sexual Content`, granular `I. Sexual Violence`),
+  which the model read as a bin for legal porn. Letters are unchanged.
+
 ## [0.4.4] - 2026-10-31
 
 ### Fixed
