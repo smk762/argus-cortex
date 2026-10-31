@@ -253,6 +253,16 @@ def test_singguard_config() -> None:
         SingGuardClient("gopher://g")
 
 
+def test_to_result_keeps_a_long_explanation() -> None:
+    writeup = "Cascade: fast flagged this; the slow pass is the verdict.\n\n" + ("A posed adult. " * 400)
+    writeup = writeup.strip()
+    assert len(writeup) > 4000
+    result = singguard.to_result(
+        {"safe": True, "verdict": "safe", "rule": "Safe", "explanation": writeup, "categories": []}
+    )
+    assert result.explanation == writeup
+
+
 def test_singguard_check(singguard_server) -> None:
     fake, url = singguard_server
     client = SingGuardClient(url, timeout=5, thinking="fast-slow", policy="### A. Minors")
