@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-10-31
+
 ### Added
 - **`adult-cinematic`**: `adult` with B narrowed to how-to / real targeting, and
   Safe naming fictional crime (heist, fraud, dirty cops, war as setting, weapons
@@ -193,7 +195,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/smk762/argus-cortex/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/smk762/argus-cortex/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/smk762/argus-cortex/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/smk762/argus-cortex/compare/v0.4.1...v0.4.2
