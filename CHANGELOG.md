@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-10-31
+
 ### Fixed
 - **`SingGuardClient` keeps a longer writeup.** `to_result` clipped `explanation` at 4000
   characters, which cut cascade/slow reasoning mid-sentence. The cap is now 16384, enough
@@ -176,7 +178,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/smk762/argus-cortex/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/smk762/argus-cortex/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/smk762/argus-cortex/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/smk762/argus-cortex/compare/v0.4.0...v0.4.1
