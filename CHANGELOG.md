@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`SingGuardClient` keeps a longer writeup.** `to_result` clipped `explanation` at 4000
+  characters, which cut cascade/slow reasoning mid-sentence. The cap is now 16384, enough
+  for a 2048-token slow writeup plus a cascade preface.
 - **Re-recording an asset no longer erases what another stage recorded on it.** `record_asset`'s
   upsert on `sha256` replaced `immich_id` and `metadata` outright, so argus-lens recording a caption
   for an image argus-quarry had already recorded (licence, author, source) wiped that provenance,

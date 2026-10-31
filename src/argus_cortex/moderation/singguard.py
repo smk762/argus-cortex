@@ -47,7 +47,9 @@ MAX_EDGE = 1536
 MAX_BYTES = 4 * 1024 * 1024
 _MIN_EDGE = 256  # below this, give up rather than send SingGuard a postage stamp
 _NEEDS_PILLOW = "downscaling images needs: pip install argus-cortex[images] (or pass downscale=False)"
-_EXPLANATION_MAX = 4000
+# Fits a 2048-token slow writeup plus a short cascade preface. 4000
+# cut recorded reasoning mid-sentence on cascade scans.
+_EXPLANATION_MAX = 16384
 _FIELD_MAX = 200
 
 
