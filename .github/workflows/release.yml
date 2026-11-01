@@ -118,3 +118,54 @@ jobs:
           else
             gh release create "$tag" dist/* --verify-tag --title "$tag" --notes-file notes.md $prerelease
           fi
+
+  dispatch-stages:
+    # Each stage image installs argus-cortex at build time from its pyproject
+    # range, so a new cortex only reaches running services once the images are
+    # rebuilt. Tell the stages: their release.yml rebuilds the image of their
+    # newest release on `cortex-released`. atlas and survey are left out on
+    # purpose: they `uv sync --locked`, so a rebuild reinstalls the cortex their
+    # lockfile pins — they need a lock bump, not a rebuild. quarry has no cortex.
+    runs-on: ubuntu-latest
+    needs: publish-pypi
+    if: "!cancelled() && needs.publish-pypi.result == 'success'"
+    steps:
+      - name: Wait until pip can resolve the new version
+        # The upload is accepted before the simple index serves it; a stage
+        # build that starts in that window would resolve the previous cortex.
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          wheel="argus_cortex-${version}-py3-none-any.whl"
+          for _ in $(seq 60); do
+            if curl -fsS https://pypi.org/simple/argus-cortex/ | grep -q "$wheel"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::$wheel is not on the PyPI simple index after 10 minutes; no stage was told."
+          exit 1
+      - name: Dispatch cortex-released to the stages
+        # A pre-release is skipped: no stage range admits one, so the rebuild
+        # would reinstall the cortex already there.
+        # SUITE_DISPATCH_TOKEN: a fine-grained PAT with Contents: read & write
+        # on the repos below (GITHUB_TOKEN cannot reach another repo).
+        env:
+          GH_TOKEN: ${{ secrets.SUITE_DISPATCH_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          case "$tag" in *-*|*rc*|*a[0-9]*|*b[0-9]*) echo "Pre-release $tag: not dispatching."; exit 0 ;; esac
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::SUITE_DISPATCH_TOKEN is not set; no stage image was rebuilt for $tag."
+            exit 1
+          fi
+          failed=0
+          for repo in argus-curator argus-lens argus-proof argus-forge argus-darkroom; do
+            if gh api "repos/${GITHUB_REPOSITORY_OWNER}/${repo}/dispatches" \
+                -f event_type=cortex-released -f "client_payload[version]=${tag#v}"; then
+              echo "Dispatched cortex-released to $repo"
+            else
+              echo "::error::Could not dispatch to $repo"
+              failed=1
+            fi
+          done
+          exit "$failed"

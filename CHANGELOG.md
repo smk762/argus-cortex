@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **A release now rebuilds the stage images.** Once the version is on the PyPI index,
+  `release.yml` sends `cortex-released` to curator, lens, proof, forge and darkroom, whose
+  release workflows rebuild their newest release's image against it. Needs the
+  `SUITE_DISPATCH_TOKEN` secret (a fine-grained PAT, Contents: read & write on those repos).
+  atlas and survey are not sent it: they install from their lockfile.
+
 ## [0.4.5] - 2026-10-31
 
 ### Added
