@@ -223,8 +223,9 @@ _TEXT: dict[str, str | None] = {
 }
 
 # Rule letters that mean illegal content. "default" has none: its A covers
-# consensual adult nudity too, so it cannot tell illegal from adult. Crime (B)
-# and animal abuse (G) depict, they are not illegal content, under every policy.
+# consensual adult nudity too, so it cannot tell illegal from adult. Crime and
+# animal abuse depict, they are not illegal content, under every policy, whatever
+# their letters: B and G, or G and F under adult-cinematic.
 _ILLEGAL: dict[str, frozenset[str]] = {
     "default": frozenset(),
     "adult": frozenset({"A"}),
