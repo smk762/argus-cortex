@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **`adult-cinematic` passes depicted crime without a film cue.** A robbery,
+  kidnapping, armed standoff, drugs or war is Safe unless it is sexual, shows
+  gore or dismemberment, or teaches how to do it. The crimes heading at B is
+  gone, because it was read as any crime shown.
+- **`adult-cinematic` letters changed.** B to F are now Unethical Behavior,
+  Cybersecurity, Agent Safety, Politically Sensitive and Animal Abuse, and G is
+  Criminal Instructions, so B to G no longer match the other adult policies. A
+  filter that names a letter selects a different rule here, including on
+  verdicts recorded earlier. Illegal A is unchanged.
+
 ### Added
 - **A release now rebuilds the stage images.** Once the version is on the PyPI index,
   `release.yml` sends `cortex-released` to curator, lens, proof, forge and darkroom, whose
