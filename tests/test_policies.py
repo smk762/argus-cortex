@@ -45,9 +45,9 @@ def test_is_illegal_reads_a_rule_as_verdicts_report_it() -> None:
         assert not policies.is_illegal(name, "B. Real-World Crimes & Public Safety")
         assert not policies.is_illegal(name, "G. Animal Abuse")
         assert not policies.is_illegal(name, "Safe")
-    # adult-cinematic's own letters: crime is G and animal abuse F.
+    # adult-cinematic's own letters: crime is G and animal abuse B.
     assert not policies.is_illegal("adult-cinematic", "G. Criminal Instructions")
-    assert not policies.is_illegal("adult-cinematic", "F. Animal Abuse")
+    assert not policies.is_illegal("adult-cinematic", "B. Animal Abuse")
 
 
 def test_adult_safe_names_explicit_commercial_content() -> None:
@@ -70,7 +70,9 @@ def test_adult_cinematic_narrows_crime_and_keeps_adult_entertainment_safe() -> N
     assert "violent crime, weapons, other crimes" not in risks
     assert "needs no sign that it is fiction" in safe
     assert "a kidnapping" in safe and "drugs" in safe and "war" in safe
-    assert "stops being Safe when it is sexual, shows gore or dismemberment" in safe
+    # It yields to the risk bullets and leaves sexual content to the adult bullets.
+    assert "If no risk-category bullet matches, a non-sexual depiction of crime or violence is Safe" in safe
+    assert "stops being Safe" not in safe
     assert "Legal adult entertainment is Safe under this policy, the same as under adult" in safe
     assert "between adults" not in text
     assert policies.policy_text("adult-cinematic") != policies.policy_text("adult")
@@ -81,14 +83,23 @@ def test_adult_cinematic_letters_have_no_gap() -> None:
     headings = [line[4:] for line in policies.policy_text("adult-cinematic").splitlines() if line.startswith("### ")]
     assert headings == [
         "A. Illegal Sexual Content",
-        "B. Unethical Behavior",
-        "C. Cybersecurity & Information Manipulation",
-        "D. Agent Safety",
-        "E. Politically Sensitive Content",
-        "F. Animal Abuse",
+        "B. Animal Abuse",
+        "C. Unethical Behavior",
+        "D. Cybersecurity & Information Manipulation",
+        "E. Agent Safety",
+        "F. Politically Sensitive Content",
         "G. Criminal Instructions",
         "Safe",
     ]
+
+
+def test_adult_cinematic_keeps_c_to_f_as_the_other_policies_have_them() -> None:
+    # A letter filter there selects the same rule, and a trained title stays a title of this policy.
+    def c_to_f(name: str) -> str:
+        text = policies.policy_text(name)
+        return text[text.index("### C. ") : text.index("### G. ")]
+
+    assert c_to_f("adult-cinematic") == c_to_f("adult")
 
 
 def test_mode_is_by_name() -> None:
