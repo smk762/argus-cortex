@@ -45,6 +45,9 @@ def test_is_illegal_reads_a_rule_as_verdicts_report_it() -> None:
         assert not policies.is_illegal(name, "B. Real-World Crimes & Public Safety")
         assert not policies.is_illegal(name, "G. Animal Abuse")
         assert not policies.is_illegal(name, "Safe")
+    # adult-cinematic's own letters: crime is G and animal abuse F.
+    assert not policies.is_illegal("adult-cinematic", "G. Criminal Instructions")
+    assert not policies.is_illegal("adult-cinematic", "F. Animal Abuse")
 
 
 def test_adult_safe_names_explicit_commercial_content() -> None:
