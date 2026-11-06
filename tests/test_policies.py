@@ -45,6 +45,9 @@ def test_is_illegal_reads_a_rule_as_verdicts_report_it() -> None:
         assert not policies.is_illegal(name, "B. Real-World Crimes & Public Safety")
         assert not policies.is_illegal(name, "G. Animal Abuse")
         assert not policies.is_illegal(name, "Safe")
+    # adult-cinematic's own letters: crime is G and animal abuse F.
+    assert not policies.is_illegal("adult-cinematic", "G. Criminal Instructions")
+    assert not policies.is_illegal("adult-cinematic", "F. Animal Abuse")
 
 
 def test_adult_safe_names_explicit_commercial_content() -> None:
@@ -65,10 +68,27 @@ def test_adult_cinematic_narrows_crime_and_keeps_adult_entertainment_safe() -> N
     risks, safe = text.split("### Safe")
     assert "how to commit one" in risks
     assert "violent crime, weapons, other crimes" not in risks
-    assert "bank robbery" in safe and "stealing pensions" in safe and "dirty cops" in safe
+    assert "needs no sign that it is fiction" in safe
+    assert "a kidnapping" in safe and "drugs" in safe and "war" in safe
+    assert "stops being Safe when it is sexual, shows gore or dismemberment" in safe
     assert "Legal adult entertainment is Safe under this policy, the same as under adult" in safe
     assert "between adults" not in text
     assert policies.policy_text("adult-cinematic") != policies.policy_text("adult")
+
+
+def test_adult_cinematic_letters_have_no_gap() -> None:
+    # With a gap the model renumbers the rules as it reasons, and verdicts name the wrong one.
+    headings = [line[4:] for line in policies.policy_text("adult-cinematic").splitlines() if line.startswith("### ")]
+    assert headings == [
+        "A. Illegal Sexual Content",
+        "B. Unethical Behavior",
+        "C. Cybersecurity & Information Manipulation",
+        "D. Agent Safety",
+        "E. Politically Sensitive Content",
+        "F. Animal Abuse",
+        "G. Criminal Instructions",
+        "Safe",
+    ]
 
 
 def test_mode_is_by_name() -> None:
