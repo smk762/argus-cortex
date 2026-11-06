@@ -39,15 +39,14 @@ SFW_PREFIX = "sfw-"
 
 # Rules B to G, shared by every adult policy except cinematic: the same
 # letters and areas as SingGuard's defaults. They are our wording, so their
-# verdicts can differ from the built-ins. Cinematic keeps C to F as they are
-# and swaps what sits at B and G.
+# verdicts can differ from the built-ins.
 _CRIME_B = [
     "### B. Real-World Crimes & Public Safety",
     "  - Content involving violent crime, weapons, other crimes, or public-safety threats.",
 ]
 # Depiction is not a hit; how-to, a named real target, and operational threats are.
-# At G, not B: a heading called crimes at B was read as any crime shown, whatever
-# its bullet said.
+# Last, not at B: a heading called crimes at B was read as any crime shown,
+# whatever its bullet said.
 _CRIME_CINEMATIC = [
     "### G. Criminal Instructions",
     (
@@ -55,7 +54,7 @@ _CRIME_CINEMATIC = [
         "targeting a named real person or a real institution, or an operational public-safety threat."
     ),
 ]
-_C_TO_F = [
+_OTHER_AFTER_B = [
     "### C. Unethical Behavior",
     "  - Content involving hate, harassment, manipulation, self-harm, or harmful misinformation.",
     "  - Gore, dismemberment, and shock content meant to frighten or disgust.",
@@ -68,9 +67,16 @@ _C_TO_F = [
         "  - Content involving political advocacy, rumors, unrest, historical distortion, "
         "or attacks on political figures."
     ),
+    "### G. Animal Abuse",
+    "  - Content involving cruelty to animals or the spread of animal abuse.",
 ]
-_ANIMAL_ABUSE = "  - Content involving cruelty to animals or the spread of animal abuse."
-_OTHER_RULES = [*_CRIME_B, *_C_TO_F, "### G. Animal Abuse", _ANIMAL_ABUSE]
+_OTHER_RULES = [*_CRIME_B, *_OTHER_AFTER_B]
+
+
+def _one_letter_up(line: str) -> str:
+    """A ``### C. ...`` heading as ``### B. ...``; a bullet as it is."""
+    return f"### {chr(ord(line[4]) - 1)}{line[5:]}" if line.startswith("### ") else line
+
 
 _MINORS = "  - Sexual content involving anyone under 18, or anyone who appears to be a minor."
 _NON_CONSENT = (
@@ -176,13 +182,9 @@ ADULT_CAUTIOUS_POLICY = "\n".join(
     ]
 )
 
-# ADULT_POLICY with no crimes heading at B: animal abuse moves to B, and G is
-# how-to / real targeting only. C to F keep their letters and titles, so a letter
-# filter means the same there as under the other policies, and a title the model
-# was trained on stays a title of this policy. Depicted crime is named under
+# ADULT_POLICY with no crimes heading at B: the rules after it move up a
+# letter, and G is how-to / real targeting only. Depicted crime is named under
 # Safe, and adult entertainment stays Safe the same way as under adult.
-# The depiction bullet yields to every risk bullet and leaves sexual content to
-# the adult bullets, so it cannot pass a rule or take Safe from a legal frame.
 # Letters must stay contiguous: with a gap at B the model renumbered the rules
 # in its reasoning, so verdicts named the wrong rule and some changed. Compared
 # against adult; do not fold this into granular (that mix of lettering and
@@ -194,9 +196,7 @@ ADULT_CINEMATIC_POLICY = "\n".join(
         _MINORS,
         _NON_CONSENT,
         _EXTREME,
-        "### B. Animal Abuse",
-        _ANIMAL_ABUSE,
-        *_C_TO_F,
+        *(_one_letter_up(line) for line in _OTHER_AFTER_B),
         *_CRIME_CINEMATIC,
         "### Safe",
         *_ADULT_SAFE,
@@ -205,11 +205,12 @@ ADULT_CINEMATIC_POLICY = "\n".join(
             "commercial porn, studio stills, explicit sex, and an adult-site watermark."
         ),
         (
-            "  - If no risk-category bullet matches, a non-sexual depiction of crime or violence is Safe, as in "
-            "film, television, games, and print, and it needs no sign that it is fiction: a robbery, a heist, "
-            "a kidnapping, a person bound or held captive, theft, fraud, corrupt officials, an armed standoff, "
-            "a police raid, a fight, a battle, weapons, drugs, and war."
+            "  - A depiction of crime or violence is Safe, as in film, television, games, and print, and it "
+            "needs no sign that it is fiction: a robbery, a heist, a kidnapping, a person bound or held "
+            "captive, theft, fraud, corrupt officials, an armed standoff, a police raid, a fight, a battle, "
+            "weapons, drugs, and war."
         ),
+        "  - That stops being Safe when it is sexual, shows gore or dismemberment, or teaches how to do it.",
     ]
 )
 
@@ -224,7 +225,7 @@ _TEXT: dict[str, str | None] = {
 # Rule letters that mean illegal content. "default" has none: its A covers
 # consensual adult nudity too, so it cannot tell illegal from adult. Crime and
 # animal abuse depict, they are not illegal content, under every policy, whatever
-# their letters: B and G, or G and B under adult-cinematic.
+# their letters: B and G, or G and F under adult-cinematic.
 _ILLEGAL: dict[str, frozenset[str]] = {
     "default": frozenset(),
     "adult": frozenset({"A"}),
