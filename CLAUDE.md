@@ -14,7 +14,7 @@ Because everything here is imported by the downstream stages, **a change ripples
 
 `src/argus_cortex/` (top level is pydantic-only; everything heavier is behind an extra and lazily imported):
 
-- `taxonomy.py` — the "moat" types every stage inherits verbatim: `TargetProfile`, `TargetStyle`/`TargetCategory` literals. Keep it dependency-light; a change here retrains everyone's expectations.
+- `taxonomy.py` — the "moat" types every stage inherits verbatim: `TargetProfile`, `TargetStyle`/`TargetCategory` literals, and `taxonomy_schema()` (the source of the committed `taxonomy-schema.json`). Keep it dependency-light; a change here retrains everyone's expectations.
 - `wire.py` — the versioned wire-schema toolkit consumers build their contracts on: `make_versioned_base(field_name, current, majors)` (a Pydantic base that stamps + version-checks a field like `proof_version`/`manifest_version`), `check_version()` (the major-compatibility gate), `render_schema()`/`wire_schema()` (the canonical committed-schema string behind each consumer's `schema --check` CLI), and `VersionError`.
 - `backends.py` — the AI-backend contract: `Backend`/`LocalBackend`/`RemoteBackend` (point at a hosted service via `from_host(host, port)` or `from_provider(RemoteProvider.…)`), plus `with_retries()` and `resolve_device()`. httpx is lazy, behind `[remote]`.
 - `server.py` — the shared FastAPI/ASGI scaffolding other repos' micro-servers mount: `WriteGuard` (pure-ASGI method gate), the `constant_refuse()` (read-only/replay) and `cross_site_refuse()` (cross-origin write) predicates, `env_flag()`, and the `UNSAFE_METHODS`/`TRUTHY`/`FALSY` constants. Starlette is behind `[server]`.
@@ -23,7 +23,7 @@ Because everything here is imported by the downstream stages, **a change ripples
 - `moderation/` — content-moderation clients over HTTP: `nudenet.py` (`NudeNetClient`, `NsfwResult`, `DEFAULT_EXPOSED_LABELS` — **the suite's one definition of nudity; don't widen it casually**, every stage's NSFW numbers move with it), `singguard.py` (`SingGuardClient` incl. text-only `check_text()`, `GuardResult`, `rule_matches`), `policies.py` (the named policy texts, the per-policy illegal-rule table and `mode()`: `default`/`sfw-*` are SFW — **a policy's text and its illegal letters change together**), `_http.py` (shared POST, proxy-free opener, `CheckFailed`/`ModerationConfigError`). Stdlib + pydantic; Pillow lazily, behind `[images]`. Never import NudeNet (AGPL) — HTTP only. URLs are passed in; stages own their env config.
 - `store/` — the optional stateful-services layer, opt-in per `CORTEX_*` env var: `lineage.py` (Phase 1 Postgres DAG, `open_lineage_store()`), `vector.py` (Phase 2 Qdrant, `open_vector_store()`), `blob.py` (Phase 3 MinIO/S3, `open_blob_store()`), over `config.py`/`models.py`/`errors.py`. Each `open_*()` returns a `Null*` no-op when its URL is unset. Drivers are behind `[postgres]`/`[qdrant]`/`[s3]`.
 
-There is **no CLI and no committed schema in this repo** — the `schema`/`schema --check` pattern is something `wire.py` *enables* for downstream repos, not something cortex runs on itself.
+There is **no CLI in this repo**. The one committed schema is `taxonomy-schema.json` (from `taxonomy_schema()`; `make schema` regenerates it and `tests/test_taxonomy.py` fails when it is stale). Studio generates its taxonomy types from it, so a `taxonomy.py` change needs `make schema` in the same commit.
 
 ## Commands
 

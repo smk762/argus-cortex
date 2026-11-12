@@ -1,0 +1,57 @@
+{
+  "$defs": {
+    "TargetProfile": {
+      "description": "What a dataset was curated for \u2014 shared verbatim across the suite.\n\nInherited unchanged from stage to stage (curator \u2192 lens \u2192 forge \u2192 proof) so\na decision made once at curation time is honoured everywhere downstream; no\nstage remaps the taxonomy.",
+      "properties": {
+        "checkpoint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Checkpoint"
+        },
+        "target_backend": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "sdxl",
+          "title": "Target Backend"
+        },
+        "target_category": {
+          "default": "identity",
+          "enum": [
+            "identity",
+            "wardrobe",
+            "pose_composition",
+            "setting",
+            "concept"
+          ],
+          "title": "Target Category",
+          "type": "string"
+        },
+        "target_style": {
+          "default": "photo",
+          "enum": [
+            "photo",
+            "anime"
+          ],
+          "title": "Target Style",
+          "type": "string"
+        }
+      },
+      "title": "TargetProfile",
+      "type": "object"
+    }
+  },
+  "title": "argus-cortex taxonomy"
+}
