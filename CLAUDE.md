@@ -4,11 +4,19 @@ Guidance for AI agents working in this repo. Human-facing usage lives in [README
 
 ## What this is
 
-The **shared foundation library** of the Argus suite (quarry → curator → lens → forge → proof). It holds the code the stages *share* so it lives in one place instead of copy-pasted per repo: the target taxonomy, the wire-schema versioning discipline, the local/remote AI-backend contract, and the optional stateful-services layer.
+The **shared foundation library** of the Argus suite. It holds the code the stages *share* so it lives in one place instead of copy-pasted per repo: the target taxonomy, the wire-schema versioning discipline, the local/remote AI-backend contract, and the optional stateful-services layer.
 
 Naming: the working directory is `argus-core`, but the GitHub repo, the PyPI package, and the import name are all **`argus-cortex`** (`src/argus_cortex/`). Don't "fix" the mismatch.
 
 Because everything here is imported by the downstream stages, **a change ripples across the whole suite** — treat this repo as an API, not a leaf. Read [README.md](README.md) for the *why* and worked examples; it is the source of truth for behaviour.
+
+## Argus suite
+<!-- argus-suite: keep this block; argus-ci checks for it -->
+Cortex owns the suite map, [SUITE.md](SUITE.md), which every repo's CLAUDE.md imports. **Keep it accurate:** a cortex
+release that adds or changes a shared module updates its "Need it? Use it" row, and PRs from other repos that update
+their own rows land here. Keep it short, because it is loaded into every session in every repo.
+
+@SUITE.md
 
 ## Layout
 
