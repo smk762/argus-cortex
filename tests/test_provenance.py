@@ -1,0 +1,79 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from argus_cortex.provenance import CLEARED_KINDS, PROVENANCE_KINDS, Provenance, provenance_schema
+
+SHA = "a" * 64
+
+
+def test_personal_needs_only_a_source_and_is_never_cleared() -> None:
+    p = Provenance(kind="personal", source="my own photo")
+    assert p.license == ""
+    assert p.cleared is False
+
+
+@pytest.mark.parametrize("kind", ["stock", "synthetic"])
+def test_stock_and_synthetic_are_cleared_with_a_licence(kind: str) -> None:
+    assert Provenance(kind=kind, source="x", license="CC0-1.0").cleared is True
+
+
+@pytest.mark.parametrize("kind", ["stock", "synthetic", "consented", "curated"])
+def test_every_kind_but_personal_states_its_licence(kind: str) -> None:
+    with pytest.raises(ValidationError, match="licence"):
+        Provenance(kind=kind, source="x", subject="Jo", release_sha256=SHA, license="  ")
+
+
+def test_consented_needs_subject_and_release_hash() -> None:
+    p = Provenance(kind="consented", source="studio session", license="release", subject="Jo", release_sha256=SHA)
+    assert p.cleared is True
+    with pytest.raises(ValidationError, match="subject"):
+        Provenance(kind="consented", source="x", license="release", release_sha256=SHA)
+    with pytest.raises(ValidationError, match="subject"):
+        Provenance(kind="consented", source="x", license="release", subject="Jo")
+
+
+def test_release_hash_is_a_lowercase_sha256() -> None:
+    with pytest.raises(ValidationError):
+        Provenance(kind="consented", source="x", license="release", subject="Jo", release_sha256="A" * 64)
+
+
+def test_curated_is_reserved_and_not_cleared() -> None:
+    assert Provenance(kind="curated", source="x", license="CC0-1.0").cleared is False
+
+
+def test_rejects_unknown_kind_and_empty_source() -> None:
+    with pytest.raises(ValidationError):
+        Provenance(kind="scraped", source="x", license="?")
+    with pytest.raises(ValidationError):
+        Provenance(kind="personal", source="")
+
+
+def test_round_trips_with_cleared_in_the_payload() -> None:
+    p = Provenance(kind="stock", source="unsplash", license="Unsplash")
+    data = json.loads(p.model_dump_json())
+    assert data["cleared"] is True
+    # A reader validating the dumped payload accepts the computed field back.
+    assert Provenance.model_validate(data) == p
+
+
+def test_kinds_match_literal() -> None:
+    assert set(PROVENANCE_KINDS) == {"personal", "stock", "synthetic", "consented", "curated"}
+    assert set(CLEARED_KINDS) == {"stock", "synthetic", "consented"}
+
+
+SCHEMA_FILE = Path(__file__).resolve().parent.parent / "provenance-schema.json"
+
+
+def test_committed_schema_matches_provenance() -> None:
+    assert SCHEMA_FILE.read_text() == provenance_schema(), "provenance-schema.json is stale; run `make schema`"
+
+
+def test_schema_lists_every_kind_and_marks_cleared_read_only() -> None:
+    props = json.loads(provenance_schema())["$defs"]["Provenance"]["properties"]
+    assert props["kind"]["enum"] == list(PROVENANCE_KINDS)
+    assert props["cleared"]["readOnly"] is True

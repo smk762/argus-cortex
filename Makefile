@@ -20,8 +20,9 @@ format:  ## Ruff autoformat + autofix
 test:  ## Run the test suite
 	$(UV) run --no-sync pytest --tb=short -q
 
-schema:  ## Regenerate the committed taxonomy-schema.json
+schema:  ## Regenerate the committed taxonomy-schema.json and provenance-schema.json
 	$(UV) run --no-sync python -c "from pathlib import Path; from argus_cortex.taxonomy import taxonomy_schema; Path('taxonomy-schema.json').write_text(taxonomy_schema(), encoding='utf-8')"
+	$(UV) run --no-sync python -c "from pathlib import Path; from argus_cortex.provenance import provenance_schema; Path('provenance-schema.json').write_text(provenance_schema(), encoding='utf-8')"
 
 build:  ## Build sdist + wheel
 	$(UV) build

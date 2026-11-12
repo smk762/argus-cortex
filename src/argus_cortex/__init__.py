@@ -31,6 +31,7 @@ from argus_cortex.moderation import (
     NudeNetClient,
     SingGuardClient,
 )
+from argus_cortex.provenance import CLEARED_KINDS, Provenance, ProvenanceKind, provenance_schema
 from argus_cortex.store import (
     IMAGE_COLLECTION,
     TAGSET_COLLECTION,
@@ -84,6 +85,11 @@ __all__ = [
     "TargetCategory",
     "TargetStyle",
     "taxonomy_schema",
+    # provenance (face/voice/image sources)
+    "Provenance",
+    "ProvenanceKind",
+    "CLEARED_KINDS",
+    "provenance_schema",
     # wire
     "VersionError",
     "check_version",
