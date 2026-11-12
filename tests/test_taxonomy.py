@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
-from argus_cortex.taxonomy import TARGET_CATEGORIES, TARGET_STYLES, TargetProfile
+from argus_cortex.taxonomy import TARGET_CATEGORIES, TARGET_STYLES, TargetProfile, taxonomy_schema
 
 
 def test_defaults() -> None:
@@ -34,4 +36,19 @@ def test_round_trips() -> None:
 
 def test_tuples_match_literals() -> None:
     assert set(TARGET_STYLES) == {"photo", "anime"}
-    assert set(TARGET_CATEGORIES) == {"identity", "wardrobe", "pose_composition", "setting"}
+    assert set(TARGET_CATEGORIES) == {"identity", "wardrobe", "pose_composition", "setting", "concept"}
+
+
+SCHEMA_FILE = Path(__file__).resolve().parent.parent / "taxonomy-schema.json"
+
+
+def test_committed_schema_matches_taxonomy() -> None:
+    assert SCHEMA_FILE.read_text() == taxonomy_schema(), "taxonomy-schema.json is stale; run `make schema`"
+
+
+def test_schema_lists_every_literal() -> None:
+    import json
+
+    defs = json.loads(taxonomy_schema())["$defs"]["TargetProfile"]["properties"]
+    assert defs["target_category"]["enum"] == list(TARGET_CATEGORIES)
+    assert defs["target_style"]["enum"] == list(TARGET_STYLES)

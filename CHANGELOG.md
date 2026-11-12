@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`concept` target category.** `TargetCategory` gains `concept`, a style or
+  visual-concept LoRA, matching argus-quarry's `concept` subjects. It is
+  additive, but a stage that keys tables by category (forge's heuristics, curator's
+  scanner) must add an entry before it accepts it.
+- **Committed `taxonomy-schema.json`.** Generated from `TargetProfile` by the new
+  `taxonomy_schema()` (`make schema`), with a test that fails when it drifts from
+  `taxonomy.py`, so non-Python clients such as studio generate their types instead
+  of copying the literals (#29).
+
 ## [0.4.6] - 2026-11-06
 
 ### Changed

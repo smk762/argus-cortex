@@ -23,7 +23,7 @@ Because everything here is imported by the downstream stages, **a change ripples
 - `moderation/` — content-moderation clients over HTTP: `nudenet.py` (`NudeNetClient`, `NsfwResult`, `DEFAULT_EXPOSED_LABELS` — **the suite's one definition of nudity; don't widen it casually**, every stage's NSFW numbers move with it), `singguard.py` (`SingGuardClient` incl. text-only `check_text()`, `GuardResult`, `rule_matches`), `policies.py` (the named policy texts, the per-policy illegal-rule table and `mode()`: `default`/`sfw-*` are SFW — **a policy's text and its illegal letters change together**), `_http.py` (shared POST, proxy-free opener, `CheckFailed`/`ModerationConfigError`). Stdlib + pydantic; Pillow lazily, behind `[images]`. Never import NudeNet (AGPL) — HTTP only. URLs are passed in; stages own their env config.
 - `store/` — the optional stateful-services layer, opt-in per `CORTEX_*` env var: `lineage.py` (Phase 1 Postgres DAG, `open_lineage_store()`), `vector.py` (Phase 2 Qdrant, `open_vector_store()`), `blob.py` (Phase 3 MinIO/S3, `open_blob_store()`), over `config.py`/`models.py`/`errors.py`. Each `open_*()` returns a `Null*` no-op when its URL is unset. Drivers are behind `[postgres]`/`[qdrant]`/`[s3]`.
 
-There is **no CLI and no committed schema in this repo** — the `schema`/`schema --check` pattern is something `wire.py` *enables* for downstream repos, not something cortex runs on itself.
+There is **no CLI in this repo**. The one committed schema is `taxonomy-schema.json` (from `taxonomy_schema()`; `make schema` regenerates it and `tests/test_taxonomy.py` fails when it is stale). Studio generates its taxonomy types from it, so a `taxonomy.py` change needs `make schema` in the same commit.
 
 ## Commands
 
