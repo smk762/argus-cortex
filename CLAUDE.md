@@ -14,7 +14,7 @@ Because everything here is imported by the downstream stages, **a change ripples
 
 `src/argus_cortex/` (top level is pydantic-only; everything heavier is behind an extra and lazily imported):
 
-- `taxonomy.py` — the "moat" types every stage inherits verbatim: `TargetProfile`, `TargetStyle`/`TargetCategory` literals. Keep it dependency-light; a change here retrains everyone's expectations.
+- `taxonomy.py` — the "moat" types every stage inherits verbatim: `TargetProfile`, `TargetStyle`/`TargetCategory` literals, and `taxonomy_schema()` (the source of the committed `taxonomy-schema.json`). Keep it dependency-light; a change here retrains everyone's expectations.
 - `wire.py` — the versioned wire-schema toolkit consumers build their contracts on: `make_versioned_base(field_name, current, majors)` (a Pydantic base that stamps + version-checks a field like `proof_version`/`manifest_version`), `check_version()` (the major-compatibility gate), `render_schema()`/`wire_schema()` (the canonical committed-schema string behind each consumer's `schema --check` CLI), and `VersionError`.
 - `backends.py` — the AI-backend contract: `Backend`/`LocalBackend`/`RemoteBackend` (point at a hosted service via `from_host(host, port)` or `from_provider(RemoteProvider.…)`), plus `with_retries()` and `resolve_device()`. httpx is lazy, behind `[remote]`.
 - `server.py` — the shared FastAPI/ASGI scaffolding other repos' micro-servers mount: `WriteGuard` (pure-ASGI method gate), the `constant_refuse()` (read-only/replay) and `cross_site_refuse()` (cross-origin write) predicates, `env_flag()`, and the `UNSAFE_METHODS`/`TRUTHY`/`FALSY` constants. Starlette is behind `[server]`.

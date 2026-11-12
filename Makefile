@@ -21,7 +21,7 @@ test:  ## Run the test suite
 	$(UV) run --no-sync pytest --tb=short -q
 
 schema:  ## Regenerate the committed taxonomy-schema.json
-	$(UV) run --no-sync python -c "from argus_cortex.taxonomy import taxonomy_schema; open('taxonomy-schema.json', 'w').write(taxonomy_schema())"
+	$(UV) run --no-sync python -c "from pathlib import Path; from argus_cortex.taxonomy import taxonomy_schema; Path('taxonomy-schema.json').write_text(taxonomy_schema(), encoding='utf-8')"
 
 build:  ## Build sdist + wheel
 	$(UV) build

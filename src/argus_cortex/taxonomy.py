@@ -16,6 +16,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from argus_cortex.wire import render_schema
+
 TargetStyle = Literal["photo", "anime"]
 
 # What the dataset is curated for. Note this is distinct from argus-lens's
@@ -53,6 +55,4 @@ def taxonomy_schema() -> str:
     of hand-copying the literals. ``tests/test_taxonomy.py`` fails if the
     committed file and this module drift; regenerate it with ``make schema``.
     """
-    from argus_cortex.wire import render_schema
-
     return render_schema([TargetProfile], title=TAXONOMY_SCHEMA_TITLE)
