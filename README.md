@@ -2,7 +2,7 @@
 
 Shared foundation for the Argus suite: taxonomy, versioned wire-schema tooling, and the local/remote AI backend contract.
 
-Part of the Argus suite; [SUITE.md](SUITE.md) lists every repo, what it owns, and how they fit together. This is the library the stages import so the code they *share* — the target taxonomy, the wire-schema versioning discipline, and the way they call local or hosted models — lives in one place instead of being copy-pasted per repo.
+Part of the Argus suite; [SUITE.md](https://github.com/smk762/argus-cortex/blob/main/SUITE.md) lists every repo, what it owns, and how they fit together. This is the library the stages import so the code they *share* — the target taxonomy, the wire-schema versioning discipline, and the way they call local or hosted models — lives in one place instead of being copy-pasted per repo.
 
 ## What's here
 

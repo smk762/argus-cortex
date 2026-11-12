@@ -17,7 +17,7 @@ GitHub: `smk762/<repo>`. Ports are each service's default.
 | **argus-cortex** | library | n/a | Shared foundation: taxonomy, wire-schema versioning, AI-backend contract, server guards, GPU lease, XMP, moderation clients, optional lineage/vector/blob stores. |
 | **argus-quarry** | service | 8102 | Acquire public-domain / CC0 images with provenance and licence into a category-sorted raw pool. Acquisition only. |
 | **argus-curator** | service | 8101 | Decide which images belong in a LoRA training set (quality, near-dup, faces, NSFW, diversity) and export them with a `manifest.jsonl`. |
-| **argus-lens** | service | 8100 | Structured, category-bucketed captions, `.txt` sidecars and XMP keywords. |
+| **argus-lens** | service | 8100 (8080 standalone) | Structured, category-bucketed captions, `.txt` sidecars and XMP keywords. |
 | **argus-forge** | service | 8103 | Turn a curated, captioned export into runnable kohya_ss / OneTrainer / diffusers configs. |
 | **argus-proof** | service | 8104 | Evaluate a trained LoRA against its dataset: sample grid, scores, pass/fail. |
 | **argus-atlas** | service | 8105 | Bake georeferenced fantasy-map overlays from real terrain (GDAL controls plus a cartography LoRA), to GeoTIFF / PMTiles. |
@@ -36,10 +36,11 @@ GitHub: `smk762/<repo>`. Ports are each service's default.
 | **argus-pkg-template** | infra | n/a | Copier template for new Argus Python packages; `copier update` pulls tooling changes. |
 
 **How they fit.** The LoRA pipeline is `quarry → curator → lens → forge → (trainer) → proof → atlas`; curator, lens,
-forge and proof carry the same `TargetProfile` from cortex. Darkroom is the suite's only way to generate an image:
-mint renders through it, and anything else that needs a picture (mask backgrounds, game art) should too. Survey stands
-alone; its GeoTIFFs can feed atlas. Every Python service depends on cortex. UIs are thin clients: the service decides
-and the UI only shows.
+forge and proof carry the same `TargetProfile` from cortex. Darkroom is the suite's way to generate an image: mint
+renders through it, and anything new that needs a picture (mask backgrounds, game art) should too. Proof's sample grids
+and atlas's bakes predate it and still drive their own diffusion backend. Survey stands alone; its GeoTIFFs can feed
+atlas. Every Python service except quarry depends on cortex. UIs are thin clients: the service decides and the UI only
+shows.
 
 **API and UI pairs.** darkroom ↔ safelight · curator ↔ cull · lens ↔ lightbox · survey ↔ sightline · mint ↔ assay.
 Studio has a page for lens, curator, quarry, forge, proof, atlas and darkroom, and links out to sightline.
