@@ -94,5 +94,5 @@ argus-cortex's SUITE.md** (a PR to argus-cortex in the same release).
 
 @../argus-core/SUITE.md
 
-Not checked out? Read https://github.com/smk762/argus-cortex/blob/main/SUITE.md
+Not checked out? Read https://github.com/smk762/argus-cortex/blob/dev/SUITE.md
 ```
