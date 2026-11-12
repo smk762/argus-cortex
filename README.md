@@ -6,7 +6,7 @@ Part of the [Argus suite](https://github.com/smk762?tab=repositories&q=argus) (q
 
 ## What's here
 
-- **`argus_cortex.taxonomy`** — `TargetProfile` / `TargetStyle` / `TargetCategory`, the "moat" types every stage inherits verbatim.
+- **`argus_cortex.taxonomy`** — `TargetProfile` / `TargetStyle` / `TargetCategory`, the "moat" types every stage inherits verbatim. `taxonomy_schema()` renders them into the committed `taxonomy-schema.json` (`make schema` regenerates it; a test fails when it is stale), so non-Python clients generate their types instead of copying the literals.
 - **`argus_cortex.wire`** — the versioned wire-schema toolkit: `check_version()` (major-compatibility gate), `make_versioned_base()` (a Pydantic base that stamps + checks a version field like `proof_version` / `manifest_version`), and `wire_schema()` / `render_schema()` for the committed-schema `schema --check` CLI pattern.
 - **`argus_cortex.backends`** — the AI-backend contract generalised from argus-lens: `Backend` / `LocalBackend` / `RemoteBackend` (point at a hosted service by `base_url`, `host`/`port`, or a known `RemoteProvider`), plus `with_retries()` and `resolve_device()`. httpx lives behind the `[remote]` extra.
 - **`argus_cortex.server`** — shared write-guard + env-flag scaffolding for the suite's FastAPI micro-servers: `WriteGuard` (a pure-ASGI method-gate that never buffers streaming responses), the `constant_refuse()` / `cross_site_refuse()` predicates (read-only/replay mode and cross-site-write protection are two configs of the one guard), the `UNSAFE_METHODS` / `TRUTHY` / `FALSY` constants, and `env_flag()` (warns on a mistyped protection flag rather than silently disabling it). Starlette lives behind the `[server]` extra.
