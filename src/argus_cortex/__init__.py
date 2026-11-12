@@ -55,7 +55,7 @@ from argus_cortex.store import (
     open_lineage_store,
     open_vector_store,
 )
-from argus_cortex.taxonomy import TargetCategory, TargetProfile, TargetStyle
+from argus_cortex.taxonomy import TargetCategory, TargetProfile, TargetStyle, taxonomy_schema
 from argus_cortex.wire import (
     VersionError,
     check_version,
@@ -83,6 +83,7 @@ __all__ = [
     "TargetProfile",
     "TargetCategory",
     "TargetStyle",
+    "taxonomy_schema",
     # wire
     "VersionError",
     "check_version",

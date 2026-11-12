@@ -21,10 +21,12 @@ TargetStyle = Literal["photo", "anime"]
 # What the dataset is curated for. Note this is distinct from argus-lens's
 # caption *buckets* (identity/action/pose_composition/wardrobe/lighting/setting):
 # those describe caption fragments, this describes the training objective.
-TargetCategory = Literal["identity", "wardrobe", "pose_composition", "setting"]
+# ``concept`` is a style or visual-concept LoRA: what argus-quarry acquires
+# under its ``concept`` subjects.
+TargetCategory = Literal["identity", "wardrobe", "pose_composition", "setting", "concept"]
 
 TARGET_STYLES: tuple[TargetStyle, ...] = ("photo", "anime")
-TARGET_CATEGORIES: tuple[TargetCategory, ...] = ("identity", "wardrobe", "pose_composition", "setting")
+TARGET_CATEGORIES: tuple[TargetCategory, ...] = ("identity", "wardrobe", "pose_composition", "setting", "concept")
 
 
 class TargetProfile(BaseModel):
@@ -39,3 +41,18 @@ class TargetProfile(BaseModel):
     target_backend: str | None = "sdxl"
     checkpoint: str | None = None
     target_category: TargetCategory = "identity"
+
+
+TAXONOMY_SCHEMA_TITLE = "argus-cortex taxonomy"
+
+
+def taxonomy_schema() -> str:
+    """The canonical JSON Schema for the taxonomy, as committed in ``taxonomy-schema.json``.
+
+    Non-Python clients (argus-studio) generate their types from that file instead
+    of hand-copying the literals. ``tests/test_taxonomy.py`` fails if the
+    committed file and this module drift; regenerate it with ``make schema``.
+    """
+    from argus_cortex.wire import render_schema
+
+    return render_schema([TargetProfile], title=TAXONOMY_SCHEMA_TITLE)
