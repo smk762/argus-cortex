@@ -1,6 +1,6 @@
 UV ?= uv
 
-.PHONY: help install lint format test build clean
+.PHONY: help install lint format test schema build clean
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -19,6 +19,9 @@ format:  ## Ruff autoformat + autofix
 
 test:  ## Run the test suite
 	$(UV) run --no-sync pytest --tb=short -q
+
+schema:  ## Regenerate the committed taxonomy-schema.json
+	$(UV) run --no-sync python -c "from pathlib import Path; from argus_cortex.taxonomy import taxonomy_schema; Path('taxonomy-schema.json').write_text(taxonomy_schema(), encoding='utf-8')"
 
 build:  ## Build sdist + wheel
 	$(UV) build
