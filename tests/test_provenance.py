@@ -61,6 +61,12 @@ def test_round_trips_with_cleared_in_the_payload() -> None:
     assert Provenance.model_validate(data) == p
 
 
+def test_is_frozen_so_a_record_cannot_skip_its_check() -> None:
+    p = Provenance(kind="personal", source="my own photo")
+    with pytest.raises(ValidationError):
+        p.kind = "consented"
+
+
 def test_kinds_match_literal() -> None:
     assert set(PROVENANCE_KINDS) == {"personal", "stock", "synthetic", "consented", "curated"}
     assert set(CLEARED_KINDS) == {"stock", "synthetic", "consented"}

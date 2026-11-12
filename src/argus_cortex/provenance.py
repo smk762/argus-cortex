@@ -23,15 +23,15 @@ are added here, additively, once argus-mask#19 defines them.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, get_args
 
-from pydantic import BaseModel, Field, computed_field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from argus_cortex.wire import render_schema
 
 ProvenanceKind = Literal["personal", "stock", "synthetic", "consented", "curated"]
 
-PROVENANCE_KINDS: tuple[ProvenanceKind, ...] = ("personal", "stock", "synthetic", "consented", "curated")
+PROVENANCE_KINDS: tuple[ProvenanceKind, ...] = get_args(ProvenanceKind)
 CLEARED_KINDS: frozenset[ProvenanceKind] = frozenset({"stock", "synthetic", "consented"})
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
 
@@ -46,6 +46,10 @@ class Provenance(BaseModel):
       by the release's sha256 (never the document) and the subject as the release names them.
     - ``curated``: reserved; not cleared.
     """
+
+    # Frozen: the completeness check runs only at construction, so an assignment such as
+    # ``p.kind = "consented"`` would otherwise yield a cleared record that skipped it.
+    model_config = ConfigDict(frozen=True)
 
     kind: ProvenanceKind
     source: str = Field(..., min_length=1)
