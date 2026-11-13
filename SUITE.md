@@ -27,7 +27,7 @@ GitHub: `smk762/<repo>`. Ports are each service's default.
 | **argus-mask** | service | 8109 | A talking face: audio in, facial-animation frames out, rendered in a browser on any LAN screen. |
 | **argus-studio** | UI + compose | 3000 | The suite web UI, and the compose stack that runs the services from GHCR images. No backend code. |
 | **argus-safelight** | UI | 3097 | Demo UI for darkroom: prompt, verdicts, generation over SSE, history. |
-| **argus-cull** | UI | 3000 | Demo UI for curator: which images make the set and why, plus the paths to act on. |
+| **argus-cull** | UI + compose | 3000 | Demo UI for curator: which images make the set and why, plus the paths to act on. Its compose runs curator with NudeNet, EraX-NSFW and watermark sidecars (NudeNet-shaped `POST /infer`); SingGuard is darkroom's agent-composer. Follows curator's `dev` at a recorded commit, not a release; web image `ghcr.io/smk762/argus-cull`. |
 | **argus-lightbox** | UI (static) | 3000 | Demo gallery navigated by lens captions; bakes from cortex stores, then runs with no server. |
 | **argus-sightline** | UI | 3107 | Workspace UI for survey. |
 | **argus-assay** | UI | 3108 | Review UI for mint: the moderator and owner approve every card, template and frame. |
