@@ -22,7 +22,7 @@ GitHub: `smk762/<repo>`. Ports are each service's default.
 | **argus-proof** | service | 8104 | Evaluate a trained LoRA against its dataset: sample grid, scores, pass/fail. |
 | **argus-atlas** | service | 8105 | Bake georeferenced fantasy-map overlays from real terrain (GDAL controls plus a cartography LoRA), to GeoTIFF / PMTiles. |
 | **argus-darkroom** | service | 8106 | Guarded image generation: checks the prompt, generates via ComfyUI, checks each output, and keeps a record of every attempt. |
-| **argus-survey** | service | 8107 | Point-cloud deliverables for land surveyors: QA, ground, DTM/DSM, contours, volumes, change, ASPRS accuracy. |
+| **argus-survey** | service | 8107 | Point-cloud deliverables for land surveyors (LAS/LAZ/COPC/E57 in): QA, ground, DTM/DSM/CHM, contours, stockpile volumes and cut/fill (grid and ground-scaled), change between epochs, profiles, ASPRS Edition 2 (v2, 2024) accuracy, LAS 1.4 / E57 export for ReCap and Civil 3D. Explicit datum operations (MGA2020, AHD via AUSGeoid2020), every command recorded in `job.json`. PyPI `argus-survey`, image `ghcr.io/smk762/argus-survey`. |
 | **argus-mint** | service | 8108 | Provenance tokens for game assets: renders reviewed templates through darkroom, pins to IPFS, mints ERC-721 cards and soulbound deeds, anchors Merkle roots (Base). |
 | **argus-mask** | service | 8109 | A talking face: audio in (or text through a TTS service), ARKit facial-animation frames out (an energy driver on CPU, or NVIDIA Audio2Face-3D as a separate image), rendered in a browser on any LAN screen. Mesh (`.glb`) and LAM Gaussian-splat heads, each with provenance (`personal` or cleared); an optional face editor builds MakeHuman heads with Blender. PyPI `argus-mask`, image `ghcr.io/smk762/argus-mask`. |
 | **argus-studio** | UI + compose | 3000 | The suite web UI, and the compose stack that runs the services from GHCR images. No backend code. |
@@ -64,6 +64,7 @@ Studio has a page for lens, curator, quarry, forge, proof, atlas and darkroom, a
 | Caption or keyword images | **lens** | Write ad-hoc captions. |
 | Training configs, or evaluating a LoRA | **forge**, **proof** | |
 | Terrain, georeferencing, map tiles | **atlas** (stylised), **survey** (survey-grade) | |
+| Point clouds: ground classification, DTM/DSM, volumes, datum transformations (geoid heights, GDA94→GDA2020) | **survey** (CLI, or `POST /jobs/{id}/{step}` over SSE); its GeoTIFFs feed `argus-atlas controls --dem` | Let PROJ pick a transformation, or reproject heights without a geoid grid. |
 | A face that speaks | **mask** `POST /speak?face=<id>` (text), `POST /push?face=<id>` (a WAV or PCM you already have) or the `/session/<id>/source` socket; screens open `/?face=<id>` | Drive a face's animation yourself, or render it per stage. |
 | On-chain provenance, IPFS | **mint** | |
 | Run the whole stack locally | **studio** `compose.yaml` | |
