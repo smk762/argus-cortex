@@ -26,7 +26,7 @@ from argus_cortex.backends import RemoteBackend, RemoteProvider
 _Versioned = make_versioned_base("proof_version", "1.0", ("1",))
 
 # reach a hosted scorer by IP/port, or a known provider
-scorer = RemoteBackend.from_host("192.168.1.20", 9000, api_key="…")
+scorer = RemoteBackend.from_host("<LAN_HOST>", 9000, api_key="…")  # real host/IP: local .env
 nim = RemoteBackend.from_provider(RemoteProvider.NVIDIA_NIM, api_key="…")
 ```
 
