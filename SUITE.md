@@ -14,7 +14,7 @@ GitHub: `smk762/<repo>`. Ports are each service's default.
 
 | Repo | Kind | Port | What it is for |
 |---|---|---|---|
-| **argus-cortex** | library | n/a | Shared foundation: taxonomy, wire-schema versioning, AI-backend contract, server guards, GPU lease, XMP, moderation clients, optional lineage/vector/blob stores. |
+| **argus-cortex** | library | n/a | Shared foundation: taxonomy, wire-schema versioning, AI-backend contract, server guards, GPU lease, XMP, moderation clients, likeness provenance, optional lineage/vector/blob stores. |
 | **argus-quarry** | service | 8102 | Acquire public-domain / CC0 images with provenance and licence into a category-sorted raw pool. Acquisition only. |
 | **argus-curator** | service | 8101 | Decide which images belong in a LoRA training set (quality, near-dup, faces, NSFW, diversity) and export them with a `manifest.jsonl`. |
 | **argus-lens** | service | 8100 (8080 standalone) | Structured, category-bucketed captions, `.txt` sidecars and XMP keywords. Records live captions to the cortex lineage store (the tape lightbox and replay read); runs read-only with `LENS_READ_ONLY`. |
@@ -57,6 +57,7 @@ Studio has a page for lens, curator, quarry, forge, proof, atlas and darkroom, a
 | Guard a FastAPI server's writes, or run read-only | `argus_cortex.server` (`WriteGuard`, `env_flag`) | Use `BaseHTTPMiddleware`, which buffers streams. |
 | Read or write XMP sidecars | `argus_cortex.xmp` | Overwrite another stage's properties. |
 | Record lineage, embeddings or blobs | `argus_cortex.store` (`open_lineage_store` / `open_vector_store` / `open_blob_store`) | Add a database to a single stage. |
+| Record where a face, voice or image came from, or whether it may be shown publicly | `argus_cortex.provenance` (`Provenance`, `.cleared`); non-Python clients use `provenance-schema.json` | Define your own provenance kinds or consent fields. |
 | The training target (style, category) | `argus_cortex.taxonomy`; non-Python clients use `taxonomy-schema.json` | Copy the literals. |
 | Acquire source photos with licence and provenance | **quarry** | Scrape inside another stage. |
 | Score, dedupe or select images; faces; content rating | **curator** | Re-score in a later stage. |
