@@ -17,7 +17,7 @@ GitHub: `smk762/<repo>`. Ports are each service's default.
 | **argus-cortex** | library | n/a | Shared foundation: taxonomy, wire-schema versioning, AI-backend contract, server guards, GPU lease, XMP, moderation clients, optional lineage/vector/blob stores. |
 | **argus-quarry** | service | 8102 | Acquire public-domain / CC0 images with provenance and licence into a category-sorted raw pool. Acquisition only. |
 | **argus-curator** | service | 8101 | Decide which images belong in a LoRA training set (quality, near-dup, faces, NSFW, diversity) and export them with a `manifest.jsonl`. |
-| **argus-lens** | service | 8100 (8080 standalone) | Structured, category-bucketed captions, `.txt` sidecars and XMP keywords. |
+| **argus-lens** | service | 8100 (8080 standalone) | Structured, category-bucketed captions, `.txt` sidecars and XMP keywords. Records live captions to the cortex lineage store (the tape lightbox and replay read); runs read-only with `LENS_READ_ONLY`. |
 | **argus-forge** | service | 8103 | Turn a curated, captioned export into runnable kohya_ss / OneTrainer / diffusers configs. |
 | **argus-proof** | service | 8104 | Evaluate a trained LoRA against its dataset: sample grid, scores, pass/fail. |
 | **argus-atlas** | service | 8105 | Bake georeferenced fantasy-map overlays from real terrain (GDAL controls plus a cartography LoRA), to GeoTIFF / PMTiles. |
@@ -29,7 +29,7 @@ GitHub: `smk762/<repo>`. Ports are each service's default.
 | **argus-safelight** | UI | 3097 | Demo UI for darkroom: prompt and pre-flight, text-to-image, image-to-image and inpainting over SSE, the per-policy shield grid, history, and darkroom's docs in `/docs` with in-context help. Follows darkroom's `dev` at a recorded commit (`web/schema/pins.json`: docs, wire types and fixture move together), not a release; built from source by darkroom's compose, no image. |
 | **argus-cull** | UI + compose | 3000 | Demo UI for curator: which images make the set and why, plus the paths to act on. Its compose runs curator with NudeNet, EraX-NSFW and watermark sidecars (NudeNet-shaped `POST /infer`); SingGuard is darkroom's agent-composer. Follows curator's `dev` at a recorded commit, not a release; web image `ghcr.io/smk762/argus-cull`. |
 | **argus-lightbox** | UI (static) + compose | 3000 | Demo gallery navigated by lens captions. Bakes the recorded tape from cortex stores into a static site (the hosted demo), or captions a photo folder through lens in its compose stack, where a small server also lets you pick each photo's final caption. `/docs` links lens's docs at the baked version. |
-| **argus-sightline** | UI | 3107 | Workspace UI for survey. |
+| **argus-sightline** | UI | 3107 | Workspace UI for survey: every step over SSE, a map of the derived views with drawing tools, a COPC point view, datums always on screen, a guided demo measured against analytic truth, and a "Made with" line per step from `job.json`. Follows survey's `dev` at a recorded commit (`schema/pins.json`: wire types, demo numbers and docs links move together), not a release; built from source by its compose, no published image yet. |
 | **argus-assay** | UI | 3108 | Review UI for mint: the moderator and owner approve every card, template and frame. |
 | **argus-halo** | infra | n/a | Terraform for the public demo (`argus.dragonhound.dev`): read-only replay services plus a private data host. |
 | **argus-ci** | infra | n/a | Reusable GitHub Actions workflows (uv, ruff, pytest, build, release). |
