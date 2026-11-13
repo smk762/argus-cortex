@@ -26,7 +26,7 @@ GitHub: `smk762/<repo>`. Ports are each service's default.
 | **argus-mint** | service | 8108 | Provenance tokens for game assets: renders reviewed templates through darkroom, pins to IPFS, mints ERC-721 cards and soulbound deeds, anchors Merkle roots (Base). |
 | **argus-mask** | service | 8109 | A talking face: audio in, facial-animation frames out, rendered in a browser on any LAN screen. |
 | **argus-studio** | UI + compose | 3000 | The suite web UI, and the compose stack that runs the services from GHCR images. No backend code. |
-| **argus-safelight** | UI | 3097 | Demo UI for darkroom: prompt, verdicts, generation over SSE, history. |
+| **argus-safelight** | UI | 3097 | Demo UI for darkroom: prompt and pre-flight, text-to-image, image-to-image and inpainting over SSE, the per-policy shield grid, history, and darkroom's docs in `/docs` with in-context help. Follows darkroom's `dev` at a recorded commit (`web/schema/pins.json`: docs, wire types and fixture move together), not a release; built from source by darkroom's compose, no image. |
 | **argus-cull** | UI + compose | 3000 | Demo UI for curator: which images make the set and why, plus the paths to act on. Its compose runs curator with NudeNet, EraX-NSFW and watermark sidecars (NudeNet-shaped `POST /infer`); SingGuard is darkroom's agent-composer. Follows curator's `dev` at a recorded commit, not a release; web image `ghcr.io/smk762/argus-cull`. |
 | **argus-lightbox** | UI (static) | 3000 | Demo gallery navigated by lens captions; bakes from cortex stores, then runs with no server. |
 | **argus-sightline** | UI | 3107 | Workspace UI for survey. |
