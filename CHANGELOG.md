@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-11-13
+
 ### Added
 - **`concept` target category.** `TargetCategory` gains `concept`, a style or
   visual-concept LoRA, matching argus-quarry's `concept` subjects. It is
@@ -16,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `taxonomy_schema()` (`make schema`), with a test that fails when it drifts from
   `taxonomy.py`, so non-Python clients such as studio generate their types instead
   of copying the literals (#29).
+- **`SUITE.md`, the suite map for agents.** Every Argus repo, its port and purpose,
+  and a "Need it? Use it" index. Each repo's `CLAUDE.md` imports it (#33).
 
 ## [0.4.6] - 2026-11-06
 
@@ -225,7 +229,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.4.6...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.4.7...HEAD
+[0.4.7]: https://github.com/smk762/argus-cortex/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/smk762/argus-cortex/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/smk762/argus-cortex/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/smk762/argus-cortex/compare/v0.4.3...v0.4.4
