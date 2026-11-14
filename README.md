@@ -63,7 +63,7 @@ result.exposed_score    # 0.0-1.0 over DEFAULT_EXPOSED_LABELS; result.labels = p
 guard = SingGuardClient("http://guard:9150", policy=None)  # None = SingGuard's default rules
 # thinking="fast" (default) is a verdict and rule; "fast-slow" also writes why; "slow" writes why
 # with no fast verdict ahead of the reasoning; "cascade" is fast, then slow only for what fast
-# flagged (the last two: argus-cull's singguard service only).
+# flagged (the last two: agent-composer's guard or argus-cull's singguard service).
 verdict = guard.check(image_bytes, text="the prompt, if any")
 preflight = guard.check_text("the prompt")    # no image: judge a prompt before it is run
 verdict.safe, verdict.rules   # False, ["B. Real-World Crimes & Public Safety"]

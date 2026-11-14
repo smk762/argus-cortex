@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Docs: `slow` and `cascade` are supported by agent-composer's guard router as well as argus-cull's `singguard`
+  service, not by argus-cull's alone (`SingGuardClient` docstrings, README). Code is unchanged.
+
 ### Added
 - `brand/`: Panoptes 0.2 adds capitals, digits and basic punctuation (85 glyphs). Glyphs made only of dots, like the
   colon, now keep every dot in the font build.
