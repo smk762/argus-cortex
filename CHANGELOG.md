@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `release.yml` also sends `cortex-released` to argus-mint, whose image installs cortex from its
+  `server` extra's range and now rebuilds on it (argus-mint#29).
+
 ## [0.5.0] - 2026-11-14
 
 ### Added
