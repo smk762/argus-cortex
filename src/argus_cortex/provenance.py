@@ -45,11 +45,15 @@ class Provenance(BaseModel):
     - ``consented``: a real person's likeness (or an owned character) under a signed release, bound
       by the release's sha256 (never the document) and the subject as the release names them.
     - ``curated``: reserved; not cleared.
+
+    Unknown fields are refused, so a misspelt field cannot be dropped in silence (argus-mask#64).
+    ``licence`` is read as ``license``, and the derived ``cleared`` a dumped record carries is
+    dropped and recomputed, never believed.
     """
 
     # Frozen: the completeness check runs only at construction, so an assignment such as
     # ``p.kind = "consented"`` would otherwise yield a cleared record that skipped it.
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     kind: ProvenanceKind
     source: str = Field(..., min_length=1)
@@ -58,8 +62,23 @@ class Provenance(BaseModel):
     subject: str = ""
     release_sha256: str | None = Field(None, pattern=SHA256_PATTERN)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _read(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data = {k: v for k, v in data.items() if k != "cleared"}
+        if "licence" in data:
+            licence = data.pop("licence")
+            if "license" in data and data["license"] != licence:
+                raise ValueError("give the licence once: `license` and `licence` disagree")
+            data["license"] = licence
+        return data
+
     @model_validator(mode="after")
     def _complete(self) -> Provenance:
+        if not self.source.strip():
+            raise ValueError("a source states where it came from")
         if self.kind != "personal" and not self.license.strip():
             raise ValueError(f"a {self.kind} source states its licence")
         if self.kind == "consented" and not (self.release_sha256 and self.subject.strip()):
