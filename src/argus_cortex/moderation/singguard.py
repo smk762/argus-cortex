@@ -136,7 +136,9 @@ def downscale(data: bytes, max_edge: int = MAX_EDGE, max_bytes: int = MAX_BYTES)
     the first encoding is still too large.
 
     Raises :class:`GuardCheckFailed` for an image Pillow cannot read or shrink
-    under *max_bytes*.
+    under *max_bytes*, and for a multi-frame image (animated GIF/WebP/APNG,
+    multi-page TIFF): SingGuard judges one picture, so a verdict on frame 0
+    would not describe the frames after it. Split the frames and check each.
     """
     try:
         from PIL import Image, ImageOps
@@ -144,6 +146,10 @@ def downscale(data: bytes, max_edge: int = MAX_EDGE, max_bytes: int = MAX_BYTES)
         raise ModerationConfigError(_NEEDS_PILLOW) from exc
     try:
         with Image.open(io.BytesIO(data)) as im:
+            if getattr(im, "n_frames", 1) > 1:
+                raise GuardCheckFailed(
+                    f"image has {im.n_frames} frames; SingGuard judges one, so check each frame separately"
+                )
             if max(im.size) <= max_edge and len(data) <= max_bytes:
                 return data
             # Shrink first, so a JPEG decodes at reduced scale (draft mode);
