@@ -7,16 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-14
+
 ### Added
 - **`argus_cortex.provenance`.** `Provenance`, `ProvenanceKind` and `CLEARED_KINDS`, hoisted from
   argus-mask so every package that stores where a face, voice or image came from reads one shape,
   with a committed `provenance-schema.json` (#35).
+- **`argus_cortex.consent`.** `ConsentRecord`, a real person's likeness release as argus-mask#26
+  defined it, keyed by the `release_sha256` a `consented` `Provenance` names. `consent_valid()`
+  returns a `ConsentVerdict` with one of a closed set of refusal codes, checked in a fixed order
+  (`revoked`, `not-yet-signed`, `expired`, `likeness-not-covered`, `use-not-covered`,
+  `delivery-not-covered`), so every stage refuses for the same reasons. `consent_matches()` checks
+  that a record is the release and subject a provenance names. Committed `consent-schema.json` (#53).
+- **`Provenance.generator`.** An optional `model`, `model_sha256`, `seed` and `prompt` for how a
+  generated source was made, allowed only on `synthetic` and `personal` sources (#53).
 
 ### Changed
 - **`Provenance` is strict, as argus-mask's is (argus-mask#64).** Unknown fields are refused instead
   of dropped (`additionalProperties: false` in the schema). `licence` is read as `license`; both given
   and different is refused. A `source` of only whitespace is refused. The derived `cleared` in a dumped
   record is dropped on read and recomputed.
+- **README:** lists the `[images]` and `[gpu]` extras, `ARGUS_GPU_DEVICE`, and the moderation policy
+  names with their illegal-rule letters (#42).
 
 ## [0.4.7] - 2026-11-13
 
@@ -240,7 +252,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.4.7...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/smk762/argus-cortex/compare/v0.4.7...v0.5.0
 [0.4.7]: https://github.com/smk762/argus-cortex/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/smk762/argus-cortex/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/smk762/argus-cortex/compare/v0.4.4...v0.4.5
