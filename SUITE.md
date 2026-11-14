@@ -16,7 +16,7 @@ GitHub: `smk762/<repo>`. Ports are each service's default.
 |---|---|---|---|
 | **argus-cortex** | library | n/a | Shared foundation: taxonomy, wire-schema versioning, AI-backend contract, server guards, GPU lease, XMP, moderation clients, likeness provenance and consent records, optional lineage/vector/blob stores. |
 | **argus-quarry** | service | 8102 | Acquire public-domain / CC0 images with provenance and licence into a category-sorted raw pool. Searches local metadata archives of PD12M and Megalith-10m (filters, plus CLIP semantic and "more like this" search over PD12M) and lands chosen slices, with Megalith's Drawthings mirror as a fallback for photos gone from Flickr. Acquisition only. |
-| **argus-curator** | service | 8101 | Decide which images belong in a LoRA training set (quality, near-dup, faces, NSFW, diversity) and export them with a `manifest.jsonl`. |
+| **argus-curator** | service | 8101 | Decide which images belong in a LoRA training set (quality, near-dup, faces, NSFW, diversity) and export them with a `manifest.jsonl` (2.3: each row's primary face and the set's age). Its `face_source` preset shortlists source portraits for mask: one adult identity, frontal, sharp, eyes open, close to a reference. PyPI `argus-curator`. |
 | **argus-lens** | service | 8100 (8080 standalone) | Structured, category-bucketed captions, `.txt` sidecars and XMP keywords. Records live captions to the cortex lineage store (the tape lightbox and replay read); runs read-only with `LENS_READ_ONLY`. |
 | **argus-forge** | service | 8103 | Turn a curated, captioned export into runnable kohya_ss / OneTrainer / diffusers configs. |
 | **argus-proof** | service | 8104 | Evaluate a trained LoRA against its dataset: sample grid, scores, pass/fail. |
@@ -63,6 +63,7 @@ Studio has a page for lens, curator, quarry, forge, proof, atlas and darkroom, a
 | Acquire source photos with licence and provenance | **quarry** | Scrape inside another stage. |
 | Find public-domain photos by caption, filters or meaning, then land a slice | **quarry** `GET /archives/{name}/search` (`semantic=`, `similar_to=` on PD12M), `POST /archives/{name}/fetch` (opt-in, `QUARRY_ALLOW_FETCH=1`) | Download PD12M or Megalith wholesale to search it. |
 | Score, dedupe or select images; faces; content rating | **curator** | Re-score in a later stage. |
+| Shortlist source portraits for a mask face | **curator** `face_source` on `POST /scan/{id}/select` / `POST /export` (CLI `--face-source`, `--face-reference`); each image left out says which check it failed | Pick a face source by eye, or take one from quarry. |
 | Caption or keyword images | **lens** | Write ad-hoc captions. |
 | Training configs, or evaluating a LoRA | **forge**, **proof** | |
 | Terrain, georeferencing, map tiles | **atlas** (stylised), **survey** (survey-grade) | |
