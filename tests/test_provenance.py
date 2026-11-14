@@ -107,3 +107,38 @@ def test_schema_lists_every_kind_and_marks_cleared_read_only() -> None:
     props = json.loads(provenance_schema())["$defs"]["Provenance"]["properties"]
     assert props["kind"]["enum"] == list(PROVENANCE_KINDS)
     assert props["cleared"]["readOnly"] is True
+
+
+GEN = {"model": "flux1-dev", "model_sha256": "e" * 64, "seed": 42, "prompt": "a portrait, studio light"}
+
+
+@pytest.mark.parametrize("kind", ["synthetic", "personal"])
+def test_a_generated_source_may_name_its_generator(kind: str) -> None:
+    p = Provenance(kind=kind, source="darkroom", license="CC0-1.0", generator=GEN)
+    assert p.generator is not None and p.generator.seed == 42
+    assert Provenance.model_validate(json.loads(p.model_dump_json())) == p
+
+
+def test_generator_is_optional_and_needs_only_a_model() -> None:
+    assert Provenance(kind="synthetic", source="x", license="CC0-1.0").generator is None
+    p = Provenance(kind="synthetic", source="x", license="CC0-1.0", generator={"model": "sdxl"})
+    assert p.generator is not None and (p.generator.model_sha256, p.generator.seed, p.generator.prompt) == (
+        None,
+        None,
+        "",
+    )
+
+
+@pytest.mark.parametrize("kind", ["stock", "consented", "curated"])
+def test_only_synthetic_and_personal_carry_a_generator(kind: str) -> None:
+    with pytest.raises(ValidationError, match="no generator"):
+        Provenance(kind=kind, source="x", license="L", subject="Jo", release_sha256=SHA, generator=GEN)
+
+
+@pytest.mark.parametrize(
+    "gen",
+    [{"model": "  "}, {"model": "m", "model_sha256": "nope"}, {"model": "m", "sampler": "euler"}, {"prompt": "p"}],
+)
+def test_a_malformed_generator_is_refused(gen: dict) -> None:
+    with pytest.raises(ValidationError):
+        Provenance(kind="synthetic", source="x", license="CC0-1.0", generator=gen)
