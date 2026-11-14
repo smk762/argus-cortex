@@ -1,0 +1,21 @@
+Argus brand assets
+Copyright (c) 2026 Dragonhound Labs. All rights reserved.
+
+This licence covers everything in this brand/ directory except brand/tools/: the Argus suite
+mark, the package marks, the lockups, the favicons, the identity sheet (sheet.html) and the
+Panoptes typeface (font/). The MIT License at the repository root does NOT apply to them.
+
+You may, without asking:
+  - use the unmodified marks, lockups and favicons to refer to the Argus suite or one of its
+    packages, for example in an article, a link, a dependency list or a talk;
+  - use them in forks or redistributions of the Argus repositories, as long as it remains
+    clear that your fork or redistribution is not the original project.
+
+You may not, without written permission:
+  - modify the marks or use them in a way that suggests endorsement by, or affiliation
+    with, the Argus project;
+  - use them as, or as part of, the logo or branding of another product or project;
+  - use, copy, modify or redistribute the Panoptes typeface outside the Argus repositories.
+
+brand/tools/ (the scripts that generate these files) is covered by the repository's MIT
+License.
