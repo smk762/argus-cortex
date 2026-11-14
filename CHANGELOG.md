@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `brand/`: Panoptes 0.2 adds capitals, digits and basic punctuation (85 glyphs). Glyphs made only of dots, like the
+  colon, now keep every dot in the font build.
 - `brand/`: favicon sets for every web UI (`mark/favicon/`, `packages/<pkg>/favicon/`: themed `icon.svg`,
   `favicon.ico`, `apple-icon.png`, manifest PNGs) and `panoptes.py favicons` to regenerate them; `brand/README.md`
   says where each UI puts them.

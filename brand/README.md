@@ -24,7 +24,7 @@ The suite mark's eye uses the Training red. Ink is `#1c1f22` on light background
 | `packages/<pkg>/argus-<pkg>-{light,dark,mono}.svg` | Package mark. |
 | `packages/<pkg>/argus-<pkg>-lockup-{light,dark,mono}.svg` | Package mark + "argus" + package name. Use it for README headers. |
 | `mark/favicon/`, `packages/<pkg>/favicon/` | Favicon set for a web UI: `icon.svg` (follows light/dark), `favicon.ico` (16/32/48), `apple-icon.png`, `icon-192.png`, `icon-512.png` (mark on a dark tile). |
-| `font/Panoptes-Regular.{ttf,woff2}` | **Panoptes**, the Argus lettering as a font. Draft 0.1: lowercase a–z, hyphen, space. |
+| `font/Panoptes-Regular.{ttf,woff2}` | **Panoptes**, the Argus lettering as a font. Draft 0.2: A–Z, a–z, 0–9 and basic punctuation (`. , : ; ! ? ' " ( ) / + = _ & @ # · – —`). |
 | `sheet.html` | The identity sheet: every mark proofed at 16–128 px on light and dark, the construction rules, and the candidates that were considered. **Source of truth.** |
 | `tools/panoptes.py` | Regenerates everything above from `sheet.html`. |
 
@@ -89,5 +89,10 @@ for f in brand/social/*.svg; do magick "$f" "${f%.svg}.png"; done
 ```
 
 Social previews have to be uploaded by hand under each repo's **Settings → Social preview**. GitHub has no API for it.
+
+Capitals and digits are 16 units tall (cap height y=2 to the baseline), with round capitals drawn as circles of r 8.
+The font's vendor ID (OS/2 `achVendID`) is `DHLB`. It is not on Microsoft's registered vendor list and doesn't
+clash with any ID there. Registering it is optional: an email to Microsoft, which publishes the ID, the foundry name
+and a website.
 
 The letters are centre-line drawings in `tools/panoptes.py` (`G`), on the icons' grid: baseline 18, x-height 7, ascender 2, descender 24. The font build expands them to a 2-unit stroke with skia-pathops.
