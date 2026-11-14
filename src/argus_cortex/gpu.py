@@ -36,6 +36,7 @@ import contextlib
 import logging
 import math
 import os
+import stat
 import tempfile
 import threading
 import time
@@ -153,13 +154,26 @@ class LeaseCoordinator:
         directory = os.path.dirname(self.lock_path)
         if directory:
             os.makedirs(directory, exist_ok=True)
-        # 0o666: services in different containers may run as different users.
-        # os.open's mode is masked by umask, so chmod the fd or the file is
-        # 0644/0600 and the next UID cannot open it.
-        fd = os.open(self.lock_path, os.O_CREAT | os.O_RDWR, 0o666)
+        # The lock lives in a directory several UIDs can write to, so never
+        # follow a symlink planted at the lock path (the fchmod below would make
+        # its target world-writable), and only touch a regular file we own.
+        flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
         try:
-            with contextlib.suppress(OSError):
-                os.fchmod(fd, 0o666)
+            fd = os.open(self.lock_path, flags, 0o666)
+        except OSError as exc:
+            if os.path.islink(self.lock_path):
+                raise RuntimeError(f"GPU lock path {self.lock_path} is a symlink; refusing to follow it") from exc
+            raise
+        try:
+            st = os.fstat(fd)
+            if not stat.S_ISREG(st.st_mode):
+                raise RuntimeError(f"GPU lock path {self.lock_path} is not a regular file")
+            # 0o666: services in different containers may run as different users.
+            # os.open's mode is masked by umask, so chmod the fd or the file is
+            # 0644/0600 and the next UID cannot open it. Only the owner may chmod.
+            if st.st_uid == os.geteuid():
+                with contextlib.suppress(OSError):
+                    os.fchmod(fd, 0o666)
             while True:
                 try:
                     fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
