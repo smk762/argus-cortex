@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `SUITE.md`: a row for argus-handbook, the suite's public docs at docs.dragonhound.dev.
+
 ### Fixed
 - Docs: `slow` and `cascade` are supported by agent-composer's guard router as well as argus-cull's `singguard`
   service, not by argus-cull's alone (`SingGuardClient` docstrings, README). Code is unchanged.
