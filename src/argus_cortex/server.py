@@ -25,9 +25,11 @@ Starlette ships with FastAPI, so this module lives behind the ``argus-cortex``
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
 from collections.abc import Callable, Iterable
+from urllib.parse import urlsplit
 
 try:
     from starlette.datastructures import Headers
@@ -121,7 +123,31 @@ def constant_refuse(message: str) -> Refuse:
     return _refuse
 
 
-def cross_site_refuse(trusted_origins: Iterable[str]) -> Refuse:
+def _host_name(hostport: str) -> str | None:
+    """The host of a ``Host``-style *hostport* (``h``, ``h:80``, ``[::1]:80``), lower-cased."""
+    try:
+        return urlsplit("//" + hostport).hostname
+    except ValueError:
+        return None
+
+
+def _rebind_proof(host: str) -> bool:
+    """Whether a ``Host`` value cannot have come from a DNS-rebound name.
+
+    A rebinding page is loaded from the attacker's own hostname, so its Host
+    header carries that name. An IP literal or ``localhost`` can only be sent by
+    a page loaded from that address, which a remote attacker does not control.
+    """
+    if host == "localhost":
+        return True
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
+
+
+def cross_site_refuse(trusted_origins: Iterable[str], trusted_hosts: Iterable[str] = ()) -> Refuse:
     """A :class:`WriteGuard` predicate refusing untrusted cross-origin writes.
 
     CORS is not a write boundary: a ``multipart/form-data`` POST is a
@@ -134,22 +160,29 @@ def cross_site_refuse(trusted_origins: Iterable[str]) -> Refuse:
 
     * absent -> allowed. Non-browser clients (curl, the CLI, server-to-server)
       never send it, and browsers always do for cross-origin state changes.
-    * same host:port as the request -> allowed, so a UI proxied onto this host
-      keeps working un-allow-listed. Compared host:port (not full origin) because
-      behind a TLS-terminating proxy the app sees ``http://`` while the browser
-      reports ``https://`` — same host either way.
+    * same host:port as the request, **and** that host is an IP literal,
+      ``localhost``, or in *trusted_hosts* -> allowed, so a UI proxied onto this
+      host keeps working un-allow-listed. Compared host:port (not full origin)
+      because behind a TLS-terminating proxy the app sees ``http://`` while the
+      browser reports ``https://`` — same host either way. A bare hostname
+      match is not enough: under DNS rebinding the browser sends the attacker's
+      name as both ``Origin`` and ``Host``, so a server reached by a DNS name
+      must list it in *trusted_hosts* (host names, no port).
     * in *trusted_origins* -> allowed. That is the operator's own allow-list.
     * anything else -> refused.
     """
     trusted = set(trusted_origins)
+    hosts = {h.strip().lower() for h in trusted_hosts if h.strip()}
 
     def _refuse(scope: Scope, headers: Headers) -> str | None:
         origin = headers.get("origin")
         if origin is None or origin in trusted:
             return None
         host = headers.get("host")
-        if host and origin.partition("://")[2] == host:
-            return None
+        if host and origin.partition("://")[2].lower() == host.lower():
+            name = _host_name(host)
+            if name is not None and (name in hosts or _rebind_proof(name)):
+                return None
         return f"cross-site {scope['method']} from origin {origin} is not allowed"
 
     return _refuse
