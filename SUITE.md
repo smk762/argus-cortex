@@ -72,6 +72,7 @@ Studio has a page for lens, curator, quarry, forge, proof, atlas and darkroom, a
 | On-chain provenance, IPFS; game-asset cards from reviewed templates | **mint** (`argus-mint serve`, or the CLI); a consumer supplies template variables, display text and 32-byte leaf hashes | Mint tokens a game reads stats from, or send free text to a model. |
 | Run the whole stack locally | **studio** `compose.yaml` | |
 | A new Python package, or CI | **argus-pkg-template**, **argus-ci** | Copy another repo's tooling by hand. |
+| A logo, favicon, README header or social preview for a repo, demo or UI | **cortex** `brand/` (suite mark, one mark per package, lockups, Panoptes font; `brand/README.md`) | Draw a new mark, recolour one, or set "argus" in another font. |
 
 ## Shared rules
 

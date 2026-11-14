@@ -68,6 +68,9 @@ version-file = "src/argus_cortex/_version.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/argus_cortex"]
 
+[tool.hatch.build.targets.sdist]
+exclude = ["brand/"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

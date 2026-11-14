@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `brand/`: the suite's identity (vesica-iris suite mark, one mark per package, Panoptes lettering font, the
+  identity sheet, and `brand/tools/panoptes.py` to regenerate them). Not part of the package: excluded from the
+  wheel and the sdist.
+
 ### Changed
 - `release.yml` also sends `cortex-released` to argus-mint, whose image installs cortex from its
   `server` extra's range and now rebuilds on it (argus-mint#29).
