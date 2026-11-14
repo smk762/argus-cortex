@@ -189,8 +189,8 @@ def build_font():
             "fullName": "Panoptes Regular",
             "psName": "Panoptes-Regular",
             "version": "Version 0.100",
-            "copyright": "Dragonhound Labs",
-            "licenseDescription": "Draft. Lowercase a-z, hyphen, space.",
+            "copyright": "Copyright (c) 2026 Dragonhound Labs. All rights reserved.",
+            "licenseDescription": "All rights reserved; for use in the Argus repositories only. See brand/LICENSE in argus-cortex. Draft 0.1: lowercase a-z, hyphen, space.",
         }
     )
     fb.setupOS2(

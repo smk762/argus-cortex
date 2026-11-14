@@ -58,6 +58,15 @@ Each UI uses its package's set. Studio uses the suite set. Every UI is a Next.js
 
 `icon-192.png` and `icon-512.png` are for a web app manifest, if a UI has one.
 
+## Licence
+
+The marks, lockups, favicons, identity sheet and the Panoptes font are **not** covered by the repository's MIT
+License. They are all rights reserved, under the terms in [`LICENSE`](LICENSE) in this folder:
+- You may use the unmodified marks to refer to Argus, and keep them in forks.
+- You may not modify them, use them as another project's branding, or use Panoptes outside the Argus repos.
+
+`tools/` stays MIT.
+
 ## Rules
 
 - **Grid:** 24 × 24 units with 2 units of padding.
