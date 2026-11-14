@@ -22,6 +22,7 @@ import io
 import os
 import re
 import tempfile
+import threading
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Literal
@@ -45,6 +46,13 @@ NS: dict[str, str] = {
 
 for _prefix, _uri in NS.items():
     ET.register_namespace(_prefix, _uri)
+
+# ElementTree's prefix registry is process-global. A sidecar's own prefixes are
+# applied only for the length of one serialisation, under this lock, then the
+# registry is restored, so untrusted input can never rebind our URIs for other
+# callers or grow the map without bound.
+_NS_LOCK = threading.Lock()
+_NS_URIS = frozenset(NS.values())
 
 _XPACKET_BEGIN = '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>\n'
 _XPACKET_END = '\n<?xpacket end="w"?>\n'
@@ -136,11 +144,13 @@ def _simple(tag: str, value: str) -> ET.Element:
 
 def _regions(value: XmpRegions) -> ET.Element:
     prop = ET.Element(_q("mwg-rs:Regions"), {_q("rdf:parseType"): "Resource"})
+    # Struct fields as attributes on an empty property element (RDF/XML's
+    # propertyAttribute shorthand). rdf:parseType="Resource" may not carry
+    # property attributes, and strict parsers (Adobe XMP Toolkit) reject it.
     ET.SubElement(
         prop,
         _q("mwg-rs:AppliedToDimensions"),
         {
-            _q("rdf:parseType"): "Resource",
             _q("stDim:w"): str(value.width),
             _q("stDim:h"): str(value.height),
             _q("stDim:unit"): "pixel",
@@ -156,7 +166,6 @@ def _regions(value: XmpRegions) -> ET.Element:
             li,
             _q("mwg-rs:Area"),
             {
-                _q("rdf:parseType"): "Resource",
                 _q("stArea:x"): _num(region.x),
                 _q("stArea:y"): _num(region.y),
                 _q("stArea:w"): _num(region.w),
@@ -192,12 +201,6 @@ def _parse(raw: bytes) -> ET.Element:
     # XMP never carries a DTD; refusing one outright rules out entity-expansion tricks.
     if b"<!DOCTYPE" in raw or b"<!ENTITY" in raw:
         raise XmpError("XMP sidecar contains a DTD/entity declaration; refusing to parse it")
-    for prefix, uri in _declared_namespaces(raw):
-        # Keep a foreign schema's own prefix on re-serialisation (cosmetic, but
-        # Lightroom-written sidecars stay recognisable). Ours always win.
-        if prefix and prefix not in NS:
-            with contextlib.suppress(ValueError):
-                ET.register_namespace(prefix, uri)
     try:
         root = ET.fromstring(raw)
     except ET.ParseError as exc:
@@ -216,6 +219,31 @@ def _declared_namespaces(raw: bytes) -> list[tuple[str, str]]:
         return [ns for _, ns in ET.iterparse(io.BytesIO(raw), events=("start-ns",))]
     except ET.ParseError:
         return []  # surfaced properly by ET.fromstring in _parse
+
+
+def _serialise(meta: ET.Element, declared: list[tuple[str, str]]) -> str:
+    """``meta`` as XML, keeping the foreign prefixes the source declared.
+
+    Keeping a foreign schema's own prefix is cosmetic, but Lightroom-written
+    sidecars stay recognisable. Ours always win: a declared prefix or URI that
+    is one of :data:`NS` is ignored. The registry is restored afterwards.
+    """
+    registry: dict[str, str] | None = getattr(ET, "_namespace_map", None)
+    with _NS_LOCK:
+        saved = dict(registry) if registry is not None else None
+        try:
+            if saved is not None:
+                for prefix, uri in declared:
+                    if prefix and prefix not in NS and uri not in _NS_URIS:
+                        with contextlib.suppress(ValueError):
+                            ET.register_namespace(prefix, uri)
+                for prefix, uri in NS.items():
+                    ET.register_namespace(prefix, uri)
+            return ET.tostring(meta, encoding="unicode")
+        finally:
+            if registry is not None and saved is not None:
+                registry.clear()
+                registry.update(saved)
 
 
 def _fresh() -> ET.Element:
@@ -248,6 +276,7 @@ def merge_xmp(existing: bytes | str | None, data: XmpData) -> str:
     if isinstance(existing, str):
         existing = existing.encode("utf-8")
     meta = _parse(existing) if existing else _fresh()
+    declared = _declared_namespaces(existing) if existing else []
     descs = _descriptions(meta)
     for qname, element in _properties(data):
         tag = _q(qname)
@@ -258,7 +287,7 @@ def merge_xmp(existing: bytes | str | None, data: XmpData) -> str:
         if element is not None:
             descs[0].append(element)
     ET.indent(meta, space=" ")
-    return _XPACKET_BEGIN + ET.tostring(meta, encoding="unicode") + _XPACKET_END
+    return _XPACKET_BEGIN + _serialise(meta, declared) + _XPACKET_END
 
 
 def render_xmp(data: XmpData) -> str:
@@ -279,8 +308,18 @@ def _prop_values(desc: ET.Element, qname: str) -> list[str] | None:
     return [prop.text or ""]
 
 
+def _struct(el: ET.Element | None) -> ET.Element | None:
+    """A struct's field holder: its nested ``rdf:Description`` if it has one
+    (the form many writers use), else the element itself (``parseType="Resource"``
+    or attribute form)."""
+    if el is None:
+        return None
+    nested = el.find(_q("rdf:Description"))
+    return nested if nested is not None else el
+
+
 def _read_regions(desc: ET.Element) -> XmpRegions | None:
-    prop = desc.find(_q("mwg-rs:Regions"))
+    prop = _struct(desc.find(_q("mwg-rs:Regions")))
     if prop is None:
         return None
 
@@ -292,17 +331,22 @@ def _read_regions(desc: ET.Element) -> XmpRegions | None:
         child = el.find(_q(qname))
         return child.text if child is not None else None
 
-    dims = prop.find(_q("mwg-rs:AppliedToDimensions"))
+    dims = _struct(prop.find(_q("mwg-rs:AppliedToDimensions")))
     regions: list[XmpRegion] = []
-    for li in prop.findall(f"./{_q('mwg-rs:RegionList')}/*/{_q('rdf:li')}"):
-        area = li.find(_q("mwg-rs:Area"))
+    for item in prop.findall(f"./{_q('mwg-rs:RegionList')}/*/{_q('rdf:li')}"):
+        li = _struct(item)
+        area = _struct(li.find(_q("mwg-rs:Area")))
+        coords = [field(area, f"stArea:{k}") for k in ("x", "y", "w", "h")]
+        if any(c is None for c in coords):
+            continue  # no geometry: skip it rather than invent a zero-size box
         try:
+            x, y, w, h = (float(c) for c in coords)  # type: ignore[arg-type]
             regions.append(
                 XmpRegion(
-                    x=float(field(area, "stArea:x") or 0),
-                    y=float(field(area, "stArea:y") or 0),
-                    w=float(field(area, "stArea:w") or 0),
-                    h=float(field(area, "stArea:h") or 0),
+                    x=x,
+                    y=y,
+                    w=w,
+                    h=h,
                     name=field(li, "mwg-rs:Name"),
                     type=field(li, "mwg-rs:Type") or "Face",
                 )
@@ -384,13 +428,39 @@ def write_xmp(image_path: str | os.PathLike[str], data: XmpData, *, replace: boo
     By default the existing sidecar is merged (latest write wins per property,
     everything else preserved). ``replace=True`` discards the existing sidecar
     and writes a document holding only *data*. The write is atomic (temp file +
-    rename), so a crash never leaves a half-written sidecar.
+    rename), so a crash never leaves a half-written sidecar, and the
+    read-merge-replace holds an exclusive ``flock`` on the sidecar's directory,
+    so two writers merging into the same sidecar at once cannot drop each
+    other's properties (POSIX; a no-op where ``fcntl`` is missing).
 
     Raises:
         XmpError: if merging and the existing sidecar cannot be parsed — it is
             left untouched rather than clobbered.
     """
     sidecar = sidecar_path(image_path)
+    with _dir_lock(sidecar.parent):
+        return _write_locked(sidecar, data, replace=replace)
+
+
+@contextlib.contextmanager
+def _dir_lock(directory: Path):
+    """Exclusive advisory lock on *directory* itself, so no lock file is left
+    beside the user's photos. Writers to any sidecar in it take turns; a merge is
+    milliseconds, so the coarse scope costs nothing."""
+    try:
+        import fcntl  # noqa: PLC0415 - POSIX only
+    except ImportError:  # pragma: no cover - non-POSIX host
+        yield
+        return
+    fd = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0))
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)  # closing releases the lock
+
+
+def _write_locked(sidecar: Path, data: XmpData, *, replace: bool) -> Path:
     exists = sidecar.exists()
     existing = sidecar.read_bytes() if exists and not replace else None
     doc = merge_xmp(existing, data)
