@@ -104,11 +104,25 @@ def test_expiry_must_be_stated_even_when_none() -> None:
             {"revocation": {"requested_on": date(2026, 5, 2), "effective_on": date(2026, 5, 1), "by": "Jo"}},
             "on or after",
         ),
+        ({"age_check": {"checked_by": "  ", "checked_on": date(2026, 1, 10)}}, "names who did it"),
+        ({"age_check": {"checked_by": "studio-a", "checked_on": date(2026, 1, 11)}}, "at or before signing"),
+        ({"deliveries": ["neutral", "  "]}, "names each delivery"),
+        (
+            {"revocation": {"requested_on": date(2026, 1, 9), "effective_on": date(2026, 2, 1), "by": "Jo"}},
+            "day the release was signed",
+        ),
     ],
 )
 def test_an_incomplete_record_is_refused(over: dict[str, Any], match: str) -> None:
     with pytest.raises(ValidationError, match=match):
         record(**over)
+
+
+def test_a_record_cannot_be_changed_in_place() -> None:
+    rec = record()
+    with pytest.raises(AttributeError):
+        rec.reference_images.clear()  # type: ignore[attr-defined]
+    hash(rec)
 
 
 def test_face_only_and_voice_only_releases() -> None:

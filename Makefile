@@ -21,9 +21,7 @@ test:  ## Run the test suite
 	$(UV) run --no-sync pytest --tb=short -q
 
 schema:  ## Regenerate the committed taxonomy-schema.json, provenance-schema.json and consent-schema.json
-	$(UV) run --no-sync python -c "from pathlib import Path; from argus_cortex.taxonomy import taxonomy_schema; Path('taxonomy-schema.json').write_text(taxonomy_schema(), encoding='utf-8')"
-	$(UV) run --no-sync python -c "from pathlib import Path; from argus_cortex.provenance import provenance_schema; Path('provenance-schema.json').write_text(provenance_schema(), encoding='utf-8')"
-	$(UV) run --no-sync python -c "from pathlib import Path; from argus_cortex.consent import consent_schema; Path('consent-schema.json').write_text(consent_schema(), encoding='utf-8')"
+	$(UV) run --no-sync python -c "from pathlib import Path; from argus_cortex.taxonomy import taxonomy_schema; from argus_cortex.provenance import provenance_schema; from argus_cortex.consent import consent_schema; [Path(f).write_text(r(), encoding='utf-8') for f, r in (('taxonomy-schema.json', taxonomy_schema), ('provenance-schema.json', provenance_schema), ('consent-schema.json', consent_schema))]"
 
 build:  ## Build sdist + wheel
 	$(UV) build

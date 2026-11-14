@@ -62,6 +62,12 @@ class AgeCheck(BaseModel):
     checked_by: str = Field(..., min_length=1)
     checked_on: date
 
+    @model_validator(mode="after")
+    def _named(self) -> AgeCheck:
+        if not self.checked_by.strip():
+            raise ValueError("an age check names who did it")
+        return self
+
 
 class Revocation(BaseModel):
     """Set by ``consent revoke``. Use stops on ``effective_on``; mask sets it to the day it runs.
@@ -92,7 +98,8 @@ class ConsentRecord(BaseModel):
     """
 
     # Frozen and strict, as Provenance is: the checks run only at construction, and a misspelt field
-    # must not be dropped in silence.
+    # must not be dropped in silence. Sequences are tuples, so a record cannot be changed in place
+    # after the checks have passed (and stays hashable, as a frozen model should be).
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     release_sha256: Sha256
@@ -103,13 +110,13 @@ class ConsentRecord(BaseModel):
     age_check: AgeCheck
     face: bool
     voice: bool
-    deliveries: list[str] = Field(default_factory=list)
+    deliveries: tuple[str, ...] = ()
     uses: frozenset[ConsentUse] = Field(..., min_length=1)
-    reference_images: list[Sha256] = Field(default_factory=list)
-    reference_recordings: list[Sha256] = Field(default_factory=list)
-    exclusions: list[str] = Field(default_factory=list)
-    media: list[str] = Field(default_factory=list)
-    territories: list[str] = Field(default_factory=list)
+    reference_images: tuple[Sha256, ...] = ()
+    reference_recordings: tuple[Sha256, ...] = ()
+    exclusions: tuple[str, ...] = ()
+    media: tuple[str, ...] = ()
+    territories: tuple[str, ...] = ()
     revocable: bool
     notice_days: int = Field(..., ge=0)
     on_revoke: OnRevoke
@@ -124,8 +131,10 @@ class ConsentRecord(BaseModel):
             raise ValueError("a consent record names who collected it")
         if not (self.face or self.voice):
             raise ValueError("a consent record opts in to the face, the voice or both")
-        if self.voice and not [d for d in self.deliveries if d.strip()]:
+        if self.voice and not self.deliveries:
             raise ValueError("a voice release lists the deliveries it covers")
+        if not all(d.strip() for d in self.deliveries):
+            raise ValueError("a voice release names each delivery it covers; a blank one covers nothing")
         if not self.voice and self.deliveries:
             raise ValueError("deliveries are for a voice release; this one does not cover the voice")
         if self.face and not self.reference_images:
@@ -134,6 +143,10 @@ class ConsentRecord(BaseModel):
             raise ValueError("a voice release binds its reference recordings by sha256")
         if self.expires_on is not None and self.expires_on <= self.signed_on:
             raise ValueError("a release expires after the day it was signed")
+        if self.age_check.checked_on > self.signed_on:
+            raise ValueError("the age check is done at or before signing, not after")
+        if self.revocation is not None and self.revocation.requested_on < self.signed_on:
+            raise ValueError("a revocation is requested on or after the day the release was signed")
         return self
 
     @field_serializer("uses")
