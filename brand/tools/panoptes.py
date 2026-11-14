@@ -10,6 +10,7 @@ Everything is generated from brand/sheet.html (the identity sheet; its <symbol>s
     python panoptes.py lockups   -> mark/argus-lockup-*.svg, packages/<pkg>/argus-<pkg>-lockup-*.svg
     python panoptes.py specimen  -> font/panoptes-specimen.svg
     python panoptes.py font      -> font/Panoptes-Regular.{ttf,woff2}   (needs: pip install skia-pathops fonttools brotli)
+    python panoptes.py favicons  -> mark/favicon/, packages/<pkg>/favicon/: icon.svg, favicon.ico, apple-icon.png, icon-192/512.png (needs magick)
     python panoptes.py social    -> social/*.svg, 1280x640 GitHub social previews (gitignored; rasterise to PNG to upload)
     python panoptes.py all       -> everything except social
 """
@@ -316,6 +317,89 @@ def lockups():
             write(dst, f"0 0 {32 + total:.1f} 26", svg)
 
 
+def favicons():
+    """Next.js App Router icon set per UI: drop the folder's files into <app>/ (src/app/ in our Next apps).
+
+    icon.svg     transparent; ink and eye colour follow prefers-color-scheme (modern browsers use this)
+    favicon.ico  16/32/48 px, light ink (fallback); the suite's 16 px frame is the pixel-drawn mark
+    apple-icon.png, icon-192.png, icon-512.png   light mark on a dark tile (#121416), 72 % of the tile
+    Needs ImageMagick (`magick`) on PATH.
+    """
+    import subprocess
+    import tempfile
+
+    sym = symbols()
+    ink_l, ink_d, bg = THEMES["light"][0], THEMES["dark"][0], "#121416"
+    for pkg, stage in [(None, "train")] + list(PKG.items()):
+        dst = OUT / (f"packages/{pkg}/favicon" if pkg else "mark/favicon")
+        dst.mkdir(parents=True, exist_ok=True)
+        vb, body = sym[pkg or "m_vesica"]
+        themed = body.replace("var(--pupil)", "var(--p)")
+        style = (
+            f"svg{{color:{ink_l};--p:{accent(stage, 'light')}}}"
+            f"@media (prefers-color-scheme:dark){{svg{{color:{ink_d};--p:{accent(stage, 'dark')}}}}}"
+        )
+        (dst / "icon.svg").write_text(
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{vb}"><style>{style}</style>{themed}</svg>\n'
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            light = t / "light.svg"
+            light.write_text(
+                f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{vb}">{paint(body, ink_l, accent(stage, "light"))}</svg>'
+            )
+            # tile: mark at 72 % on a dark square
+            pad = 24 * 0.14
+            tile = t / "tile.svg"
+            tile.write_text(
+                f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{-pad:.2f} {-pad:.2f} {24 + 2 * pad:.2f} {24 + 2 * pad:.2f}">'
+                f'<rect x="{-pad:.2f}" y="{-pad:.2f}" width="{24 + 2 * pad:.2f}" height="{24 + 2 * pad:.2f}" fill="{bg}"/>'
+                f"{paint(body, ink_d, accent(stage, 'dark'))}</svg>"
+            )
+            frames = []
+            for size in (16, 32, 48):
+                src = light
+                if size == 16 and not pkg:
+                    vb16, b16 = sym["px16"]
+                    src = t / "px16.svg"
+                    src.write_text(
+                        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{vb16}">{paint(b16, ink_l, accent(stage, "light"))}</svg>'
+                    )
+                out = t / f"f{size}.png"
+                subprocess.run(
+                    [
+                        "magick",
+                        "-background",
+                        "none",
+                        "-density",
+                        "1200",
+                        str(src),
+                        "-resize",
+                        f"{size}x{size}",
+                        str(out),
+                    ],
+                    check=True,
+                )
+                frames.append(str(out))
+            subprocess.run(["magick", *frames, str(dst / "favicon.ico")], check=True)
+            for name, size in (("apple-icon.png", 180), ("icon-192.png", 192), ("icon-512.png", 512)):
+                subprocess.run(
+                    [
+                        "magick",
+                        "-density",
+                        "1200",
+                        str(tile),
+                        "-resize",
+                        f"{size}x{size}",
+                        "-strip",
+                        "-colors",
+                        "64",
+                        str(dst / name),
+                    ],
+                    check=True,
+                )
+
+
 def all_():
     icons()
     lockups()
@@ -324,6 +408,12 @@ def all_():
 
 
 if __name__ == "__main__":
-    {"icons": icons, "lockups": lockups, "specimen": specimen, "font": build_font, "social": social, "all": all_}[
-        sys.argv[1]
-    ]()
+    {
+        "icons": icons,
+        "lockups": lockups,
+        "favicons": favicons,
+        "specimen": specimen,
+        "font": build_font,
+        "social": social,
+        "all": all_,
+    }[sys.argv[1]]()

@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `brand/`: favicon sets for every web UI (`mark/favicon/`, `packages/<pkg>/favicon/`: themed `icon.svg`,
+  `favicon.ico`, `apple-icon.png`, manifest PNGs) and `panoptes.py favicons` to regenerate them; `brand/README.md`
+  says where each UI puts them.
 - `brand/`: the suite's identity (vesica-iris suite mark, one mark per package, Panoptes lettering font, the
   identity sheet, and `brand/tools/panoptes.py` to regenerate them). Not part of the package: excluded from the
   wheel and the sdist.

@@ -23,6 +23,7 @@ The suite mark's eye uses the Training red. Ink is `#1c1f22` on light background
 | `mark/favicon.ico`, `mark/argus-mark-{16…512}.png` | Favicon (16 px pixel-drawn, 32/48 vector) and PNGs for touch icons and manifests. |
 | `packages/<pkg>/argus-<pkg>-{light,dark,mono}.svg` | Package mark. |
 | `packages/<pkg>/argus-<pkg>-lockup-{light,dark,mono}.svg` | Package mark + "argus" + package name. Use it for README headers. |
+| `mark/favicon/`, `packages/<pkg>/favicon/` | Favicon set for a web UI: `icon.svg` (follows light/dark), `favicon.ico` (16/32/48), `apple-icon.png`, `icon-192.png`, `icon-512.png` (mark on a dark tile). |
 | `font/Panoptes-Regular.{ttf,woff2}` | **Panoptes**, the Argus lettering as a font. Draft 0.1: lowercase a–z, hyphen, space. |
 | `sheet.html` | The identity sheet: every mark proofed at 16–128 px on light and dark, the construction rules, and the candidates that were considered. **Source of truth.** |
 | `tools/panoptes.py` | Regenerates everything above from `sheet.html`. |
@@ -40,6 +41,23 @@ Paste this at the top of a package README, replacing `lens`:
 </picture>
 ```
 
+## Favicons for the web UIs
+
+Each UI uses its package's set. Studio uses the suite set. Every UI is a Next.js App Router app, so copy the set's
+`favicon.ico`, `icon.svg` and `apple-icon.png` into the app directory, and Next adds the `<link>` tags itself:
+
+| UI | Set | Copy into |
+|---|---|---|
+| argus-studio | `mark/favicon/` | `frontend/src/app/` (replaces the current `favicon.ico`) |
+| argus-lightbox | `packages/lens/favicon/` | `web/src/app/` (and delete `web/public/favicon.ico`) |
+| argus-cull | `packages/curator/favicon/` | `web/src/app/` |
+| argus-safelight | `packages/darkroom/favicon/` | `web/src/app/` |
+| argus-assay | `packages/mint/favicon/` | `web/src/app/` |
+| argus-sightline | `packages/survey/favicon/` | `src/app/` |
+| atlas-realms | `packages/atlas/favicon/` | its static root, with `<link rel="icon">` tags |
+
+`icon-192.png` and `icon-512.png` are for a web app manifest, if a UI has one.
+
 ## Rules
 
 - **Grid:** 24 × 24 units with 2 units of padding.
@@ -56,6 +74,7 @@ The marks are the `<symbol>` elements in `sheet.html`. To change a mark, edit it
 ```bash
 pip install skia-pathops fonttools brotli   # font build only
 python brand/tools/panoptes.py all          # icons, lockups, specimen, font
+python brand/tools/panoptes.py favicons     # per-UI favicon sets (needs ImageMagick)
 python brand/tools/panoptes.py social       # 1280x640 social previews into brand/social/ (gitignored)
 for f in brand/social/*.svg; do magick "$f" "${f%.svg}.png"; done
 ```
