@@ -10,3 +10,5 @@ build/
 .env
 # hatch-vcs writes this at build time (version derived from git tags)
 src/argus_cortex/_version.py
+# generated GitHub social previews (brand/tools/panoptes.py social)
+brand/social/

@@ -1,0 +1,347 @@
+<title>Argus Marks Contact Sheet</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Quicksand:wght@600;700&display=swap">
+<style>
+@font-face { font-family: "Panoptes"; src: url(data:font/woff2;base64,d09GMgABAAAAAAYsAAoAAAAADtgAAAXjAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAABmAARAqTLI5RATYCJAN0CzwABCAFhFIHXBuQCwAeB7lp9AYqlTs+qkhLODWdnYaghC5BOqYSuAhhd2AXwd725GwcGEJpBJgH5vA8eXt/CzzNbBElPPQkkLowyILIqiVBy+kdzaktoFuFG/2AhQSU8pNL0gbLagggEWXVJBCp2hmPQk7YLeLViDZxcS9+RsDzb9aAB4EgMeKZMufMh+MJ3eXP70sAfEJJwoYNY5UEi3VynPWGeDQbBMay4pDHJEu0un83JtO54P7X/b1bj3YIaeXT2ZjDpwLghwipL0MwGGTs6VCJxYTKg2AU+4r91529ROGh4lC53EseqdZ2BAMP7vaLiQj1Cg/2C5TLcAVWxrlk1hLEjViHAOuD/DBCz6X8S9cLq4t7yT+vAxHrC3azl8LGeUiLy9t8y1P+OdueUuS0DrHez/mXnMtaYl86GI5BUFy2s+RFmd7JH7/zEaA+KNUrXpa+LLbJ8M40fKfLZJwrxkIEE/ciIJDCTpLsfC5VGdKacgeAe5LaH3IgVOWVw/FflHKXZNYLwJ6X8herBEYH9RA5oQ4rc/o5/cqcJ4a2eBf3224ZPOlbWWyTWk+uE7AJFnlvHOwbhwI2J7qSNPgKTMIVuk64Are946qKdtnsV1U5kTD10i4qIQpul+GnE1wppr1ZLBdR3dTBk0teACvlSx3bR074XJFZEdenIy7/EQYZ71dXKcZ6klDdCSg3W7MvrC70wBKQxIkVVc79ezd6l9u8bft8Kx2bCUCewsfuw+0gVKukzHlqaGvRy0qLjg9v8ytLZnubmOWxZ98mSq2JwjoErLdR0afLeV/HYbPIb7Eq5SR+v/Gnk05D7LPY6VzckJVOaMwRZs1pyETcbAOrNJ+gKEeUDdzAl+2AN5UU7ACQTRmunEhoMPFseHv4uezsjowwwp6jtfOq/DKWbNP29VKKtrvAQtl6n8Oh/3YXv6voBWgWjTVfp2F6/NYET3mtFpauIZcqZFFra5E3avHuDOCwda6ZOs1qlV+rWLbKiK7cuGJFdZbti9+Vtb+bzRuf/W7WHdypMgOotK7dD/wWgs0GK4nZKZrOaAwW+6uBVbUpkQuKdbfWviVImHv7MHvvv9GxNnzLQ9C1/YoNzpIHxGQ+U3bsELvfyWf+zBpDWiq6ehVBRTdXrDD8KLTkjzvm7sDE02rDJXKlPO2IbfUFUcdCARMdHgNKtWIw8tROi5sfhIZUF3O/8Y84aPFAL+4EzriwanrcruDkft/bRLvt8WupOefU7WjkYyObMv5V38sRjan3zMUDs1NGOKnwpKzCs/xJMg7ziduxw590kp0F0FWWB2oKJR9Kzt2WcMfar789yNw6VX3j969rwROZg99+DWV7X2W7nP7ms5dLGoyeUPve1+/lbz9V93vf0N0+XT7z2+/V0th8Vj6Ql+1EF3AUW05s3nZ1683EcmyU2sHbeTePY2jRd/TX7x6sM71/aZ/PA1JfSmPWKPnx7Y+hGpRy8C6xmZICM2odQwuBgNYn3ar1eVSnmvmbGMe/BAD4ImTwO/gKN/+H78IGAQCHadIv7k23hM79FIAEDUOyBsYXPcStRePztzg8eJ77a/QqSMsvhvGOQ0QbwQ0mhvFR6upzkmcv5TpgQ5/apD/F6rKL8fxficqncWbug6Ql2pohocA7/jlKDqFNKQ1FhTK1m4BwNSBETI0wIv4I5y0MCahNQB4UFiAhNfJyhSj1cGiQAABhOY4QtT0Io3Qc4eJcRQKEr5GHwEiREJGoMxUykpLSrLMwNMW00cbfT6IFqaOZxlZTyzebZFZRS8vVjk0eR1cT9PueCPakY8cqwb/7Gj4/nXxzcl+dtjuJoLoaKROd9I9l+uchRTMdCwaNwmhDMyLk0NFrQdKhMRq1MmlRyMSizWI6zfdg2tl1rbGSjZONjmBLKRhKatGQFpHQnNVYY73QeSgya5Wc8iRGhz3W0Hm1MCHuo9UtCYHSpRHFhKYFbtFIx7CKZJiAC3kd+YOkSpMuQ6Ys2XLkypOPVKBQkWIlSpUpV6FSlWo11HA=) format("woff2"); font-display: block; }
+/* Layout: a print-shop contact sheet — header, hero mark, package grid of split light/dark proof tiles, then construction and wordmark plates. */
+:root {
+  --bg: #f6f6f3; --surface: #ffffff; --text: #1c1f22; --muted: #5b636b; --line: #dfe1dc; --accent: #1d5f74;
+  --f-ui: "IBM Plex Sans", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --f-mark: "Panoptes", "Quicksand", system-ui, sans-serif;
+  /* proof tiles are fixed, not theme-driven, so both grounds are always visible */
+  --tile-l-bg: #fbfbf9; --tile-l-ink: #1c1f22; --tile-l-grid: #e6e8e3;
+  --tile-d-bg: #121416; --tile-d-ink: #e6e8ea; --tile-d-grid: #262b30;
+  /* stage colours: light / dark */
+  --data-l: #1d5f74; --data-d: #6fb7cc;
+  --train-l: #b33a2a; --train-d: #e57a64;
+  --apps-l: #8f6210; --apps-d: #e8b54e;
+  --base-l: #2a4a7a; --base-d: #8eacdc;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1113; --surface: #171a1d; --text: #e6e8ea; --muted: #9aa3ab; --line: #2a2f34; --accent: #6fb7cc; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #0f1113; --surface: #171a1d; --text: #e6e8ea; --muted: #9aa3ab; --line: #2a2f34; --accent: #6fb7cc; color-scheme: dark }
+
+body { background: var(--bg); color: var(--text); font: 15px/1.55 var(--f-ui); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 40px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 56px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; font-weight: 600; }
+h1 { font-size: 30px; letter-spacing: -0.01em; }
+h2 { font-size: 20px; }
+h3 { font-size: 15px; }
+p { margin: 0; max-width: 68ch; }
+.label { font: 500 11px/1.3 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); }
+section { display: grid; gap: 20px; }
+.sec-head { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 18px; }
+
+header { display: grid; gap: 14px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 22px; font: 12px var(--f-mono); color: var(--muted); }
+
+/* proof tiles */
+.split { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.tile { display: grid; place-items: center; gap: 14px; padding: 22px 12px; }
+.tile.l { background: var(--tile-l-bg); color: var(--tile-l-ink); --pupil: var(--pl); --grid: var(--tile-l-grid); }
+.tile.d { background: var(--tile-d-bg); color: var(--tile-d-ink); --pupil: var(--pd); --grid: var(--tile-d-grid); }
+.sizes { display: flex; align-items: flex-end; gap: 14px; }
+svg.i { display: block; overflow: visible; }
+
+.hero .split { grid-template-columns: 1fr 1fr; }
+.hero .tile { padding: 40px 16px; gap: 26px; }
+.hero .lock { width: min(100%, 360px); height: auto; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 12px; align-content: start; }
+.card .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.card .name { font: 500 15px var(--f-mono); }
+.chip { font: 500 10.5px var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 99px;
+  color: var(--chip); border: 1px solid currentColor; white-space: nowrap; }
+.card p { font-size: 13.5px; color: var(--muted); }
+.card .idea { color: var(--text); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 10px 24px; font-size: 13.5px; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.dot { width: 12px; height: 12px; border-radius: 50%; background: var(--c); }
+
+/* construction */
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 28px; align-items: center; }
+.rules { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.rules li { display: grid; grid-template-columns: 120px 1fr; gap: 12px; font-size: 14px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.rules b { font: 500 12px var(--f-mono); color: var(--muted); font-weight: 500; padding-top: 2px; }
+.keyline { width: 100%; max-width: 380px; height: auto; justify-self: center; }
+
+.strip { display: grid; gap: 1px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.strip .tile { justify-items: start; padding: 16px; }
+.row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+
+/* wordmark */
+.wm-plate .tile { padding: 36px 16px; }
+.wm-big { width: min(100%, 520px); height: auto; }
+.locks { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
+.locks .tile { padding: 22px 16px; }
+.locks svg { width: 100%; max-width: 300px; height: auto; }
+.pan { font: 46px/1.25 var(--f-mark); margin: 4px 0; overflow-wrap: anywhere; }
+.pan-s { font-size: 22px; line-height: 1.6; }
+.social { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.social figure { margin: 0; display: grid; gap: 6px; }
+.social img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); }
+.note { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 8px; font-size: 14px; }
+
+@media (max-width: 760px) {
+  .two { grid-template-columns: 1fr; }
+  .hero .split, .wm-plate .split { grid-template-columns: 1fr; }
+  .rules li { grid-template-columns: 1fr; gap: 2px; }
+}
+</style>
+
+<!-- ===== icon sprite: 24-unit grid, stroke 2, round caps/joins, one pupil r=2.25 ===== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- suite-mark candidates: the suite holds many eyes, each package holds one -->
+    <symbol id="i-c_peacock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5C15.5 6.5 19 10 19 14a7 7 0 0 1-14 0c0-4 3.5-7.5 7-11.5Z"/><circle cx="12" cy="14.5" r="4.25"/></g><circle cx="12" cy="14.5" r="2.25" fill="var(--pupil)"/></symbol>
+    <symbol id="i-c_compound" viewBox="0 0 24 24"><path fill="currentColor" d="M18.79 15.4 L15.84 13.7 L15.84 10.3 L18.79 8.6 L21.73 10.3 L21.73 13.7Z M15.39 21.28 L12.45 19.58 L12.45 16.18 L15.39 14.48 L18.34 16.18 L18.34 19.58Z M8.61 21.28 L5.66 19.58 L5.66 16.18 L8.61 14.48 L11.55 16.18 L11.55 19.58Z M5.21 15.4 L2.27 13.7 L2.27 10.3 L5.21 8.6 L8.16 10.3 L8.16 13.7Z M8.61 9.52 L5.66 7.82 L5.66 4.42 L8.61 2.72 L11.55 4.42 L11.55 7.82Z M15.39 9.52 L12.45 7.82 L12.45 4.42 L15.39 2.72 L18.34 4.42 L18.34 7.82Z"/><path fill="var(--pupil)" d="M12 15.4 L9.06 13.7 L9.06 10.3 L12 8.6 L14.94 10.3 L14.94 13.7Z"/></symbol>
+    <symbol id="i-c_iris" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12c3-5.3 6.7-8 11-8s8 2.7 11 8c-3 5.3-6.7 8-11 8s-8-2.7-11-8Z"/></g><g fill="currentColor"><circle cx="15.5" cy="12" r="1.5"/><circle cx="13.75" cy="15.03" r="1.5"/><circle cx="10.25" cy="15.03" r="1.5"/><circle cx="8.5" cy="12" r="1.5"/><circle cx="10.25" cy="8.97" r="1.5"/><circle cx="13.75" cy="8.97" r="1.5"/></g><circle cx="12" cy="12" r="1.5" fill="var(--pupil)"/></symbol>
+    <symbol id="i-c_layered" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12c3-5.3 6.7-8 11-8s8 2.7 11 8c-3 5.3-6.7 8-11 8s-8-2.7-11-8Z"/><circle cx="7.75" cy="12" r="3.25"/><circle cx="16.25" cy="12" r="3.25"/><circle cx="12" cy="12" r="3.25"/></g><g fill="currentColor"><circle cx="7.75" cy="12" r="1.1"/><circle cx="16.25" cy="12" r="1.1"/></g><circle cx="12" cy="12" r="1.4" fill="var(--pupil)"/></symbol>
+    <symbol id="i-c_ring" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/></g><g fill="currentColor"><circle cx="12" cy="2.75" r="1.4"/><circle cx="18.54" cy="5.46" r="1.4"/><circle cx="21.25" cy="12" r="1.4"/><circle cx="18.54" cy="18.54" r="1.4"/><circle cx="12" cy="21.25" r="1.4"/><circle cx="5.46" cy="18.54" r="1.4"/><circle cx="2.75" cy="12" r="1.4"/><circle cx="5.46" cy="5.46" r="1.4"/></g><circle cx="12" cy="12" r="2.25" fill="var(--pupil)"/></symbol>
+    <symbol id="i-c_third" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1c2.2 1.4 3.25 3 3.25 5s-1.05 3.6-3.25 5c-2.2-1.4-3.25-3-3.25-5s1.05-3.6 3.25-5Z"/><path d="M1.25 17c1.4-2.2 3-3.25 5-3.25s3.6 1.05 5 3.25c-1.4 2.2-3 3.25-5 3.25s-3.6-1.05-5-3.25Z M12.75 17c1.4-2.2 3-3.25 5-3.25s3.6 1.05 5 3.25c-1.4 2.2-3 3.25-5 3.25s-3.6-1.05-5-3.25Z"/></g><g fill="currentColor"><circle cx="6.25" cy="17" r="1.6"/><circle cx="17.75" cy="17" r="1.6"/></g><circle cx="12" cy="6" r="1.75" fill="var(--pupil)"/></symbol>
+
+    <!-- v0.3 myth / esoteric explorations; most fuse the compound iris -->
+    <symbol id="i-m_vesica" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M1 12A11.82 11.82 0 0 1 23 12A11.82 11.82 0 0 1 1 12Z"/></g><g fill="currentColor"><circle cx="15.75" cy="12" r="1.6"/><circle cx="13.88" cy="15.25" r="1.6"/><circle cx="10.12" cy="15.25" r="1.6"/><circle cx="8.25" cy="12" r="1.6"/><circle cx="10.12" cy="8.75" r="1.6"/><circle cx="13.88" cy="8.75" r="1.6"/></g><circle cx="12" cy="12" r="1.6" fill="var(--pupil)"/></symbol>
+    <symbol id="i-m_pavonis" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5C15.5 6.5 19 10 19 14a7 7 0 0 1-14 0c0-4 3.5-7.5 7-11.5Z"/></g><g fill="currentColor"><circle cx="15.2" cy="14.25" r="1.35"/><circle cx="13.6" cy="17.02" r="1.35"/><circle cx="10.4" cy="17.02" r="1.35"/><circle cx="8.8" cy="14.25" r="1.35"/><circle cx="10.4" cy="11.48" r="1.35"/><circle cx="13.6" cy="11.48" r="1.35"/></g><circle cx="12" cy="14.25" r="1.35" fill="var(--pupil)"/></symbol>
+    <symbol id="i-m_ophanim" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9.5"/><ellipse cx="12" cy="12" rx="9.5" ry="4"/></g><g fill="currentColor"><circle cx="12" cy="2.5" r="1.75"/><circle cx="12" cy="21.5" r="1.75"/><circle cx="2.5" cy="12" r="1.75"/><circle cx="21.5" cy="12" r="1.75"/></g><circle cx="12" cy="12" r="2.25" fill="var(--pupil)"/></symbol>
+    <symbol id="i-m_nazar" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/></g><g fill="currentColor"><circle cx="14.8" cy="12" r="1.2"/><circle cx="13.4" cy="14.42" r="1.2"/><circle cx="10.6" cy="14.42" r="1.2"/><circle cx="9.2" cy="12" r="1.2"/><circle cx="10.6" cy="9.58" r="1.2"/><circle cx="13.4" cy="9.58" r="1.2"/></g><circle cx="12" cy="12" r="1.2" fill="var(--pupil)"/></symbol>
+    <symbol id="i-m_providence" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2.5 21.5 20h-19Z"/></g><g fill="currentColor"><circle cx="15" cy="14.2" r="1.3"/><circle cx="13.5" cy="16.8" r="1.3"/><circle cx="10.5" cy="16.8" r="1.3"/><circle cx="9" cy="14.2" r="1.3"/><circle cx="10.5" cy="11.6" r="1.3"/><circle cx="13.5" cy="11.6" r="1.3"/></g><circle cx="12" cy="14.2" r="1.3" fill="var(--pupil)"/></symbol>
+    <symbol id="i-m_wadjet" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5c4.5-1.8 11-2 17-.5"/><path d="M3 11.5c3-2.8 6-4 9-4s5.8 1.1 8.5 3.5H22M3 11.5c3 2 6 3 9 3s5.5-1.2 8.5-3.5"/><path d="M9 14.2v6.3M13.2 14.4c.5 3 2.5 5.4 5.3 5.4 1.8 0 2.5-2.2.8-2.8"/></g><circle cx="11" cy="11" r="2.1" fill="var(--pupil)"/></symbol>
+    <symbol id="i-quarry" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M3 20v-4h4.5v-4H12V8h4.5V4"/></g><circle cx="17" cy="15.5" r="2.25" fill="var(--pupil)"/></symbol>
+    <symbol id="i-curator" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5h17L14 11.5V18l-4 2.5v-9Z"/></g><circle cx="12" cy="7.25" r="2.25" fill="var(--pupil)"/></symbol>
+    <symbol id="i-lens" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></g><circle cx="10.5" cy="10.5" r="2.25" fill="var(--pupil)"/></symbol>
+    <symbol id="i-forge" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h18v1.5c0 1.9-1.6 3.5-3.5 3.5H15v2.5l2.5 3.5h-11L9 15.5V13H8c-2.8 0-5-2.2-5-5Z"/></g><circle cx="12" cy="3.75" r="2.25" fill="var(--pupil)"/></symbol>
+    <symbol id="i-proof" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="14" height="14" rx="2.5"/><rect x="8" y="8" width="14" height="14" rx="2.5"/></g><circle cx="12" cy="12" r="2.25" fill="var(--pupil)"/></symbol>
+    <symbol id="i-atlas" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 20 9 9.5l4 6.5 2.5-3.5 6 7.5Z"/></g><circle cx="17.5" cy="5.5" r="2.25" fill="var(--pupil)"/></symbol>
+    <symbol id="i-cortex" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7.25V15M5.5 15v-4h13v4"/><rect x="3" y="15" width="5" height="5" rx="1.5"/><rect x="9.5" y="15" width="5" height="5" rx="1.5"/><rect x="16" y="15" width="5" height="5" rx="1.5"/></g><circle cx="12" cy="4.5" r="2.25" fill="var(--pupil)"/></symbol>
+    <symbol id="i-darkroom" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2.5 7.5 3V11c0 4.6-3.1 8.4-7.5 10.5C7.6 19.4 4.5 15.6 4.5 11V5.5Z"/></g><circle cx="12" cy="11.25" r="2.25" fill="var(--pupil)"/></symbol>
+    <symbol id="i-mint" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2.5 8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5Z"/><path d="M12 6.5v1.25M12 16.25v1.25"/></g><circle cx="12" cy="12" r="2.25" fill="var(--pupil)"/></symbol>
+    <symbol id="i-survey" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7.5" y="2" width="9" height="7.5" rx="2"/><path d="M12 9.5 5.5 21M12 9.5 18.5 21M12 9.5V21"/></g><circle cx="12" cy="5.75" r="2.25" fill="var(--pupil)"/></symbol>
+    <symbol id="i-mask" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 5.5c5-2.2 10-2.2 15 0V11c0 5.2-3.4 9.5-7.5 9.5S4.5 16.2 4.5 11Z"/><path d="M13.6 11c.9-1 2.5-1 3.4 0M10 15.6c1.3.9 2.7.9 4 0"/></g><circle cx="9" cy="10.5" r="2.25" fill="var(--pupil)"/></symbol>
+    <symbol id="i-studio" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 8.5h18"/></g><circle cx="12" cy="14.25" r="2.25" fill="var(--pupil)"/></symbol>
+
+    <symbol id="i-px16" viewBox="0 0 16 16"><g shape-rendering="crispEdges"><rect x="5" y="2" width="1" height="1" fill="currentColor"/><rect x="6" y="2" width="1" height="1" fill="currentColor"/><rect x="7" y="2" width="1" height="1" fill="currentColor"/><rect x="8" y="2" width="1" height="1" fill="currentColor"/><rect x="9" y="2" width="1" height="1" fill="currentColor"/><rect x="10" y="2" width="1" height="1" fill="currentColor"/><rect x="3" y="3" width="1" height="1" fill="currentColor"/><rect x="4" y="3" width="1" height="1" fill="currentColor"/><rect x="11" y="3" width="1" height="1" fill="currentColor"/><rect x="12" y="3" width="1" height="1" fill="currentColor"/><rect x="2" y="4" width="1" height="1" fill="currentColor"/><rect x="5" y="4" width="1" height="1" fill="currentColor"/><rect x="6" y="4" width="1" height="1" fill="currentColor"/><rect x="9" y="4" width="1" height="1" fill="currentColor"/><rect x="10" y="4" width="1" height="1" fill="currentColor"/><rect x="13" y="4" width="1" height="1" fill="currentColor"/><rect x="1" y="5" width="1" height="1" fill="currentColor"/><rect x="5" y="5" width="1" height="1" fill="currentColor"/><rect x="6" y="5" width="1" height="1" fill="currentColor"/><rect x="9" y="5" width="1" height="1" fill="currentColor"/><rect x="10" y="5" width="1" height="1" fill="currentColor"/><rect x="14" y="5" width="1" height="1" fill="currentColor"/><rect x="1" y="6" width="1" height="1" fill="currentColor"/><rect x="14" y="6" width="1" height="1" fill="currentColor"/><rect x="0" y="7" width="1" height="1" fill="currentColor"/><rect x="3" y="7" width="1" height="1" fill="currentColor"/><rect x="4" y="7" width="1" height="1" fill="currentColor"/><rect x="7" y="7" width="1" height="1" fill="var(--pupil)"/><rect x="8" y="7" width="1" height="1" fill="var(--pupil)"/><rect x="11" y="7" width="1" height="1" fill="currentColor"/><rect x="12" y="7" width="1" height="1" fill="currentColor"/><rect x="15" y="7" width="1" height="1" fill="currentColor"/><rect x="0" y="8" width="1" height="1" fill="currentColor"/><rect x="3" y="8" width="1" height="1" fill="currentColor"/><rect x="4" y="8" width="1" height="1" fill="currentColor"/><rect x="7" y="8" width="1" height="1" fill="var(--pupil)"/><rect x="8" y="8" width="1" height="1" fill="var(--pupil)"/><rect x="11" y="8" width="1" height="1" fill="currentColor"/><rect x="12" y="8" width="1" height="1" fill="currentColor"/><rect x="15" y="8" width="1" height="1" fill="currentColor"/><rect x="1" y="9" width="1" height="1" fill="currentColor"/><rect x="14" y="9" width="1" height="1" fill="currentColor"/><rect x="1" y="10" width="1" height="1" fill="currentColor"/><rect x="5" y="10" width="1" height="1" fill="currentColor"/><rect x="6" y="10" width="1" height="1" fill="currentColor"/><rect x="9" y="10" width="1" height="1" fill="currentColor"/><rect x="10" y="10" width="1" height="1" fill="currentColor"/><rect x="14" y="10" width="1" height="1" fill="currentColor"/><rect x="2" y="11" width="1" height="1" fill="currentColor"/><rect x="5" y="11" width="1" height="1" fill="currentColor"/><rect x="6" y="11" width="1" height="1" fill="currentColor"/><rect x="9" y="11" width="1" height="1" fill="currentColor"/><rect x="10" y="11" width="1" height="1" fill="currentColor"/><rect x="13" y="11" width="1" height="1" fill="currentColor"/><rect x="3" y="12" width="1" height="1" fill="currentColor"/><rect x="4" y="12" width="1" height="1" fill="currentColor"/><rect x="11" y="12" width="1" height="1" fill="currentColor"/><rect x="12" y="12" width="1" height="1" fill="currentColor"/><rect x="5" y="13" width="1" height="1" fill="currentColor"/><rect x="6" y="13" width="1" height="1" fill="currentColor"/><rect x="7" y="13" width="1" height="1" fill="currentColor"/><rect x="8" y="13" width="1" height="1" fill="currentColor"/><rect x="9" y="13" width="1" height="1" fill="currentColor"/><rect x="10" y="13" width="1" height="1" fill="currentColor"/></g></symbol>
+    <!-- hand-lettered "argus": same unit space as the icons, x-height 7→18, stroke 2. The bowl of the a is an eye. -->
+    <symbol id="wm" viewBox="0 5 68 21"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="12.5" r="5.5"/><path d="M12 7v11"/><path d="M16.5 18V7m0 5.5A5.5 5.5 0 0 1 22 7"/><circle cx="31.5" cy="12.5" r="5.5"/><path d="M37 7v12.5a4.5 4.5 0 0 1-4.5 4.5H30"/><path d="M41.5 7v5.5a5.5 5.5 0 0 0 11 0M52.5 7v11"/><path d="M65 8.4C64 7.3 62.8 7 61 7c-2.4 0-4 1.2-4 2.8 0 1.8 1.8 2.3 4 2.7 2.4.4 4.2 1 4.2 2.8 0 1.7-1.8 2.7-4.2 2.7-1.9 0-3.3-.4-4.4-1.6"/></g><g fill="currentColor"><circle cx="9.1" cy="12.5" r="1.05"/><circle cx="7.8" cy="14.75" r="1.05"/><circle cx="5.2" cy="14.75" r="1.05"/><circle cx="3.9" cy="12.5" r="1.05"/><circle cx="5.2" cy="10.25" r="1.05"/><circle cx="7.8" cy="10.25" r="1.05"/></g><circle cx="6.5" cy="12.5" r="1.05" fill="var(--pupil)"/></symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <header>
+    <span class="label">Dragonhound Labs · identity v0.4 · suite mark locked</span>
+    <h1>Argus suite marks</h1>
+    <p class="muted">One system for every package: a 24-unit grid, a 2-unit round stroke, and exactly one filled pupil per mark. Each package is one of Argus's hundred eyes. The pupil carries the colour of the package's pipeline stage, and everything else is ink.</p>
+    <div class="meta"><span>13 marks + wordmark</span><span>grid 24 · stroke 2 · pupil r 2.25</span><span>Drafted 2026-11-14</span></div>
+  </header>
+
+  <section class="hero">
+    <div class="sec-head"><span class="label">Suite mark · locked 2026-11-14</span><h2>Vesica iris</h2>
+      <p class="muted">The eye outline is a true vesica piscis, the lens formed by two overlapping circles (r 11.82, centres 8.64 apart). Inside is a compound iris of seven eyes in the Seed of Life layout. Six are ink, and the centre one carries the colour. Every package mark keeps a single eye. The suite holds them all.</p></div>
+    <div class="split" style="--pl: var(--train-l); --pd: var(--train-d);">
+      <div class="tile l" id="hero-l"></div>
+      <div class="tile d" id="hero-d"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="label">Suite mark · v0.2 candidates (archive)</span><h2>Many eyes, not one</h2>
+      <p class="muted">Argus Panoptes had a hundred eyes, so the suite mark holds many and each package holds one. The red eye in each candidate is the one that carries the colour. Pick one or two to refine, and the bowl of the wordmark's a will take on the winner's interior.</p></div>
+    <div class="grid" id="cands"></div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="label">Suite mark · v0.3 myth &amp; esoteric (archive)</span><h2>Eyes from older traditions</h2>
+      <p class="muted">A due-diligence pass through mythological and esoteric eye symbols. Where the frame allows, each one carries the compound iris, so it's judged against the current pick rather than starting from zero.</p></div>
+    <div class="grid" id="myth"></div>
+    <div class="note">
+      <span class="label">Considered and left out</span>
+      <p><b>Hamsa</b> and the <b>ankh</b> are active religious symbols, and a dev-tool logo would be borrowing them. <b>Odin's eye</b> is one eye given up for wisdom, so it's the cyclops problem again. <b>Indra Sahasraksha</b>, the thousand-eyed god, is a better story than an image, and it can go in the README next to Argus Panoptes. The <b>Seed of Life</b> works the same way: the compound iris already uses its seven-circle layout, so it's a construction note, not a separate mark.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="label">Packages</span><h2>Proofs at 96 / 32 / 24 / 16 px</h2>
+      <p class="muted">Demos inherit their package's mark, so Lightbox uses lens, Realms uses atlas, Cull uses curator, Safelight uses darkroom, Assay uses mint and Sightline uses survey. Infra repos (ci, halo, pkg-template) stay unbranded.</p></div>
+    <div class="legend" id="legend"></div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="label">Construction</span><h2>Rules every mark follows</h2></div>
+    <div class="two">
+      <ul class="rules">
+        <li><b>Grid</b><span>24 × 24 units with 2 units of padding. Live area is 20 × 20, and optical overshoot is allowed for round forms.</span></li>
+        <li><b>Stroke</b><span>2 units, round caps and joins, never scaled separately from the mark.</span></li>
+        <li><b>Pupil</b><span>One filled circle, r 2.25, in the stage colour. Keep at least 0.75 units of clear space between it and any stroke.</span></li>
+        <li><b>Corners</b><span>Rectangles use r 1.5 (small) or r 2–2.5 (frames). No sharp outer corners except the mountain and the funnel's spout.</span></li>
+        <li><b>Mono</b><span>The pupil may take the ink colour in one-colour use. The mark still reads, because the dot keeps its position.</span></li>
+        <li><b>Min size</b><span>16 px. At 16 px the stroke lands at 1.33 px. A pixel-hinted 16 px set is a later step if favicons look soft.</span></li>
+      </ul>
+      <div class="split" style="--pl: var(--data-l); --pd: var(--data-d);">
+        <div class="tile l" id="key-l"></div>
+        <div class="tile d" id="key-d"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="label">Small-size and one-colour test</span><h2>Favicon strip</h2></div>
+    <div class="strip" id="strip"></div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="label">16 px</span><h2>Pixel-drawn favicon</h2>
+      <p class="muted">Below 24 px the vector mark's seven dots merge into a grey disc. This version is drawn pixel by pixel on a 16 × 16 grid: a 1 px vesica, seven 2 × 2 px eyes with 1 px gutters, and a red centre. It's used for the 16 px size in favicon.ico and wherever a 16 px icon is needed. The 32 px and larger sizes use the vector mark.</p></div>
+    <div class="split" style="--pl: var(--train-l); --pd: var(--train-d);">
+      <div class="tile l"><div class="sizes"><svg class="i" width="128" height="128" viewBox="0 0 16 16"><use href="#i-px16"/></svg><svg class="i" width="32" height="32" viewBox="0 0 16 16"><use href="#i-px16"/></svg><svg class="i" width="16" height="16" viewBox="0 0 16 16"><use href="#i-px16"/></svg></div></div>
+      <div class="tile d"><div class="sizes"><svg class="i" width="128" height="128" viewBox="0 0 16 16"><use href="#i-px16"/></svg><svg class="i" width="32" height="32" viewBox="0 0 16 16"><use href="#i-px16"/></svg><svg class="i" width="16" height="16" viewBox="0 0 16 16"><use href="#i-px16"/></svg></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="label">GitHub social previews · 1280 × 640</span><h2>Repo cards</h2>
+      <p class="muted">One per package plus the suite, generated from the same sources. GitHub only accepts these through the repo settings page, so uploading them is a manual step.</p></div>
+    <div class="social"><figure><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjgwIiBoZWlnaHQ9IjY0MCIgdmlld0JveD0iMCAwIDEyODAgNjQwIj48cmVjdCB3aWR0aD0iMTI4MCIgaGVpZ2h0PSI2NDAiIGZpbGw9IiMxMjE0MTYiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMjAuMCAxODMuOSkgc2NhbGUoMTAuNDY4KSI+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCAxKSI+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZTZlOGVhIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xIDEyQTExLjgyIDExLjgyIDAgMCAxIDIzIDEyQTExLjgyIDExLjgyIDAgMCAxIDEgMTJaIi8+PC9nPjxnIGZpbGw9IiNlNmU4ZWEiPjxjaXJjbGUgY3g9IjE1Ljc1IiBjeT0iMTIiIHI9IjEuNiIvPjxjaXJjbGUgY3g9IjEzLjg4IiBjeT0iMTUuMjUiIHI9IjEuNiIvPjxjaXJjbGUgY3g9IjEwLjEyIiBjeT0iMTUuMjUiIHI9IjEuNiIvPjxjaXJjbGUgY3g9IjguMjUiIGN5PSIxMiIgcj0iMS42Ii8+PGNpcmNsZSBjeD0iMTAuMTIiIGN5PSI4Ljc1IiByPSIxLjYiLz48Y2lyY2xlIGN4PSIxMy44OCIgY3k9IjguNzUiIHI9IjEuNiIvPjwvZz48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxLjYiIGZpbGw9IiNlNTdhNjQiLz48L2c+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMzIgMCkiPjxnIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2U2ZThlYSIgc3Ryb2tlLXdpZHRoPSIyLjAiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMi4wMCAwKSIgZD0iTTAuMCAxMi41YTUuNSA1LjUgMCAxIDAgMTEuMCAwYTUuNSA1LjUgMCAxIDAgLTExLjAgMFpNMTEgN3YxMSIvPjxjaXJjbGUgY3g9IjEwLjEwIiBjeT0iMTIuNTAiIHI9IjEuMDUiIGZpbGw9IiNlNmU4ZWEiIHN0cm9rZT0ibm9uZSIvPjxjaXJjbGUgY3g9IjguODAiIGN5PSIxNC43NSIgcj0iMS4wNSIgZmlsbD0iI2U2ZThlYSIgc3Ryb2tlPSJub25lIi8+PGNpcmNsZSBjeD0iNi4yMCIgY3k9IjE0Ljc1IiByPSIxLjA1IiBmaWxsPSIjZTZlOGVhIiBzdHJva2U9Im5vbmUiLz48Y2lyY2xlIGN4PSI0LjkwIiBjeT0iMTIuNTAiIHI9IjEuMDUiIGZpbGw9IiNlNmU4ZWEiIHN0cm9rZT0ibm9uZSIvPjxjaXJjbGUgY3g9IjYuMjAiIGN5PSIxMC4yNSIgcj0iMS4wNSIgZmlsbD0iI2U2ZThlYSIgc3Ryb2tlPSJub25lIi8+PGNpcmNsZSBjeD0iOC44MCIgY3k9IjEwLjI1IiByPSIxLjA1IiBmaWxsPSIjZTZlOGVhIiBzdHJva2U9Im5vbmUiLz48Y2lyY2xlIGN4PSI3LjUwIiBjeT0iMTIuNSIgcj0iMS4wNSIgZmlsbD0iI2U1N2E2NCIgc3Ryb2tlPSJub25lIi8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTcuNTAgMCkiIGQ9Ik0wIDE4VjdNMCAxMi41QTUuNSA1LjUgMCAwIDEgNS41IDciLz48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyNi4wMCAwKSIgZD0iTTAuMCAxMi41YTUuNSA1LjUgMCAxIDAgMTEuMCAwYTUuNSA1LjUgMCAxIDAgLTExLjAgMFpNMTEgN3YxMi41YTQuNSA0LjUgMCAwIDEtNC41IDQuNUg0Ii8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNDEuNTAgMCkiIGQ9Ik0wIDd2NS41YTUuNSA1LjUgMCAwIDAgMTEgME0xMSA3djExIi8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNTYuNzUgMCkiIGQ9Ik04LjQgOC40QzcuNCA3LjMgNi4yIDcgNC40IDdjLTIuNCAwLTQgMS4yLTQgMi44IDAgMS44IDEuOCAyLjMgNCAyLjcgMi40LjQgNC4yIDEgNC4yIDIuOCAwIDEuNy0xLjggMi43LTQuMiAyLjctMS45IDAtMy4zLS40LTQuNC0xLjYiLz48L2c+PC9nPjwvZz48L3N2Zz4K" alt="GitHub social preview for argus suite" width="1280" height="640"><figcaption class="label">argus-suite</figcaption></figure><figure><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjgwIiBoZWlnaHQ9IjY0MCIgdmlld0JveD0iMCAwIDEyODAgNjQwIj48cmVjdCB3aWR0aD0iMTI4MCIgaGVpZ2h0PSI2NDAiIGZpbGw9IiMxMjE0MTYiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMjAuMCAyMzIuNykgc2NhbGUoNi43MTIpIj48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgwIDEpIj48ZyBmaWxsPSJub25lIiBzdHJva2U9IiNlNmU4ZWEiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMC41IiBjeT0iMTAuNSIgcj0iNi41Ii8+PHBhdGggZD0ibTE1LjUgMTUuNSA1IDUiLz48L2c+PGNpcmNsZSBjeD0iMTAuNSIgY3k9IjEwLjUiIHI9IjIuMjUiIGZpbGw9IiM2ZmI3Y2MiLz48L2c+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMzIgMCkiPjxnIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2U2ZThlYSIgc3Ryb2tlLXdpZHRoPSIyLjAiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMi4wMCAwKSIgZD0iTTAuMCAxMi41YTUuNSA1LjUgMCAxIDAgMTEuMCAwYTUuNSA1LjUgMCAxIDAgLTExLjAgMFpNMTEgN3YxMSIvPjxjaXJjbGUgY3g9IjEwLjEwIiBjeT0iMTIuNTAiIHI9IjEuMDUiIGZpbGw9IiNlNmU4ZWEiIHN0cm9rZT0ibm9uZSIvPjxjaXJjbGUgY3g9IjguODAiIGN5PSIxNC43NSIgcj0iMS4wNSIgZmlsbD0iI2U2ZThlYSIgc3Ryb2tlPSJub25lIi8+PGNpcmNsZSBjeD0iNi4yMCIgY3k9IjE0Ljc1IiByPSIxLjA1IiBmaWxsPSIjZTZlOGVhIiBzdHJva2U9Im5vbmUiLz48Y2lyY2xlIGN4PSI0LjkwIiBjeT0iMTIuNTAiIHI9IjEuMDUiIGZpbGw9IiNlNmU4ZWEiIHN0cm9rZT0ibm9uZSIvPjxjaXJjbGUgY3g9IjYuMjAiIGN5PSIxMC4yNSIgcj0iMS4wNSIgZmlsbD0iI2U2ZThlYSIgc3Ryb2tlPSJub25lIi8+PGNpcmNsZSBjeD0iOC44MCIgY3k9IjEwLjI1IiByPSIxLjA1IiBmaWxsPSIjZTZlOGVhIiBzdHJva2U9Im5vbmUiLz48Y2lyY2xlIGN4PSI3LjUwIiBjeT0iMTIuNSIgcj0iMS4wNSIgZmlsbD0iI2U1N2E2NCIgc3Ryb2tlPSJub25lIi8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTcuNTAgMCkiIGQ9Ik0wIDE4VjdNMCAxMi41QTUuNSA1LjUgMCAwIDEgNS41IDciLz48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyNi4wMCAwKSIgZD0iTTAuMCAxMi41YTUuNSA1LjUgMCAxIDAgMTEuMCAwYTUuNSA1LjUgMCAxIDAgLTExLjAgMFpNMTEgN3YxMi41YTQuNSA0LjUgMCAwIDEtNC41IDQuNUg0Ii8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNDEuNTAgMCkiIGQ9Ik0wIDd2NS41YTUuNSA1LjUgMCAwIDAgMTEgME0xMSA3djExIi8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNTYuNzUgMCkiIGQ9Ik04LjQgOC40QzcuNCA3LjMgNi4yIDcgNC40IDdjLTIuNCAwLTQgMS4yLTQgMi44IDAgMS44IDEuOCAyLjMgNCAyLjcgMi40LjQgNC4yIDEgNC4yIDIuOCAwIDEuNy0xLjggMi43LTQuMiAyLjctMS45IDAtMy4zLS40LTQuNC0xLjYiLz48L2c+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNzMuMzUgMCkiPjxnIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzZmYjdjYyIgc3Ryb2tlLXdpZHRoPSIyLjAiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMi4yNSAwKSIgZD0iTTAgMnYxM2EzIDMgMCAwIDAgMyAzIi8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoOC43NSAwKSIgZD0iTTAgMTIuNWgxMUE1LjUgNS41IDAgMSAwIDkuMzkgMTYuMzkiLz48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyMy43NSAwKSIgZD0iTTAgN3YxMU0wIDEyLjVhNS41IDUuNSAwIDAgMSAxMSAwVjE4Ii8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMzkuMDAgMCkiIGQ9Ik04LjQgOC40QzcuNCA3LjMgNi4yIDcgNC40IDdjLTIuNCAwLTQgMS4yLTQgMi44IDAgMS44IDEuOCAyLjMgNCAyLjcgMi40LjQgNC4yIDEgNC4yIDIuOCAwIDEuNy0xLjggMi43LTQuMiAyLjctMS45IDAtMy4zLS40LTQuNC0xLjYiLz48L2c+PC9nPjwvZz48L2c+PC9zdmc+Cg==" alt="GitHub social preview for argus lens" width="1280" height="640"><figcaption class="label">argus-lens</figcaption></figure><figure><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjgwIiBoZWlnaHQ9IjY0MCIgdmlld0JveD0iMCAwIDEyODAgNjQwIj48cmVjdCB3aWR0aD0iMTI4MCIgaGVpZ2h0PSI2NDAiIGZpbGw9IiMxMjE0MTYiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMjAuMCAyMzguMCkgc2NhbGUoNi4zMDUpIj48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgwIDEpIj48ZyBmaWxsPSJub25lIiBzdHJva2U9IiNlNmU4ZWEiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMi41IDIwIDkgOS41bDQgNi41IDIuNS0zLjUgNiA3LjVaIi8+PC9nPjxjaXJjbGUgY3g9IjE3LjUiIGN5PSI1LjUiIHI9IjIuMjUiIGZpbGw9IiNlOGI1NGUiLz48L2c+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMzIgMCkiPjxnIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2U2ZThlYSIgc3Ryb2tlLXdpZHRoPSIyLjAiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMi4wMCAwKSIgZD0iTTAuMCAxMi41YTUuNSA1LjUgMCAxIDAgMTEuMCAwYTUuNSA1LjUgMCAxIDAgLTExLjAgMFpNMTEgN3YxMSIvPjxjaXJjbGUgY3g9IjEwLjEwIiBjeT0iMTIuNTAiIHI9IjEuMDUiIGZpbGw9IiNlNmU4ZWEiIHN0cm9rZT0ibm9uZSIvPjxjaXJjbGUgY3g9IjguODAiIGN5PSIxNC43NSIgcj0iMS4wNSIgZmlsbD0iI2U2ZThlYSIgc3Ryb2tlPSJub25lIi8+PGNpcmNsZSBjeD0iNi4yMCIgY3k9IjE0Ljc1IiByPSIxLjA1IiBmaWxsPSIjZTZlOGVhIiBzdHJva2U9Im5vbmUiLz48Y2lyY2xlIGN4PSI0LjkwIiBjeT0iMTIuNTAiIHI9IjEuMDUiIGZpbGw9IiNlNmU4ZWEiIHN0cm9rZT0ibm9uZSIvPjxjaXJjbGUgY3g9IjYuMjAiIGN5PSIxMC4yNSIgcj0iMS4wNSIgZmlsbD0iI2U2ZThlYSIgc3Ryb2tlPSJub25lIi8+PGNpcmNsZSBjeD0iOC44MCIgY3k9IjEwLjI1IiByPSIxLjA1IiBmaWxsPSIjZTZlOGVhIiBzdHJva2U9Im5vbmUiLz48Y2lyY2xlIGN4PSI3LjUwIiBjeT0iMTIuNSIgcj0iMS4wNSIgZmlsbD0iI2U1N2E2NCIgc3Ryb2tlPSJub25lIi8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTcuNTAgMCkiIGQ9Ik0wIDE4VjdNMCAxMi41QTUuNSA1LjUgMCAwIDEgNS41IDciLz48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyNi4wMCAwKSIgZD0iTTAuMCAxMi41YTUuNSA1LjUgMCAxIDAgMTEuMCAwYTUuNSA1LjUgMCAxIDAgLTExLjAgMFpNMTEgN3YxMi41YTQuNSA0LjUgMCAwIDEtNC41IDQuNUg0Ii8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNDEuNTAgMCkiIGQ9Ik0wIDd2NS41YTUuNSA1LjUgMCAwIDAgMTEgME0xMSA3djExIi8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNTYuNzUgMCkiIGQ9Ik04LjQgOC40QzcuNCA3LjMgNi4yIDcgNC40IDdjLTIuNCAwLTQgMS4yLTQgMi44IDAgMS44IDEuOCAyLjMgNCAyLjcgMi40LjQgNC4yIDEgNC4yIDIuOCAwIDEuNy0xLjggMi43LTQuMiAyLjctMS45IDAtMy4zLS40LTQuNC0xLjYiLz48L2c+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNzMuMzUgMCkiPjxnIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2U4YjU0ZSIgc3Ryb2tlLXdpZHRoPSIyLjAiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMi4wMCAwKSIgZD0iTTAuMCAxMi41YTUuNSA1LjUgMCAxIDAgMTEuMCAwYTUuNSA1LjUgMCAxIDAgLTExLjAgMFpNMTEgN3YxMSIvPjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDE2LjUwIDApIiBkPSJNMyAzdjEyYTMgMyAwIDAgMCAzIDNoMU0wIDdoNyIvPjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDI3LjI1IDApIiBkPSJNMCAydjEzYTMgMyAwIDAgMCAzIDMiLz48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgzMy43NSAwKSIgZD0iTTAuMCAxMi41YTUuNSA1LjUgMCAxIDAgMTEuMCAwYTUuNSA1LjUgMCAxIDAgLTExLjAgMFpNMTEgN3YxMSIvPjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDQ5LjAwIDApIiBkPSJNOC40IDguNEM3LjQgNy4zIDYuMiA3IDQuNCA3Yy0yLjQgMC00IDEuMi00IDIuOCAwIDEuOCAxLjggMi4zIDQgMi43IDIuNC40IDQuMiAxIDQuMiAyLjggMCAxLjctMS44IDIuNy00LjIgMi43LTEuOSAwLTMuMy0uNC00LjQtMS42Ii8+PC9nPjwvZz48L2c+PC9nPjwvc3ZnPgo=" alt="GitHub social preview for argus atlas" width="1280" height="640"><figcaption class="label">argus-atlas</figcaption></figure><figure><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjgwIiBoZWlnaHQ9IjY0MCIgdmlld0JveD0iMCAwIDEyODAgNjQwIj48cmVjdCB3aWR0aD0iMTI4MCIgaGVpZ2h0PSI2NDAiIGZpbGw9IiMxMjE0MTYiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMjAuMCAyNTguOCkgc2NhbGUoNC43MDkpIj48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgwIDEpIj48ZyBmaWxsPSJub25lIiBzdHJva2U9IiNlNmU4ZWEiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJtMTIgMi41IDcuNSAzVjExYzAgNC42LTMuMSA4LjQtNy41IDEwLjVDNy42IDE5LjQgNC41IDE1LjYgNC41IDExVjUuNVoiLz48L2c+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMS4yNSIgcj0iMi4yNSIgZmlsbD0iI2U4YjU0ZSIvPjwvZz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgzMiAwKSI+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZTZlOGVhIiBzdHJva2Utd2lkdGg9IjIuMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyLjAwIDApIiBkPSJNMC4wIDEyLjVhNS41IDUuNSAwIDEgMCAxMS4wIDBhNS41IDUuNSAwIDEgMCAtMTEuMCAwWk0xMSA3djExIi8+PGNpcmNsZSBjeD0iMTAuMTAiIGN5PSIxMi41MCIgcj0iMS4wNSIgZmlsbD0iI2U2ZThlYSIgc3Ryb2tlPSJub25lIi8+PGNpcmNsZSBjeD0iOC44MCIgY3k9IjE0Ljc1IiByPSIxLjA1IiBmaWxsPSIjZTZlOGVhIiBzdHJva2U9Im5vbmUiLz48Y2lyY2xlIGN4PSI2LjIwIiBjeT0iMTQuNzUiIHI9IjEuMDUiIGZpbGw9IiNlNmU4ZWEiIHN0cm9rZT0ibm9uZSIvPjxjaXJjbGUgY3g9IjQuOTAiIGN5PSIxMi41MCIgcj0iMS4wNSIgZmlsbD0iI2U2ZThlYSIgc3Ryb2tlPSJub25lIi8+PGNpcmNsZSBjeD0iNi4yMCIgY3k9IjEwLjI1IiByPSIxLjA1IiBmaWxsPSIjZTZlOGVhIiBzdHJva2U9Im5vbmUiLz48Y2lyY2xlIGN4PSI4LjgwIiBjeT0iMTAuMjUiIHI9IjEuMDUiIGZpbGw9IiNlNmU4ZWEiIHN0cm9rZT0ibm9uZSIvPjxjaXJjbGUgY3g9IjcuNTAiIGN5PSIxMi41IiByPSIxLjA1IiBmaWxsPSIjZTU3YTY0IiBzdHJva2U9Im5vbmUiLz48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxNy41MCAwKSIgZD0iTTAgMThWN00wIDEyLjVBNS41IDUuNSAwIDAgMSA1LjUgNyIvPjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDI2LjAwIDApIiBkPSJNMC4wIDEyLjVhNS41IDUuNSAwIDEgMCAxMS4wIDBhNS41IDUuNSAwIDEgMCAtMTEuMCAwWk0xMSA3djEyLjVhNC41IDQuNSAwIDAgMS00LjUgNC41SDQiLz48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0MS41MCAwKSIgZD0iTTAgN3Y1LjVhNS41IDUuNSAwIDAgMCAxMSAwTTExIDd2MTEiLz48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSg1Ni43NSAwKSIgZD0iTTguNCA4LjRDNy40IDcuMyA2LjIgNyA0LjQgN2MtMi40IDAtNCAxLjItNCAyLjggMCAxLjggMS44IDIuMyA0IDIuNyAyLjQuNCA0LjIgMSA0LjIgMi44IDAgMS43LTEuOCAyLjctNC4yIDIuNy0xLjkgMC0zLjMtLjQtNC40LTEuNiIvPjwvZz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg3My4zNSAwKSI+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZThiNTRlIiBzdHJva2Utd2lkdGg9IjIuMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyLjAwIDApIiBkPSJNMC4wIDEyLjVhNS41IDUuNSAwIDEgMCAxMS4wIDBhNS41IDUuNSAwIDEgMCAtMTEuMCAwWk0xMSAydjE2Ii8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTcuMjUgMCkiIGQ9Ik0wLjAgMTIuNWE1LjUgNS41IDAgMSAwIDExLjAgMGE1LjUgNS41IDAgMSAwIC0xMS4wIDBaTTExIDd2MTEiLz48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgzMi43NSAwKSIgZD0iTTAgMThWN00wIDEyLjVBNS41IDUuNSAwIDAgMSA1LjUgNyIvPjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDQxLjUwIDApIiBkPSJNMCAydjE2TTkuNSA3IDEgMTMuMk00LjIgMTAuOCAxMCAxOCIvPjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDU0LjUwIDApIiBkPSJNMCAxOFY3TTAgMTIuNUE1LjUgNS41IDAgMCAxIDUuNSA3Ii8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNjMuMDAgMCkiIGQ9Ik0wLjAgMTIuNWE1LjUgNS41IDAgMSAwIDExLjAgMGE1LjUgNS41IDAgMSAwIC0xMS4wIDBaIi8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNzguMDAgMCkiIGQ9Ik0wLjAgMTIuNWE1LjUgNS41IDAgMSAwIDExLjAgMGE1LjUgNS41IDAgMSAwIC0xMS4wIDBaIi8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoOTMuMjUgMCkiIGQ9Ik0wIDd2MTFNMCAxMmE1IDUgMCAwIDEgMTAgMHY2TTEwIDEyYTUgNSAwIDAgMSAxMCAwdjYiLz48L2c+PC9nPjwvZz48L2c+PC9zdmc+Cg==" alt="GitHub social preview for argus darkroom" width="1280" height="640"><figcaption class="label">argus-darkroom</figcaption></figure></div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="label">Wordmark</span><h2>Hand-lettered "argus"</h2>
+      <p class="muted">The letters use the icons' own unit space: x-height 11, stroke 2, single-storey a and g, round terminals. The bowl of the a is drawn as an eye, so the wordmark holds the pupil too. The package names next to it are set in Quicksand Bold as a stand-in for a custom face.</p></div>
+    <div class="wm-plate"><div class="split" style="--pl: var(--train-l); --pd: var(--train-d);">
+      <div class="tile l" id="wm-l"></div><div class="tile d" id="wm-d"></div>
+    </div></div>
+    <p class="muted">The package lockups below use the locked vesica iris. The bowl of the a carries the same seven-eye iris.</p>
+    <div class="locks" id="locks"></div>
+    <div class="note">
+      <span class="label">Panoptes · draft 0.1 · lowercase a–z, hyphen, space</span>
+      <p class="pan">abcdefghijklm<br>nopqrstuvwxyz</p>
+      <p class="pan pan-s">argus-quarry · argus-curator · argus-lens · argus-forge · argus-proof · argus-atlas<br>argus-cortex · argus-darkroom · argus-mint · argus-survey · argus-mask · argus-studio</p>
+      <p class="muted">Package names in the lockups above are now set in Panoptes, built from the same centre lines as the icons and outlined to a 2-unit stroke (1.6 KB WOFF2). The custom wordmark keeps its compound-iris a. The font's a is plain.</p>
+    </div>
+    <div class="note" hidden>
+      <span class="label">Custom font path</span>
+      <p>This lettering is the seed for a custom face. Next, draw the remaining lowercase letters on the same grid (the package names use a b c d e f g h i k l m n o p q r s t u v x y), then build it in Fontra or FontForge. Until then, package names stay in an OFL face, and wordmarks always ship as outlined SVG so no font is needed to display them.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+const G = {
+  data:  { label: "Data",       l: "var(--data-l)",  d: "var(--data-d)",  desc: "acquire, curate, caption" },
+  train: { label: "Training",   l: "var(--train-l)", d: "var(--train-d)", desc: "configure and evaluate LoRAs" },
+  apps:  { label: "Apps",       l: "var(--apps-l)",  d: "var(--apps-d)",  desc: "things built on the suite" },
+  base:  { label: "Foundation", l: "var(--base-l)",  d: "var(--base-d)",  desc: "shared contract and UI" },
+};
+const P = [
+  ["quarry",   "data",  "Terraced quarry face, with the pupil as a cut block.", "Provenance-first acquisition of PD / CC0 images."],
+  ["curator",  "data",  "Funnel holding the one image that made it through.", "Quality scoring, de-dup, clustering, subset selection."],
+  ["lens",     "data",  "Loupe with the eye at its centre.", "Structured image captioning."],
+  ["forge",    "train", "Anvil with a hot ingot above it.", "Dataset exports → ready-to-run LoRA configs."],
+  ["proof",    "train", "A sample over its reference, with the eye where they overlap.", "Post-training LoRA evaluation."],
+  ["atlas",    "apps",  "Real relief with the sun as the eye.", "Fantasy-map tiles baked from real terrain."],
+  ["darkroom", "apps",  "A shield guarding the eye.", "Guarded image generation."],
+  ["mint",     "apps",  "Hex token with a stamp mark top and bottom.", "Provenance tokens, IPFS, on-chain anchors."],
+  ["survey",   "apps",  "Theodolite on a tripod.", "Point-cloud deliverables for land surveyors."],
+  ["mask",     "apps",  "A winking face that talks.", "Audio in, facial animation out."],
+  ["cortex",   "base",  "Taxonomy tree from a single root.", "Taxonomy, wire schemas, backend contract."],
+  ["studio",   "base",  "App window with the eye inside.", "The suite's web UI and orchestration."],
+];
+const icon = (id, px, extra = "") => `<svg class="i" width="${px}" height="${px}" viewBox="0 0 24 24" ${extra} aria-hidden="true"><use href="#i-${id}"/></svg>`;
+const wm = (w) => `<svg class="i wm-big" viewBox="0 5 68 21" width="${w}" aria-label="argus"><use href="#wm"/></svg>`;
+const lockup = (id, name) => {
+  const w = name ? 104 + name.length * 11.4 : 100;
+  return `<svg class="i lock" viewBox="0 0 ${w} 26" aria-label="argus ${name || ''}">
+    <use href="#i-${name ? "m_vesica" : id}" x="0" y="1" width="24" height="24"/>
+    <use href="#wm" x="32" y="5" width="68" height="21"/>
+    ${name ? `<text x="105" y="18" font-family="Panoptes, Quicksand, sans-serif" font-size="25" fill="var(--pupil)">${name}</text>` : ""}
+  </svg>`;
+};
+const $ = (s) => document.getElementById(s);
+
+// suite-mark candidates
+const C = [
+  ["c_peacock",  "Peacock ocellus", "Hera set Argus's hundred eyes in the peacock's tail after his death. This is the most on-myth option and the simplest silhouette, a feather eye that reads at 16 px."],
+  ["c_compound", "Compound eye", "Seven ommatidia, like a fly's eye. Solid fills hold up best at small sizes. Risk: it can read as a honeycomb or hive."],
+  ["c_iris",     "Compound iris", "A familiar eye outline with a compound iris inside: one eye made of many. Inner dots will merge below 24 px."],
+  ["c_layered",  "Layered irises", "Three irises overlapping in one eye, a nod to layered-eye visionary art kept to a single stroke weight. The most intricate option, and it goes muddy at 16 px."],
+  ["c_ring",     "Ring of eyes", "One central eye watched by a ring of eight. Reads as surveillance or vigilance. Risk: it can look like a sun or a loading spinner."],
+  ["c_third",    "Third eye", "Two eyes below and an upright third eye above that carries the colour: the suite as the eye that sees what the packages see. Distinctive silhouette, but the small almonds are tight at 16 px."],
+];
+$("cands").innerHTML = C.map(([id, name, why]) => {
+  const tile = (t) => `<div class="tile ${t}">${icon(id, 112)}<div class="sizes">${icon(id, 32)}${icon(id, 24)}${icon(id, 16)}</div>${lockup(id)}</div>`;
+  return `<article class="card" style="--pl:var(--train-l);--pd:var(--train-d);">
+    <div class="top"><span class="name">${name}</span><span class="chip" style="--chip:var(--train-l)">${id === "c_iris" ? "Basis of locked mark" : "Suite"}</span></div>
+    <div class="split">${tile("l")}${tile("d")}</div><p>${why}</p></article>`;
+}).join("");
+
+const M = [
+  ["m_vesica",     "Vesica iris", "Sacred geometry. The eye outline is a true vesica piscis, the lens where two circles overlap, so its corners come to points. It's the compound iris with a constructed origin, and the closest relative of the current pick."],
+  ["m_pavonis",    "Cauda pavonis", "The peacock feather with a compound iris. In alchemy the peacock's tail is a named stage of the Great Work, and in Greek myth it holds Argus's eyes. Two lore links, and the silhouette reads well."],
+  ["m_ophanim",    "Ophanim", "Ezekiel's wheels within wheels, with rims full of eyes: the biblical many-eyed watchers. Eyes sit as beads on two crossed rings. Risk: it reads as an atom or a gyroscope."],
+  ["m_nazar",      "Nazar", "The evil-eye amulet from Turkey and Greece: concentric rings that watch back and ward off harm, here with a compound centre. It suits a suite that guards provenance. Risk: it can look like a target."],
+  ["m_providence", "Eye of Providence", "The all-seeing eye in a triangle, with a compound iris. Heavily loaded: the dollar bill, Freemasonry and conspiracy culture. Included only to be thorough."],
+  ["m_wadjet",     "Wadjet", "An original drawing of the Eye of Horus markings: brow, lid, teardrop and spiral. Very recognisable, but it's one eye (the cyclops problem) and widely used already."],
+];
+$("myth").innerHTML = M.map(([id, name, why]) => {
+  const tile = (t) => `<div class="tile ${t}">${icon(id, 112)}<div class="sizes">${icon(id, 32)}${icon(id, 24)}${icon(id, 16)}</div>${lockup(id)}</div>`;
+  return `<article class="card" style="--pl:var(--train-l);--pd:var(--train-d);">
+    <div class="top"><span class="name">${name}</span><span class="chip" style="--chip:var(--train-l)">${id === "m_vesica" ? "Locked" : "Myth"}</span></div>
+    <div class="split">${tile("l")}${tile("d")}</div><p>${why}</p></article>`;
+}).join("");
+
+// legend
+$("legend").innerHTML = Object.values(G).map(g =>
+  `<span><i class="dot" style="--c:${g.l}"></i><b>${g.label}</b><span class="muted">${g.desc}</span></span>`).join("");
+
+// cards
+$("grid").innerHTML = P.map(([id, g, idea, what]) => {
+  const tile = (t) => `<div class="tile ${t}">${icon(id, 96)}<div class="sizes">${icon(id, 32)}${icon(id, 24)}${icon(id, 16)}</div></div>`;
+  return `<article class="card" style="--pl:${G[g].l};--pd:${G[g].d};">
+    <div class="top"><span class="name">argus-${id}</span><span class="chip" style="--chip:${G[g].l}">${G[g].label}</span></div>
+    <div class="split">${tile("l")}${tile("d")}</div>
+    <p class="idea">${idea}</p><p>${what}</p></article>`;
+}).join("");
+
+// keyline plate: lens over its grid
+const keyline = `<svg class="i keyline" viewBox="-1 -1 26 26" aria-label="lens on construction grid">
+  <g stroke="var(--grid)" stroke-width="0.06">${Array.from({length: 25}, (_, i) => `<path d="M${i} 0V24M0 ${i}H24"/>`).join("")}</g>
+  <rect x="2" y="2" width="20" height="20" fill="none" stroke="var(--pupil)" stroke-width="0.08" stroke-dasharray="0.4 0.3" opacity="0.7"/>
+  <use href="#i-lens" width="24" height="24"/></svg>`;
+$("key-l").innerHTML = keyline; $("key-d").innerHTML = keyline;
+
+// fit lockup viewBoxes to the real Panoptes text width
+document.fonts.ready.then(() => document.querySelectorAll("svg.lock").forEach(s => {
+  const t = s.querySelector("text"); if (!t) return;
+  s.setAttribute("viewBox", `0 0 ${(105 + t.getComputedTextLength() + 1).toFixed(1)} 26`);
+}));
+
+// favicon strip: colour + mono rows on both grounds
+const all = ["m_vesica", ...P.map(p => p[0])];
+for (const t of ["l", "d"]) $("hero-" + t).innerHTML = `${icon("m_vesica", 160)}<div class="sizes">${icon("m_vesica", 64)}${icon("m_vesica", 32)}${icon("m_vesica", 24)}<svg class="i" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-px16"/></svg></div>${lockup("m_vesica")}`;
+const gOf = (id) => (P.find(p => p[0] === id) || [0, "train"])[1];
+const stripRow = (t, mono, px) => `<div class="row">${all.map(id =>
+  `<span style="--pl:${G[gOf(id)].l};--pd:${G[gOf(id)].d};${mono ? "--pupil:currentColor" : ""}">${icon(id, px)}</span>`).join("")}</div>`;
+$("strip").innerHTML = ["l", "d"].map(t =>
+  `<div class="tile ${t}"><span class="label" style="color:inherit;opacity:.6">${t === "l" ? "Light" : "Dark"} · colour 24 / 16 · one-colour 16</span>
+   ${stripRow(t, false, 24)}${stripRow(t, false, 16)}${stripRow(t, true, 16)}</div>`).join("");
+
+// wordmark plate with guides
+const guides = `<svg class="i wm-big" viewBox="-2 3 72 24" aria-label="argus wordmark with guides">
+  <g stroke="var(--grid)" stroke-width="0.15"><path d="M-2 7H70M-2 18H70M-2 24H70"/></g>
+  <g font-family="IBM Plex Mono, monospace" font-size="1.6" fill="currentColor" opacity=".5"><text x="-2" y="6.4">x-height</text><text x="-2" y="17.4">baseline</text><text x="-2" y="25.9">descender</text></g>
+  <use href="#wm" x="0" y="5" width="68" height="21"/></svg>`;
+$("wm-l").innerHTML = guides; $("wm-d").innerHTML = guides;
+
+// package lockups
+$("locks").innerHTML = ["lens", "atlas", "mint", "survey"].map(id => {
+  const g = gOf(id);
+  return `<div class="split" style="--pl:${G[g].l};--pd:${G[g].d};"><div class="tile l">${lockup(id, id)}</div><div class="tile d">${lockup(id, id)}</div></div>`;
+}).join("");
+</script>
