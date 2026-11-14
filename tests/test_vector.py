@@ -187,6 +187,14 @@ def test_upsert_maps_non_uuid_key_to_stable_uuid5() -> None:
     assert stored_id == normalise_point_id("cap-1")  # deterministic
     assert uuid.UUID(stored_id)  # a valid UUID Qdrant will accept
     assert stored_id != "cap-1"
+    assert client.upserts[-1][1][0].kw["payload"] == {"caption_id": "cap-1", "_point_id": "cap-1"}
+
+
+def test_search_returns_the_original_key_for_a_normalised_point_id() -> None:
+    qdrant_id = normalise_point_id("cap-9")
+    client = _FakeQdrant(hits=[_FakeScored(qdrant_id, 0.8, {"_point_id": "cap-9", "asset_id": "a"})])
+    hits = _store_with(client).search(IMAGE_COLLECTION, vector=[0.1])
+    assert hits == [VectorHit(id="cap-9", score=0.8, payload={"asset_id": "a"})]
 
 
 def test_upsert_passes_int_point_id_through() -> None:

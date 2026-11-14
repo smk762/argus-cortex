@@ -142,8 +142,22 @@ def test_cross_site_refuse_allows_trusted_origin() -> None:
 def test_cross_site_refuse_allows_same_host() -> None:
     """A UI proxied onto this host is same-origin (host:port match), no allow-list
     entry needed — even when the proxy rewrote the scheme to https."""
-    client = TestClient(_app(cross_site_refuse([])))
+    client = TestClient(_app(cross_site_refuse([], trusted_hosts=["TestServer"])))
     assert client.post("/", headers={"Origin": "https://testserver"}).status_code == 200
+
+
+def test_cross_site_refuse_blocks_dns_rebinding() -> None:
+    """A rebound name sends matching Origin and Host; an unlisted hostname is not trusted."""
+    client = TestClient(_app(cross_site_refuse([])), base_url="http://attacker.example:8100")
+    resp = client.post("/", headers={"Origin": "http://attacker.example:8100"})
+    assert resp.status_code == 403
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1:8100", "192.168.1.5:8100", "[::1]:8100", "localhost:8100"])
+def test_cross_site_refuse_allows_same_host_by_address(host: str) -> None:
+    """An IP literal or localhost Host cannot come from a rebound name, so it needs no allow-list."""
+    client = TestClient(_app(cross_site_refuse([])), base_url=f"http://{host}")
+    assert client.post("/", headers={"Origin": f"http://{host}"}).status_code == 200
 
 
 def test_cross_site_read_is_never_gated() -> None:

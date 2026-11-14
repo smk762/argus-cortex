@@ -257,5 +257,13 @@ def is_illegal(name: str, rule: str) -> bool:
 
 
 def mode(name: str) -> Mode:
-    """``sfw`` for ``default`` and any ``sfw-*`` name, else ``nsfw``. By name, so it needs no table entry."""
-    return "sfw" if name == "default" or name.startswith(SFW_PREFIX) else "nsfw"
+    """``sfw`` for ``default`` and any ``sfw-*`` name (by name, so it needs no table
+    entry), ``nsfw`` for a known adult policy.
+
+    Any other name raises :class:`ModerationConfigError`: a misspelt policy
+    (``"defaults"``) must fail loudly, not run with the permissive mode.
+    """
+    if name == "default" or name.startswith(SFW_PREFIX):
+        return "sfw"
+    _known(name)
+    return "nsfw"

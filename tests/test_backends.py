@@ -201,3 +201,59 @@ def test_remote_unload_closes_client() -> None:
 def test_client_without_httpx_raises_helpful_error() -> None:
     with pytest.raises(BackendError, match=r"argus-cortex\[remote\]"):
         RemoteBackend("http://host:1")._client()
+
+
+@pytest.mark.skipif(not _HAS_HTTPX, reason="needs httpx for its transport error types")
+@pytest.mark.parametrize("exc_name", ["ReadTimeout", "WriteError", "RemoteProtocolError"])
+def test_post_is_not_resent_after_it_may_have_reached_the_server(exc_name: str) -> None:
+    import httpx
+
+    class Failing(_FakeClient):
+        def post(self, path: str, json: dict) -> _FakeResp:
+            self.calls.append((path, json))
+            raise getattr(httpx, exc_name)("lost after send")
+
+    b = RemoteBackend("http://host:1")
+    b._http = fake = Failing()
+    with pytest.raises(BackendError, match="POST /infer failed"):
+        b.post_json("/infer", {"a": 1})
+    assert len(fake.calls) == 1
+
+
+@pytest.mark.skipif(not _HAS_HTTPX, reason="needs httpx for its transport error types")
+def test_post_retries_a_connect_error_and_an_idempotent_post_retries_a_read_timeout() -> None:
+    import httpx
+
+    class Flaky(_FakeClient):
+        def __init__(self, exc: Exception) -> None:
+            super().__init__()
+            self.exc = exc
+
+        def post(self, path: str, json: dict) -> _FakeResp:
+            self.calls.append((path, json))
+            if len(self.calls) == 1:
+                raise self.exc
+            return _FakeResp({"ok": True})
+
+    b = RemoteBackend("http://host:1")
+    b._http = Flaky(httpx.ConnectError("refused"))
+    assert b.post_json("/infer", {}, attempts=2) == {"ok": True}
+
+    b._http = Flaky(httpx.ReadTimeout("slow"))
+    assert b.post_json("/infer", {}, attempts=2, idempotent=True) == {"ok": True}
+
+
+@pytest.mark.skipif(not _HAS_HTTPX, reason="needs httpx for its transport error types")
+def test_get_still_retries_a_read_timeout() -> None:
+    import httpx
+
+    class Flaky(_FakeClient):
+        def get(self, path: str) -> _FakeResp:
+            self.calls.append((path, None))
+            if len(self.calls) == 1:
+                raise httpx.ReadTimeout("slow")
+            return _FakeResp({"ok": True})
+
+    b = RemoteBackend("http://host:1")
+    b._http = Flaky()
+    assert b.get_json("/health", attempts=2) == {"ok": True}

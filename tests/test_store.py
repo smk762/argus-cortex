@@ -300,7 +300,14 @@ def test_ensure_schema_runs_every_statement() -> None:
     store = _store_with(conn)
     store.ensure_schema()
     assert len(conn.executed) == len(SCHEMA_STATEMENTS)
-    assert all("CREATE" in sql for sql, _ in conn.executed)
+    # every statement is idempotent: CREATE ... IF NOT EXISTS / OR REPLACE, or a DROP ... IF EXISTS
+    assert all("CREATE" in sql or "DROP TRIGGER IF EXISTS" in sql for sql, _ in conn.executed)
+
+
+def test_schema_ties_a_membership_edit_to_its_caption() -> None:
+    sql = "\n".join(SCHEMA_STATEMENTS)
+    assert "WHERE id = NEW.edit_id AND caption_id = NEW.caption_id" in sql
+    assert "BEFORE INSERT OR UPDATE OF edit_id, caption_id ON dataset_membership" in sql
 
 
 def test_close_closes_pool() -> None:

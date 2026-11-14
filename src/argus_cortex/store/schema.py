@@ -76,4 +76,28 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS dataset_membership_dataset_idx ON dataset_membership (dataset)",
+    # A membership's edit must be an edit OF its caption, or the exported training
+    # text comes from another image. A trigger rather than a composite FK: it runs
+    # on PostgreSQL 13+ (a composite FK's ``ON DELETE SET NULL (edit_id)`` needs 15)
+    # and reaches tables created before it, which CREATE TABLE IF NOT EXISTS skips.
+    """
+    CREATE OR REPLACE FUNCTION dataset_membership_edit_matches_caption() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        IF NEW.edit_id IS NOT NULL AND NOT EXISTS (
+            SELECT 1 FROM human_edit WHERE id = NEW.edit_id AND caption_id = NEW.caption_id
+        ) THEN
+            RAISE EXCEPTION 'dataset_membership.edit_id % is not an edit of caption %', NEW.edit_id, NEW.caption_id
+                USING ERRCODE = 'foreign_key_violation';
+        END IF;
+        RETURN NEW;
+    END
+    $$
+    """,
+    "DROP TRIGGER IF EXISTS dataset_membership_edit_matches_caption ON dataset_membership",
+    """
+    CREATE TRIGGER dataset_membership_edit_matches_caption
+        BEFORE INSERT OR UPDATE OF edit_id, caption_id ON dataset_membership
+        FOR EACH ROW EXECUTE FUNCTION dataset_membership_edit_matches_caption()
+    """,
 )

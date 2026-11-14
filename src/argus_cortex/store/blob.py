@@ -55,17 +55,21 @@ def _parse_endpoint(endpoint: str) -> tuple[str, bool]:
     ``http://host:9000`` → ``("host:9000", False)``; ``https://host`` →
     ``("host", True)``. A **scheme-less** ``host:9000`` defaults to ``secure=True``
     (TLS) so a missing scheme never silently sends credentials in cleartext — write
-    an explicit ``http://`` for a plaintext endpoint. Credentials embedded in the
-    URL are rejected (use ``CORTEX_S3_ACCESS_KEY`` / ``CORTEX_S3_SECRET_KEY``).
+    an explicit ``http://`` for a plaintext endpoint. Any scheme other than
+    ``http``/``https`` (a typo like ``htps://``, or ``s3://``) is rejected rather
+    than read as plaintext. Credentials embedded in the URL are rejected (use ``CORTEX_S3_ACCESS_KEY`` / ``CORTEX_S3_SECRET_KEY``).
     """
     if "://" not in endpoint:
         return endpoint, True
     parsed = urlparse(endpoint)
+    scheme = parsed.scheme.lower()
+    if scheme not in ("http", "https"):
+        raise StoreError(f"CORTEX_S3_ENDPOINT scheme must be http:// or https://, got {parsed.scheme!r}://")
     if "@" in parsed.netloc:
         raise StoreError(
             "CORTEX_S3_ENDPOINT must not embed credentials — set CORTEX_S3_ACCESS_KEY / CORTEX_S3_SECRET_KEY instead"
         )
-    return parsed.netloc, parsed.scheme == "https"
+    return parsed.netloc, scheme == "https"
 
 
 def _is_not_found(exc: BaseException) -> bool:
