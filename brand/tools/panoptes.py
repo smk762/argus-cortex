@@ -65,6 +65,90 @@ G = {
     "y": (10, "o", "o", "M0 7l5 11M10 7 2.27 24", []),
     "z": (9, 1.75, 1.75, "M0 7h9L0 18h9", []),
     "-": (6, 1.5, 1.5, "M0 12.5h6", []),
+    # Capitals: cap height y=2 to baseline 18 (16 units); rounds are circles r 8 centred on y=10.
+    "A": (14, "o", "o", "M0 18 7 2l7 16M2.19 13h9.62", []),
+    "B": (10.25, "s", "r", "M0 18V2h5a3.75 3.75 0 0 1 0 7.5H0M5 9.5h1a4.25 4.25 0 0 1 0 8.5H0", []),
+    "C": (13.66, "r", "o", "M13.66 4.34A8 8 0 1 0 13.66 15.66", []),
+    "D": (12, "s", "r", "M0 2h4a8 8 0 0 1 0 16H0Z", []),
+    "E": (10, "s", "o", "M10 2H0v16h10M0 10h8.5", []),
+    "F": (10, "s", "o", "M10 2H0v16M0 10h8.5", []),
+    "G": (16, "r", "r", "M13.66 4.34A8 8 0 1 0 16 10h-6", []),
+    "H": (12, "s", "s", "M0 2v16M12 2v16M0 10h12", []),
+    "I": (0, "s", "s", "M0 2v16", []),
+    "J": (10, 1.75, "s", "M10 2v11a5 5 0 0 1-10 0", []),
+    "K": (11.5, "s", "o", "M0 2v16M11 2 0 12.5M4.2 8.49 11.5 18", []),
+    "L": (9, "s", "o", "M0 2v16h9", []),
+    "M": (15, "s", "s", "M0 18V2l7.5 11L15 2v16", []),
+    "N": (12, "s", "s", "M0 18V2l12 16V2", []),
+    "O": (16, "r", "r", circ(8, 10, 8), []),
+    "P": (9.75, "s", 1.5, "M0 18V2h5.5a4.25 4.25 0 0 1 0 8.5H0", []),
+    "Q": (16, "r", "r", circ(8, 10, 8) + "M11 13.5l5 5", []),
+    "R": (10, "s", "o", "M0 18V2h5.5a4.25 4.25 0 0 1 0 8.5H0M5 10.5 10 18", []),
+    "S": (
+        11.6,
+        "r",
+        "r",
+        "M11.3 4.3C10 2.8 8.2 2 6 2 2.8 2 .6 3.8.6 6.2c0 2.6 2.4 3.4 5.4 4 3.2.6 5.6 1.5 5.6 4.1 0 2.3-2.4 3.7-5.6 3.7-2.6 0-4.6-.6-6-2.4",
+        [],
+    ),
+    "T": (12, "o", "o", "M0 2h12M6 2v16", []),
+    "U": (12, "s", "s", "M0 2v10a6 6 0 0 0 12 0V2", []),
+    "V": (13, "o", "o", "M0 2l6.5 16L13 2", []),
+    "W": (19, "o", "o", "M0 2l4.5 16L9.5 5l5 13L19 2", []),
+    "X": (12, "o", "o", "M0 2l12 16M12 2 0 18", []),
+    "Y": (12, "o", "o", "M0 2l6 8 6-8M6 10v8", []),
+    "Z": (12, 1.75, 1.75, "M0 2h12L0 18h12", []),
+    # Digits: lining, cap height.
+    "0": (10, "r", "r", "M5 2a5 8 0 1 0 0 16A5 8 0 1 0 5 2Z", []),
+    "1": (5, "o", "s", "M1.5 5.5 5 2v16", []),
+    "2": (10, "r", 1.75, "M.6 6.2C.6 3.8 2.6 2 5.2 2s4.6 1.8 4.6 4.3c0 2-1.2 3.4-2.8 4.8L0 18h10", []),
+    "3": (
+        10,
+        "r",
+        "r",
+        "M.5 3.5C1.6 2.5 3.2 2 5 2c2.6 0 4.5 1.6 4.5 3.9S7.6 9.8 5 9.8H4M5 9.8c2.9 0 5 1.7 5 4.1S7.9 18 5 18c-2 0-3.6-.6-4.8-1.8",
+        [],
+    ),
+    "4": (11, "o", "o", "M8 18V2L0 13.5h11", []),
+    "5": (10, "o", "r", "M9.5 2h-8L1 9.3c1.1-.8 2.5-1.3 4-1.3 2.9 0 5 2 5 5s-2.1 5-5 5c-1.9 0-3.6-.7-4.8-2", []),
+    "6": (10, "r", "r", "M8.5 2.6C7.5 2.2 6.4 2 5.4 2 2.4 2 0 5 0 10.5V13" + circ(5, 13, 5), []),
+    "7": (10, "o", "o", "M0 2h10L3.5 18", []),
+    "8": (8.5, "r", "r", circ(4.25, 5.75, 3.75) + circ(4.25, 13.75, 4.25), []),
+    "9": (10, "r", "r", circ(5, 7, 5) + "M10 7v2.5C10 15 7.6 18 4.6 18c-1 0-2.1-.2-3.1-.6", []),
+    # Punctuation. Dots match the i dot (r 1.4); a baseline dot sits at y=17.6 so it lands with the strokes.
+    ".": (0, 1.75, 1.75, "", [(0, 17.6, 1.4)]),
+    ",": (0, 1.75, 1.75, "M.4 17.6-.8 21", [(0, 17.6, 1.4)]),
+    ":": (0, 1.75, 1.75, "", [(0, 8.4, 1.4), (0, 17.6, 1.4)]),
+    ";": (0, 1.75, 1.75, "M.4 17.6-.8 21", [(0, 8.4, 1.4), (0, 17.6, 1.4)]),
+    "!": (0, "s", "s", "M0 2v11", [(0, 17.6, 1.4)]),
+    "?": (9.5, "o", "o", "M.5 5.2C1 3.3 2.8 2 5 2c2.6 0 4.5 1.7 4.5 4 0 2.6-2.5 3.4-4.5 5V13", [(5, 17.6, 1.4)]),
+    "'": (0, "s", "s", "M0 2v4", []),
+    '"': (3, "s", "s", "M0 2v4M3 2v4", []),
+    "(": (4, 2.0, 1.25, "M4 1C1.4 3.6 0 7 0 10.5S1.4 17.4 4 20", []),
+    ")": (4, 1.25, 2.0, "M0 1c2.6 2.6 4 6 4 9.5S2.6 17.4 0 20", []),
+    "/": (7, "o", "o", "M0 19.5 7 1", []),
+    "+": (9, 1.75, 1.75, "M4.5 8v9M0 12.5h9", []),
+    "=": (9, 1.75, 1.75, "M0 10.5h9M0 14.5h9", []),
+    "_": (10, 1.0, 1.0, "M0 22h10", []),
+    "&": (
+        12,
+        "r",
+        "o",
+        "M12 18 3.4 8.6C2.6 7.7 2.2 6.8 2.2 5.8 2.2 3.6 4 2 6.2 2s3.8 1.6 3.8 3.6c0 2-1.6 3.1-3.6 4.3C3.5 11.6 1 13 1 15.1 1 16.8 2.7 18 5 18c2.6 0 4.6-1.4 6.2-4.4",
+        [],
+    ),
+    "@": (
+        16,
+        "r",
+        "r",
+        circ(8, 11.5, 3)
+        + "M11 8.5v4.6c0 1.5.9 2.4 2.1 2.4 1.7 0 2.9-1.8 2.9-4 0-4.4-3.6-8-8-8s-8 3.6-8 8 3.6 8 8 8c1.4 0 2.7-.3 3.8-1",
+        [],
+    ),
+    "#": (11, "o", "o", "M3.5 3 2 18M9.5 3 8 18M0 7.5h11M0 13.5h11", []),
+    "·": (0, 1.75, 1.75, "", [(0, 12.5, 1.4)]),
+    "–": (10, 1.5, 1.5, "M0 12.5h10", []),
+    "—": (16, 1.25, 1.25, "M0 12.5h16", []),
     " ": (2.5, 2.25, 2.25, "", []),
 }
 SIDE = {"s": GAP_STEM, "r": GAP_ROUND, "o": GAP_OPEN}
@@ -110,6 +194,10 @@ def svg_group(text, ink="currentColor", accent="var(--pupil)", iris_a=False):
 def specimen():
     ink, acc = "#1c1f22", "#b33a2a"
     lines = [
+        "ABCDEFGHIJKLM",
+        "NOPQRSTUVWXYZ",
+        "0123456789",
+        ".,:;!?'\"()/+=_&@#\u00b7\u2013\u2014",
         "abcdefghijklm",
         "nopqrstuvwxyz",
         "quarry curator lens forge",
@@ -137,7 +225,38 @@ def build_font():
 
     S = 40  # font units per grid unit: x-height 11 -> 440, ascender 640, descender -240
     upm = 1000
-    names = {" ": "space", "-": "hyphen"}
+    names = {
+        " ": "space",
+        "-": "hyphen",
+        ".": "period",
+        ",": "comma",
+        ":": "colon",
+        ";": "semicolon",
+        "!": "exclam",
+        "?": "question",
+        "'": "quotesingle",
+        '"': "quotedbl",
+        "(": "parenleft",
+        ")": "parenright",
+        "/": "slash",
+        "+": "plus",
+        "=": "equal",
+        "_": "underscore",
+        "&": "ampersand",
+        "@": "at",
+        "#": "numbersign",
+        "\u00b7": "periodcentered",
+        "\u2013": "endash",
+        "\u2014": "emdash",
+        **{
+            d: n
+            for d, n in zip(
+                "0123456789",
+                ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"],
+                strict=True,
+            )
+        },
+    }
     order = [".notdef"] + [names.get(c, c) for c in G]
     glyphs, metrics, cmap = {}, {}, {}
     for ch, (w, left, r, d, dots) in G.items():
@@ -153,7 +272,7 @@ def build_font():
         for cx, cy, rad in dots:
             dot = pathops.Path()
             parse_path(circ(cx, cy, rad), pathops.PathPen(dot))
-            path = pathops.op(path, dot, pathops.PathOp.UNION) if d else dot
+            path = pathops.op(path, dot, pathops.PathOp.UNION)  # union also handles an empty path
         path.convertConicsToQuads(0.05)
         path.simplify()
         pen = TTGlyphPen(None)
@@ -185,12 +304,12 @@ def build_font():
         {
             "familyName": "Panoptes",
             "styleName": "Regular",
-            "uniqueFontIdentifier": "Panoptes-Regular-0.1",
+            "uniqueFontIdentifier": "Panoptes-Regular-0.2",
             "fullName": "Panoptes Regular",
             "psName": "Panoptes-Regular",
-            "version": "Version 0.100",
+            "version": "Version 0.200",
             "copyright": "Copyright (c) 2026 Dragonhound Labs. All rights reserved.",
-            "licenseDescription": "All rights reserved; for use in the Argus repositories only. See brand/LICENSE in argus-cortex. Draft 0.1: lowercase a-z, hyphen, space.",
+            "licenseDescription": "All rights reserved; for use in the Argus repositories only. See brand/LICENSE in argus-cortex. Draft 0.2: a-z, A-Z, 0-9, basic punctuation.",
         }
     )
     fb.setupOS2(
