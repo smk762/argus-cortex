@@ -15,10 +15,13 @@ Two tiers:
 ``curated`` is reserved: argus-mask refuses it until it defines what a curated face must prove, so
 it is in the literal but not cleared.
 
-The meaning of each field is argus-mask's (#19). Change this module only together with it: every
-package that stores a ``Provenance`` reads these fields. Fields still open in argus-cortex#31 (a full
-consent record with scope, expiry and revocation; the model, seed and prompt of a generated face)
-are added here, additively, once argus-mask#19 defines them.
+A generated source may name its ``generator`` (model, model sha256, seed, prompt), as
+argus-mask#26 defined; it is optional, and only ``synthetic`` and ``personal`` sources carry one.
+A ``consented`` source's ``release_sha256`` is the key to its ``ConsentRecord``
+(:mod:`argus_cortex.consent`), which decides whether it may be used.
+
+The meaning of each field is argus-mask's (#19, #26). Change this module only together with it:
+every package that stores a ``Provenance`` reads these fields.
 """
 
 from __future__ import annotations
@@ -34,6 +37,24 @@ ProvenanceKind = Literal["personal", "stock", "synthetic", "consented", "curated
 PROVENANCE_KINDS: tuple[ProvenanceKind, ...] = get_args(ProvenanceKind)
 CLEARED_KINDS: frozenset[ProvenanceKind] = frozenset({"stock", "synthetic", "consented"})
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
+GENERATOR_KINDS: frozenset[ProvenanceKind] = frozenset({"synthetic", "personal"})
+
+
+class Generator(BaseModel):
+    """How a generated source was made (argus-mask#26): the model, its sha256, the seed and the prompt."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    model: str = Field(..., min_length=1)
+    model_sha256: str | None = Field(None, pattern=SHA256_PATTERN)
+    seed: int | None = None
+    prompt: str = ""
+
+    @model_validator(mode="after")
+    def _named(self) -> Generator:
+        if not self.model.strip():
+            raise ValueError("a generator names its model")
+        return self
 
 
 class Provenance(BaseModel):
@@ -61,6 +82,7 @@ class Provenance(BaseModel):
     notes: str = ""
     subject: str = ""
     release_sha256: str | None = Field(None, pattern=SHA256_PATTERN)
+    generator: Generator | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -83,6 +105,8 @@ class Provenance(BaseModel):
             raise ValueError(f"a {self.kind} source states its licence")
         if self.kind == "consented" and not (self.release_sha256 and self.subject.strip()):
             raise ValueError("a consented source names its subject and the sha256 of the signed release")
+        if self.generator is not None and self.kind not in GENERATOR_KINDS:
+            raise ValueError(f"a {self.kind} source has no generator; only synthetic and personal sources do")
         return self
 
     @computed_field  # type: ignore[prop-decorator]
