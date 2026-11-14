@@ -23,6 +23,17 @@ from argus_cortex.backends import (
     resolve_device,
     with_retries,
 )
+from argus_cortex.consent import (
+    CONSENT_REFUSALS,
+    CONSENT_USES,
+    ConsentRecord,
+    ConsentRefusal,
+    ConsentUse,
+    ConsentVerdict,
+    consent_matches,
+    consent_schema,
+    consent_valid,
+)
 from argus_cortex.moderation import (
     CheckFailed,
     GuardResult,
@@ -30,6 +41,14 @@ from argus_cortex.moderation import (
     NsfwResult,
     NudeNetClient,
     SingGuardClient,
+)
+from argus_cortex.provenance import (
+    CLEARED_KINDS,
+    PROVENANCE_KINDS,
+    Generator,
+    Provenance,
+    ProvenanceKind,
+    provenance_schema,
 )
 from argus_cortex.store import (
     IMAGE_COLLECTION,
@@ -84,6 +103,23 @@ __all__ = [
     "TargetCategory",
     "TargetStyle",
     "taxonomy_schema",
+    # provenance (face/voice/image sources)
+    "Provenance",
+    "ProvenanceKind",
+    "PROVENANCE_KINDS",
+    "CLEARED_KINDS",
+    "provenance_schema",
+    "Generator",
+    # consent (a real person's release for their face or voice)
+    "ConsentRecord",
+    "ConsentUse",
+    "ConsentRefusal",
+    "ConsentVerdict",
+    "CONSENT_USES",
+    "CONSENT_REFUSALS",
+    "consent_valid",
+    "consent_matches",
+    "consent_schema",
     # wire
     "VersionError",
     "check_version",

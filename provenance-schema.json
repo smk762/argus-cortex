@@ -1,0 +1,125 @@
+{
+  "$defs": {
+    "Generator": {
+      "additionalProperties": false,
+      "description": "How a generated source was made (argus-mask#26): the model, its sha256, the seed and the prompt.",
+      "properties": {
+        "model": {
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "model_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Sha256"
+        },
+        "prompt": {
+          "default": "",
+          "title": "Prompt",
+          "type": "string"
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed"
+        }
+      },
+      "required": [
+        "model"
+      ],
+      "title": "Generator",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "description": "Where a source came from. Required wherever the suite serves or trains on a likeness.\n\n- ``personal``: the user's own use; needs only ``source``; not cleared to show or share.\n- ``stock``: a published asset under its licence. ``synthetic``: generated, with no real person\n  or owned character going in.\n- ``consented``: a real person's likeness (or an owned character) under a signed release, bound\n  by the release's sha256 (never the document) and the subject as the release names them.\n- ``curated``: reserved; not cleared.\n\nUnknown fields are refused, so a misspelt field cannot be dropped in silence (argus-mask#64).\n``licence`` is read as ``license``, and the derived ``cleared`` a dumped record carries is\ndropped and recomputed, never believed.",
+      "properties": {
+        "cleared": {
+          "description": "Whether the source may be shown beyond the user's own screens: a demo, a release, anything public.",
+          "readOnly": true,
+          "title": "Cleared",
+          "type": "boolean"
+        },
+        "generator": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Generator"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "kind": {
+          "enum": [
+            "personal",
+            "stock",
+            "synthetic",
+            "consented",
+            "curated"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "license": {
+          "default": "",
+          "title": "License",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
+          "type": "string"
+        },
+        "release_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Release Sha256"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "subject": {
+          "default": "",
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "source",
+        "cleared"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    }
+  },
+  "title": "argus-cortex provenance"
+}
