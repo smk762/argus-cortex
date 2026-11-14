@@ -222,20 +222,27 @@ class RemoteBackend(Backend):
         return self._http
 
     @staticmethod
-    def _transient_errors() -> tuple[type[BaseException], ...]:
+    def _transient_errors(idempotent: bool = True) -> tuple[type[BaseException], ...]:
         """Errors worth retrying: network/timeout blips, NOT 4xx/5xx responses.
 
-        ``httpx.TransportError`` covers connect/read/write/pool timeouts and
-        connection failures. A ``raise_for_status()`` 4xx/5xx (``HTTPStatusError``)
-        is deliberately excluded — a 401/404 never succeeds on retry, and a POST
-        that reached the server must not be blindly re-sent.
+        For an idempotent request (a GET), ``httpx.TransportError`` covers
+        connect/read/write/pool timeouts and connection failures. A request that
+        is not idempotent (a POST) is retried only on errors that guarantee it
+        never reached the server: ``ConnectError``, ``ConnectTimeout`` and
+        ``PoolTimeout``. A ``ReadTimeout``, ``WriteError`` or
+        ``RemoteProtocolError`` can arrive after the server took the body, and
+        re-sending then repeats the inference (and any paid-provider charge).
+        A ``raise_for_status()`` 4xx/5xx (``HTTPStatusError``) is never retried:
+        a 401/404 never succeeds on retry.
         """
         try:
             import httpx
 
-            return (httpx.TransportError,)
+            if idempotent:
+                return (httpx.TransportError,)
+            return (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
         except ImportError:  # pragma: no cover
-            return (OSError,)
+            return (ConnectionRefusedError,) if not idempotent else (OSError,)
 
     @staticmethod
     def _wrap_errors() -> tuple[type[BaseException], ...]:
@@ -247,19 +254,24 @@ class RemoteBackend(Backend):
         except ImportError:  # pragma: no cover
             return (ValueError, OSError)
 
-    def _send(self, call: Callable[[], dict], *, label: str, attempts: int) -> dict:
+    def _send(self, call: Callable[[], dict], *, label: str, attempts: int, idempotent: bool = True) -> dict:
         """Retry *call* on transient failures; wrap any failure in BackendError.
 
         So callers catch one error type whether the endpoint was unreachable,
         returned a bad status, or sent a non-JSON body.
         """
         try:
-            return with_retries(call, attempts=attempts, retry_on=self._transient_errors())
+            return with_retries(call, attempts=attempts, retry_on=self._transient_errors(idempotent))
         except self._wrap_errors() as exc:
             raise BackendError(f"{label} failed: {exc}") from exc
 
-    def post_json(self, path: str, payload: dict, *, attempts: int = 3) -> dict:
-        """POST JSON and return the JSON response; retries transient failures only."""
+    def post_json(self, path: str, payload: dict, *, attempts: int = 3, idempotent: bool = False) -> dict:
+        """POST JSON and return the JSON response.
+
+        Retries only failures where the request never reached the server
+        (connect errors, pool timeouts). Pass ``idempotent=True`` when re-sending
+        is harmless to retry every transport error, as :meth:`get_json` does.
+        """
         client = self._client()
 
         def call() -> dict:
@@ -267,7 +279,7 @@ class RemoteBackend(Backend):
             resp.raise_for_status()
             return resp.json()
 
-        return self._send(call, label=f"POST {path}", attempts=attempts)
+        return self._send(call, label=f"POST {path}", attempts=attempts, idempotent=idempotent)
 
     def get_json(self, path: str, *, attempts: int = 3) -> dict:
         """GET and return the JSON response; retries transient failures only."""
