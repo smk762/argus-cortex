@@ -1,4 +1,9 @@
-# argus-cortex
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/smk762/argus-cortex/dev/brand/packages/cortex/argus-cortex-lockup-dark.svg">
+    <img alt="argus-cortex" src="https://raw.githubusercontent.com/smk762/argus-cortex/dev/brand/packages/cortex/argus-cortex-lockup-light.svg" height="52">
+  </picture>
+</h1>
 
 Shared foundation for the Argus suite: taxonomy, versioned wire-schema tooling, and the local/remote AI backend contract.
 
