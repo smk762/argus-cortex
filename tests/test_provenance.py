@@ -53,6 +53,30 @@ def test_rejects_unknown_kind_and_empty_source() -> None:
         Provenance(kind="personal", source="")
 
 
+def test_a_blank_source_is_refused() -> None:
+    with pytest.raises(ValidationError, match="came from"):
+        Provenance(kind="personal", source="   ")
+
+
+def test_unknown_fields_are_refused() -> None:
+    with pytest.raises(ValidationError, match="liscense"):
+        Provenance.model_validate({"kind": "stock", "source": "x", "license": "CC0-1.0", "liscense": "CC0-1.0"})
+
+
+def test_licence_is_read_as_license() -> None:
+    assert Provenance(kind="stock", source="x", licence="CC0-1.0").license == "CC0-1.0"
+    assert Provenance(kind="personal", source="x", licence="CC0-1.0").license == "CC0-1.0"
+    same = {"kind": "stock", "source": "x", "license": "CC0-1.0", "licence": "CC0-1.0"}
+    assert Provenance.model_validate(same).license == "CC0-1.0"
+    with pytest.raises(ValidationError, match="disagree"):
+        Provenance.model_validate({**same, "licence": "CC-BY-4.0"})
+
+
+def test_a_stored_cleared_flag_is_recomputed_not_believed() -> None:
+    data = {"kind": "personal", "source": "x", "cleared": True}
+    assert Provenance.model_validate(data).cleared is False
+
+
 def test_round_trips_with_cleared_in_the_payload() -> None:
     p = Provenance(kind="stock", source="unsplash", license="Unsplash")
     data = json.loads(p.model_dump_json())

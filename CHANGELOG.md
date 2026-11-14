@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`argus_cortex.provenance`.** `Provenance`, `ProvenanceKind` and `CLEARED_KINDS`, hoisted from
+  argus-mask so every package that stores where a face, voice or image came from reads one shape,
+  with a committed `provenance-schema.json` (#35).
+
+### Changed
+- **`Provenance` is strict, as argus-mask's is (argus-mask#64).** Unknown fields are refused instead
+  of dropped (`additionalProperties: false` in the schema). `licence` is read as `license`; both given
+  and different is refused. A `source` of only whitespace is refused. The derived `cleared` in a dumped
+  record is dropped on read and recomputed.
+
 ## [0.4.7] - 2026-11-13
 
 ### Added
