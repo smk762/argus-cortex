@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`revoked`, `not-yet-signed`, `expired`, `likeness-not-covered`, `use-not-covered`,
   `delivery-not-covered`), so every stage refuses for the same reasons. `consent_matches()` checks
   that a record is the release and subject a provenance names. Committed `consent-schema.json` (#53).
+  A record is frozen and its sequences are tuples, so it cannot be changed after its checks pass.
+  It is refused when the age check names nobody or comes after signing, when a revocation is
+  requested before signing, or when a listed voice delivery is blank (#56).
 - **`Provenance.generator`.** An optional `model`, `model_sha256`, `seed` and `prompt` for how a
   generated source was made, allowed only on `synthetic` and `personal` sources (#53).
 
