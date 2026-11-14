@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `SUITE.md`: a row for argus-handbook, the suite's public docs at docs.dragonhound.dev.
 
+### Changed
+- `SUITE.md`: argus-studio's row says its `/docs` keeps only the captioning concept pages; the setup guides and
+  package docs moved to argus-handbook, and the old paths 301 there.
+
 ### Fixed
 - Docs: `slow` and `cascade` are supported by agent-composer's guard router as well as argus-cull's `singguard`
   service, not by argus-cull's alone (`SingGuardClient` docstrings, README). Code is unchanged.
