@@ -1,0 +1,251 @@
+{
+  "$defs": {
+    "AgeCheck": {
+      "additionalProperties": false,
+      "description": "The adult check against ID at signing: who did it and when. Never the ID or any copy of it.",
+      "properties": {
+        "checked_by": {
+          "minLength": 1,
+          "title": "Checked By",
+          "type": "string"
+        },
+        "checked_on": {
+          "format": "date",
+          "title": "Checked On",
+          "type": "string"
+        }
+      },
+      "required": [
+        "checked_by",
+        "checked_on"
+      ],
+      "title": "AgeCheck",
+      "type": "object"
+    },
+    "ConsentRecord": {
+      "additionalProperties": false,
+      "description": "One signed likeness release, as the suite checks it. Keyed by ``release_sha256``.\n\nFree-text fields (``exclusions``, ``media``, ``territories``, ``notes``) are for people and are\nnot checked by code. Payment and retention terms stay in the signed document.",
+      "properties": {
+        "age_check": {
+          "$ref": "#/$defs/AgeCheck"
+        },
+        "collected_by": {
+          "minLength": 1,
+          "title": "Collected By",
+          "type": "string"
+        },
+        "deliveries": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Deliveries",
+          "type": "array"
+        },
+        "exclusions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Exclusions",
+          "type": "array"
+        },
+        "expires_on": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None means no expiry; it must be stated, not omitted.",
+          "title": "Expires On"
+        },
+        "face": {
+          "title": "Face",
+          "type": "boolean"
+        },
+        "media": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Media",
+          "type": "array"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
+          "type": "string"
+        },
+        "notice_days": {
+          "minimum": 0,
+          "title": "Notice Days",
+          "type": "integer"
+        },
+        "on_revoke": {
+          "enum": [
+            "delete",
+            "keep-labelled"
+          ],
+          "title": "On Revoke",
+          "type": "string"
+        },
+        "reference_images": {
+          "items": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "title": "Reference Images",
+          "type": "array"
+        },
+        "reference_recordings": {
+          "items": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "title": "Reference Recordings",
+          "type": "array"
+        },
+        "release_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Release Sha256",
+          "type": "string"
+        },
+        "revocable": {
+          "title": "Revocable",
+          "type": "boolean"
+        },
+        "revocation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Revocation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "signed_on": {
+          "format": "date",
+          "title": "Signed On",
+          "type": "string"
+        },
+        "subject": {
+          "minLength": 1,
+          "title": "Subject",
+          "type": "string"
+        },
+        "territories": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Territories",
+          "type": "array"
+        },
+        "uses": {
+          "items": {
+            "enum": [
+              "avatar",
+              "video",
+              "speech",
+              "training"
+            ],
+            "type": "string"
+          },
+          "title": "Uses",
+          "type": "array"
+        },
+        "voice": {
+          "title": "Voice",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "release_sha256",
+        "subject",
+        "collected_by",
+        "signed_on",
+        "expires_on",
+        "age_check",
+        "face",
+        "voice",
+        "uses",
+        "revocable",
+        "notice_days",
+        "on_revoke"
+      ],
+      "title": "ConsentRecord",
+      "type": "object"
+    },
+    "ConsentVerdict": {
+      "additionalProperties": false,
+      "description": "What a service returns about a record: the verdict and its reason, never the record itself.",
+      "properties": {
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "revoked",
+                "not-yet-signed",
+                "expired",
+                "likeness-not-covered",
+                "use-not-covered",
+                "delivery-not-covered"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "title": "ConsentVerdict",
+      "type": "object"
+    },
+    "Revocation": {
+      "additionalProperties": false,
+      "description": "Set by ``consent revoke``. Use stops on ``effective_on``; mask sets it to the day it runs.\n\nThe release's notice period is the subject's commitment, not a grace period for the suite.",
+      "properties": {
+        "by": {
+          "minLength": 1,
+          "title": "By",
+          "type": "string"
+        },
+        "effective_on": {
+          "format": "date",
+          "title": "Effective On",
+          "type": "string"
+        },
+        "requested_on": {
+          "format": "date",
+          "title": "Requested On",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requested_on",
+        "effective_on",
+        "by"
+      ],
+      "title": "Revocation",
+      "type": "object"
+    }
+  },
+  "title": "argus-cortex consent"
+}
