@@ -7,30 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-15
+
 ### Added
+- **GPU broker client (`argus_cortex.gpu_broker`).** `BrokerCoordinator` asks argus-iris, the suite's GPU broker,
+  for a lease; iris places it on a node, queues it by priority, reserves the VRAM and evicts idle models to make
+  room. Select it with `ARGUS_GPU_COORDINATOR=broker` and `ARGUS_GPU_BROKER_URL` (optional
+  `ARGUS_GPU_BROKER_TOKEN`, `ARGUS_GPU_TENANT`, `ARGUS_GPU_TENANT_MANIFEST`). A lease long-polls while queued,
+  heartbeats in the background, re-attaches if the broker restarts, and reports its outcome (`ok`, `failed`,
+  `oom`, `cancelled`) and peak VRAM on release. Each request carries a `request_id`, so the one retry after a
+  lost response gets the same lease. It fails open: if the broker is unreachable or answers 5xx, the lease comes
+  from `ARGUS_GPU_BROKER_FALLBACK` (`lease`, the default, or `none`). A 4xx or an incompatible version raises
+  `BrokerError`; a refusal raises the new `GpuLeaseRefused`. httpx is behind `[remote]` (#78).
+- **GPU wire models (`argus_cortex.gpu_wire`).** The lease contract (`LeaseRequest`, `LeaseStatus`, `Heartbeat`,
+  `HeartbeatReply`, `LeaseRelease`; `lease_version` 1.0) and `TenantManifest` (`tenant_version` 1.0), the
+  `gpu-tenant.yaml` every repo that uses a GPU commits: its kinds of work with target, footprint (`vram_mb`, and
+  `model_mb` for the weights that stay loaded), priority and preemptibility, and its resident models with the
+  routes and hints the broker uses to reach, unload, evict and warm them. Committed `gpu-lease-schema.json` and
+  `gpu-tenant-schema.json` (#78).
+- **`lease()` options and handle.** Every coordinator's `lease()` takes optional `priority`, `target`, `kind`,
+  `preemptible`, `constraints` and `model_mb`, which only the broker uses, and yields a `GpuLease` (`node`,
+  `base_url`, `should_yield()`, `report_peak_vram()`). Every coordinator gains an async `alease()`. Existing
+  `with coordinator.lease(caller=, min_vram_mb=):` calls are unchanged (#78).
+- **`[yaml]` extra** (PyYAML) for `load_tenant_manifest()` reading YAML; JSON needs nothing (#78).
 - `SUITE.md`: a row for argus-handbook, the suite's public docs at docs.dragonhound.dev.
+- `brand/`: the suite's identity (vesica-iris suite mark, one mark per package, Panoptes lettering font, the
+  identity sheet, and `brand/tools/panoptes.py` to regenerate them). Panoptes 0.2 adds capitals, digits and basic
+  punctuation (85 glyphs); glyphs made only of dots, like the colon, keep every dot in the font build. Favicon sets
+  for every web UI (`mark/favicon/`, `packages/<pkg>/favicon/`) and `panoptes.py favicons` to regenerate them;
+  `brand/README.md` says where each UI puts them. Not part of the package: excluded from the wheel and the sdist.
 
 ### Changed
-- `SUITE.md`: argus-studio's row says its `/docs` keeps only the captioning concept pages; the setup guides and
-  package docs moved to argus-handbook, and the old paths 301 there.
+- `SUITE.md`: the "Share the GPU" row points at the broker and asks each repo to declare its GPU use in a
+  `gpu-tenant.yaml` (#78). argus-studio's row says its `/docs` keeps only the captioning concept pages; the setup
+  guides and package docs moved to argus-handbook, and the old paths 301 there.
+- `release.yml` also sends `cortex-released` to argus-mint, whose image installs cortex from its `server` extra's
+  range and now rebuilds on it (argus-mint#29).
 
 ### Fixed
 - Docs: `slow` and `cascade` are supported by agent-composer's guard router as well as argus-cull's `singguard`
   service, not by argus-cull's alone (`SingGuardClient` docstrings, README). Code is unchanged.
-
-### Added
-- `brand/`: Panoptes 0.2 adds capitals, digits and basic punctuation (85 glyphs). Glyphs made only of dots, like the
-  colon, now keep every dot in the font build.
-- `brand/`: favicon sets for every web UI (`mark/favicon/`, `packages/<pkg>/favicon/`: themed `icon.svg`,
-  `favicon.ico`, `apple-icon.png`, manifest PNGs) and `panoptes.py favicons` to regenerate them; `brand/README.md`
-  says where each UI puts them.
-- `brand/`: the suite's identity (vesica-iris suite mark, one mark per package, Panoptes lettering font, the
-  identity sheet, and `brand/tools/panoptes.py` to regenerate them). Not part of the package: excluded from the
-  wheel and the sdist.
-
-### Changed
-- `release.yml` also sends `cortex-released` to argus-mint, whose image installs cortex from its
-  `server` extra's range and now rebuilds on it (argus-mint#29).
 
 ## [0.5.0] - 2026-11-14
 
@@ -280,7 +296,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/smk762/argus-cortex/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/smk762/argus-cortex/compare/v0.4.7...v0.5.0
 [0.4.7]: https://github.com/smk762/argus-cortex/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/smk762/argus-cortex/compare/v0.4.5...v0.4.6
