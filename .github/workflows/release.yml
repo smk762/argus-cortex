@@ -159,7 +159,7 @@ jobs:
             exit 1
           fi
           failed=0
-          for repo in argus-curator argus-lens argus-proof argus-forge argus-darkroom; do
+          for repo in argus-curator argus-lens argus-proof argus-forge argus-darkroom argus-mint; do
             if gh api "repos/${GITHUB_REPOSITORY_OWNER}/${repo}/dispatches" \
                 -f event_type=cortex-released -f "client_payload[version]=${tag#v}"; then
               echo "Dispatched cortex-released to $repo"

@@ -1,4 +1,9 @@
-# argus-cortex
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/smk762/argus-cortex/dev/brand/packages/cortex/argus-cortex-lockup-dark.svg">
+    <img alt="argus-cortex" src="https://raw.githubusercontent.com/smk762/argus-cortex/dev/brand/packages/cortex/argus-cortex-lockup-light.svg" height="52">
+  </picture>
+</h1>
 
 Shared foundation for the Argus suite: taxonomy, versioned wire-schema tooling, and the local/remote AI backend contract.
 
@@ -11,10 +16,12 @@ Part of the Argus suite; [SUITE.md](https://github.com/smk762/argus-cortex/blob/
 - **`argus_cortex.consent`**: a real person's likeness release, as argus-mask#26 defined it. `ConsentRecord` is keyed by the `release_sha256` a `consented` `Provenance` names, and holds the subject, who collected it, signing and expiry dates (expiry must be stated, `null` for none), the age check (who and when, never the ID), the `face`/`voice` opt-ins, voice `deliveries`, `uses` (`avatar`, `video`, `speech`, `training`; training is off unless listed), sha256s of the reference images and recordings, revocation terms and any `revocation`. `consent_valid(record, use=, likeness=, at=, delivery=)` returns a `ConsentVerdict` (`ok`, `reason`, `detail`), checking in order `revoked`, `not-yet-signed`, `expired`, `likeness-not-covered`, `use-not-covered`, `delivery-not-covered`; `at` must be timezone-aware and dates compare as UTC days, so the check never reads the clock. `consent_matches(record, provenance)` checks the record is the release and subject a provenance names. A record names a person, so services return only verdicts, never records. `consent_schema()` renders the committed `consent-schema.json`.
 - **`argus_cortex.wire`** — the versioned wire-schema toolkit: `check_version()` (major-compatibility gate), `make_versioned_base()` (a Pydantic base that stamps + checks a version field like `proof_version` / `manifest_version`), and `wire_schema()` / `render_schema()` for the committed-schema `schema --check` CLI pattern.
 - **`argus_cortex.backends`** — the AI-backend contract generalised from argus-lens: `Backend` / `LocalBackend` / `RemoteBackend` (point at a hosted service by `base_url`, `host`/`port`, or a known `RemoteProvider`), plus `with_retries()` and `resolve_device()`. httpx lives behind the `[remote]` extra.
-- **`argus_cortex.server`** — shared write-guard + env-flag scaffolding for the suite's FastAPI micro-servers: `WriteGuard` (a pure-ASGI method-gate that never buffers streaming responses), the `constant_refuse()` / `cross_site_refuse()` predicates (read-only/replay mode and cross-site-write protection are two configs of the one guard), the `UNSAFE_METHODS` / `TRUTHY` / `FALSY` constants, and `env_flag()` (warns on a mistyped protection flag rather than silently disabling it). Starlette lives behind the `[server]` extra.
+- **`argus_cortex.server`** — shared write-guard + env-flag scaffolding for the suite's FastAPI micro-servers: `WriteGuard` (a pure-ASGI method-gate that never buffers streaming responses), the `constant_refuse()` / `cross_site_refuse()` predicates (read-only/replay mode and cross-site-write protection are two configs of the one guard; a same-host write is trusted only for an IP literal, `localhost` or a name in `trusted_hosts`, so DNS rebinding cannot pass it), the `UNSAFE_METHODS` / `TRUTHY` / `FALSY` constants, and `env_flag()` (warns on a mistyped protection flag rather than silently disabling it). Starlette lives behind the `[server]` extra.
 - **`argus_cortex.xmp`** — the suite's one XMP sidecar implementation (hoisted from argus-lens): `write_xmp()` / `read_xmp()` / `merge_xmp()` / `parse_xmp()` over an `XmpData` model covering `dc` (keywords, description), `xmp` (Rating, Label), `lr` (hierarchical keywords), `Iptc4xmpExt` (PersonInImage), `mwg-rs` face/pet regions, and `argus:ContentRating`. Writes **merge**: each property you set replaces that property (latest write wins), everything else in the sidecar — Lightroom develop settings, GPS, another stage's fields — is preserved. `None` leaves a property alone, an empty value removes it. Writes are atomic; an unparseable existing sidecar raises `XmpError` instead of being clobbered. Stdlib + pydantic only.
 - **`argus_cortex.moderation`** — the suite's content-moderation clients, over HTTP to servers the deployer runs (nothing here imports a detector): `NudeNetClient` (a NudeNet server's `/infer` → `NsfwResult`: detections, per-class maxima, and an **exposed score**) and `SingGuardClient` (a SingGuard server's `/api/guard/check` → `GuardResult`: verdict, the policy rules that fired, explanation; optional custom policy text). `DEFAULT_EXPOSED_LABELS` is the suite's **one definition of nudity**: the five exposed buttocks/breast/genitalia/anus classes — faces, covered parts, and bare feet, belly, armpits or male chest never count. Stdlib + pydantic; Pillow (for SingGuard's downscaling of large images, on by default) is behind `[images]`: without it `SingGuardClient(...)` raises `ModerationConfigError` at construction unless given `downscale=False`. A `user:password@` in a URL is sent as HTTP Basic auth. URLs are passed in, never read from the environment here: each stage owns its config. NudeNet itself is AGPL-3.0, which is why it stays behind an HTTP boundary.
 - **`argus_cortex.gpu`**: GPU tenancy, generalised from argus-lens. `coordinator_from_env()` returns a coordinator whose `lease(caller=, min_vram_mb=)` holds a GPU slot for a block of work. `none` (the default) grants every lease at once. `lease` takes an exclusive `flock` that every argus process on the host shares (one lock for the host, not per GPU), then waits until `free_vram_mb()` (NVML, behind `[gpu]`) reports `min_vram_mb` free across *every* process on the card, ComfyUI and Ollama included, which never take the lock. It raises `GpuLeaseTimeout` after `ARGUS_GPU_LEASE_TIMEOUT_S` (300 s). The VRAM check is a snapshot, not a reservation, and a probe that cannot run lets the lease through. Containers each have their own `/tmp`, so set `ARGUS_GPU_LEASE_PATH` to a file on a volume every GPU service mounts, or the lock coordinates nothing. `ARGUS_GPU_DEVICE` (default `0`; an invalid value warns and falls back to `0`) picks which card NVML probes for free VRAM; the lock stays host-wide.
+  - **Broker.** `ARGUS_GPU_COORDINATOR=broker` asks the suite's GPU broker, argus-iris, at `ARGUS_GPU_BROKER_URL` (bearer `ARGUS_GPU_BROKER_TOKEN`, optional) instead. The broker places the lease on a node (morpheus, dragon, jarrah), queues it by priority, holds a real VRAM reservation, and evicts idle models to make room. `lease()` now also takes optional `priority` (`realtime`/`interactive`/`batch`/`background`), `target` (`comfyui`, `ollama:<model>`, `in-process`), `kind`, `preemptible`, `constraints` (`GpuConstraints`: `node`, `min_cc`, `bf16`) and `model_mb` (the part of `min_vram_mb` that is weights the service keeps loaded after the lease, such as a ComfyUI checkpoint or an Ollama model, so the broker counts them once rather than per lease); the local coordinators ignore them. Every coordinator yields a `GpuLease`: `node` and `base_url` say where the broker placed the work (call that URL; `None` means use your own), `should_yield()` turns true when the broker wants the GPU back (release at the next safe point; nothing is killed), and `report_peak_vram(mb)` feeds the broker's footprint learning. `alease()` is the async form on every coordinator; the file lease waits in a worker thread. Each lease carries a fresh `request_id`, so the one retry after a lost POST response returns the same lease rather than a second one. A broker lease heartbeats in the background, re-attaches if the broker restarts, and reports its outcome (`ok`/`failed`/`oom`/`cancelled`) on release. **It fails open**: unreachable or 5xx, and the lease comes from `ARGUS_GPU_BROKER_FALLBACK` (`lease`, the default, or `none`) with `via="fallback"`; a 4xx or an incompatible `lease_version` raises `BrokerError`, a refusal `GpuLeaseRefused`. httpx behind `[remote]`.
+  - **Tenant manifests.** Every repo that uses a GPU commits a `gpu-tenant.yaml` (`argus_cortex.gpu_wire.TenantManifest`): its kinds of work with target, declared VRAM, default priority and preemptibility, and the models it keeps resident with keepalive and idle-kill hints. `ARGUS_GPU_TENANT_MANIFEST` points the broker coordinator at it, and it is registered with the broker before the first lease; `ARGUS_GPU_TENANT` names the tenant if there is no manifest. `load_tenant_manifest()` reads YAML (behind `[yaml]`) or JSON. The lease wire models and the manifest render the committed `gpu-lease-schema.json` and `gpu-tenant-schema.json` (`make schema`; drift-tested), so non-Python callers and repos validate against those.
 - **`argus_cortex.store`** — the optional **stateful services layer** (the suite's persistent "memory"). External and opt-in — every store is configured by `CORTEX_*` env vars and no-ops when its URL is unset.
   - **Phase 1 — Postgres lineage store.** Persists the `source_asset → caption → human_edit → dataset_membership → training_run` DAG for LoRA reproducibility, edit capture, and the feedback loop. Backed by a psycopg connection **pool** (concurrent `asyncio.to_thread` calls are safe; a dropped connection is replaced), with a `transaction()` boundary for atomic multi-step writes. `open_lineage_store()` returns a no-op store when `CORTEX_PG_URL` is unset; psycopg lives behind the `[postgres]` extra.
   - **Phase 2 — Qdrant vector store.** Stores image + tag-set embeddings for retrieval-augmented few-shot and near-duplicate curation; put a `caption_id`/`asset_id` in a point's payload and a search hit joins straight back to the lineage. `open_vector_store()` no-ops when `CORTEX_QDRANT_URL` is unset; qdrant-client lives behind the `[qdrant]` extra. cortex stores vectors it's *handed* — computing embeddings is the caller's job.
@@ -58,7 +65,7 @@ result.exposed_score    # 0.0-1.0 over DEFAULT_EXPOSED_LABELS; result.labels = p
 guard = SingGuardClient("http://guard:9150", policy=None)  # None = SingGuard's default rules
 # thinking="fast" (default) is a verdict and rule; "fast-slow" also writes why; "slow" writes why
 # with no fast verdict ahead of the reasoning; "cascade" is fast, then slow only for what fast
-# flagged (the last two: argus-cull's singguard service only).
+# flagged (the last two: agent-composer's guard or argus-cull's singguard service).
 verdict = guard.check(image_bytes, text="the prompt, if any")
 preflight = guard.check_text("the prompt")    # no image: judge a prompt before it is run
 verdict.safe, verdict.rules   # False, ["B. Real-World Crimes & Public Safety"]
@@ -95,6 +102,20 @@ try:
         run_the_model()
 except GpuLeaseTimeout:
     ...   # no slot in time: back off, or answer 503
+```
+
+Through the broker, the same code can ask for a placement and honour a yield:
+
+```python
+gpu = coordinator_from_env()   # ARGUS_GPU_COORDINATOR=broker, ARGUS_GPU_BROKER_URL=http://morpheus:8120
+async with gpu.alease(caller="expand", min_vram_mb=6000, target="ollama:qwen3:8b", priority="interactive") as lease:
+    ollama = lease.base_url or settings.ollama_url   # dragon, or jarrah when dragon is full
+    ...
+with gpu.lease(caller="bake", min_vram_mb=9000, target="comfyui", priority="batch", preemptible=True) as lease:
+    for tile in tiles:
+        if lease.should_yield():
+            break   # requeue the rest; a higher-priority job wants the card
+        bake(tile)
 ```
 
 Each `check()` raises `CheckFailed` (`NudeNetCheckFailed` / `GuardCheckFailed`) for a network error or an unusable answer, so a caller checking many images can record "unchecked" against the one image — and should treat unchecked as *not* safe. Bad configuration raises `ModerationConfigError`, whose message never echoes the URL.
@@ -149,13 +170,14 @@ link = blobs.url(sha, expires=3600)      # presigned GET URL
 
 ```bash
 uv pip install argus-cortex              # core (pydantic only)
-uv pip install "argus-cortex[remote]"    # + httpx for RemoteBackend
+uv pip install "argus-cortex[remote]"    # + httpx for RemoteBackend and the GPU broker client
 uv pip install "argus-cortex[server]"    # + starlette for argus_cortex.server (WriteGuard, env_flag)
 uv pip install "argus-cortex[postgres]"  # + psycopg for the lineage store
 uv pip install "argus-cortex[qdrant]"    # + qdrant-client for the vector store
 uv pip install "argus-cortex[s3]"        # + minio for the blob store
 uv pip install "argus-cortex[images]"    # + Pillow for SingGuardClient downscaling (on by default)
 uv pip install "argus-cortex[gpu]"       # + nvidia-ml-py for the GPU lease's free-VRAM probe
+uv pip install "argus-cortex[yaml]"      # + PyYAML for reading a gpu-tenant.yaml (JSON needs nothing)
 ```
 
 The stateful services are configured via `CORTEX_*` env vars — see [`.env.example`](.env.example). Each is optional: leave a URL unset and that feature degrades to a no-op.

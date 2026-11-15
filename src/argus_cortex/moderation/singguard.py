@@ -10,17 +10,21 @@ Animal Abuse. A custom policy text replaces them. It gives no scores.
 API: ``POST /api/guard/check`` with JSON ``{input, image_base64, policy,
 thinking}`` (or ``{input, input_role, policy, thinking}`` for a text-only
 check, which not every server takes), answered by ``{safe, verdict, rule, explanation, categories:
-[{code, label, why}], model, elapsed_ms}`` and, from the argus-cull
-``singguard`` service, ``thinking``: the mode the server judged in, which
-its ``SINGGUARD_FORCE_THINKING`` can make differ from the one asked for.
+[{code, label, why}], model, elapsed_ms}`` and ``thinking``: the mode the server judged in. A
+``cascade`` check reports ``fast`` or ``slow``, and argus-cull's ``SINGGUARD_FORCE_THINKING`` can
+make it differ from the mode asked for.
 
 ``thinking`` is ``fast`` (a verdict and rule), ``fast-slow`` (SingGuard's own
 reasoning mode: a fast first-line verdict, then the reasoning and a final
-answer), ``slow`` (the argus-cull service's variant with no first-line
-verdict, so the reasoning is not anchored to a verdict made before it) or
-``cascade`` (that service's ``fast`` for every image and ``slow`` for the ones
-fast flags, slow's verdict standing). Servers without ``slow`` and ``cascade``
-answer HTTP 400 to them.
+answer), ``slow`` (a variant with no first-line verdict, so the reasoning is
+not anchored to a verdict made before it) or ``cascade`` (``fast`` for every
+check and ``slow`` for the ones fast flags, slow's verdict standing).
+
+``fast`` and ``fast-slow`` are SingGuard's own modes. ``slow`` and ``cascade``
+are added by the suite's two guard servers, which both take all four:
+agent-composer's guard router (images and text-only checks) and argus-cull's
+``singguard`` service (images only). Any other SingGuard server answers HTTP
+400 to them.
 
 Large images are downscaled before sending (Pillow, from the ``[images]``
 extra, imported only when downscaling is on).
@@ -132,7 +136,9 @@ def downscale(data: bytes, max_edge: int = MAX_EDGE, max_bytes: int = MAX_BYTES)
     the first encoding is still too large.
 
     Raises :class:`GuardCheckFailed` for an image Pillow cannot read or shrink
-    under *max_bytes*.
+    under *max_bytes*, and for a multi-frame image (animated GIF/WebP/APNG,
+    multi-page TIFF): SingGuard judges one picture, so a verdict on frame 0
+    would not describe the frames after it. Split the frames and check each.
     """
     try:
         from PIL import Image, ImageOps
@@ -140,6 +146,10 @@ def downscale(data: bytes, max_edge: int = MAX_EDGE, max_bytes: int = MAX_BYTES)
         raise ModerationConfigError(_NEEDS_PILLOW) from exc
     try:
         with Image.open(io.BytesIO(data)) as im:
+            if getattr(im, "n_frames", 1) > 1:
+                raise GuardCheckFailed(
+                    f"image has {im.n_frames} frames; SingGuard judges one, so check each frame separately"
+                )
             if max(im.size) <= max_edge and len(data) <= max_bytes:
                 return data
             # Shrink first, so a JPEG decodes at reduced scale (draft mode);
@@ -176,7 +186,8 @@ class SingGuardClient:
     *thinking* is one of :data:`THINKING_MODES`: ``fast`` (verdict and rule),
     ``fast-slow`` (also writes why), ``slow`` (writes why, with no fast
     verdict ahead of the reasoning) or ``cascade`` (fast, then slow only for
-    what fast flagged); the last two need the argus-cull ``singguard`` service.
+    what fast flagged); the last two need agent-composer's guard router or
+    argus-cull's ``singguard`` service.
     With *downscale* on (the default, needs ``[images]``), images over
     :data:`MAX_EDGE` px or :data:`MAX_BYTES` are shrunk before sending.
     Thread-safe: :meth:`check` holds no state.

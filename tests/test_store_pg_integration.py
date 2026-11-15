@@ -18,7 +18,7 @@ import uuid
 
 import pytest
 
-from argus_cortex.store import Caption, HumanEdit, PostgresLineageStore, SourceAsset
+from argus_cortex.store import Caption, HumanEdit, PostgresLineageStore, SourceAsset, StoreError
 
 _PG_URL = os.environ.get("CORTEX_TEST_PG_URL")
 
@@ -54,6 +54,19 @@ def test_write_persists_without_an_explicit_transaction(store: PostgresLineageSt
         assert other.caption_edit_pairs(dataset=dataset) == [("model wrote", "human fixed")]
     finally:
         other.close()
+
+
+def test_membership_refuses_an_edit_of_another_caption(store: PostgresLineageStore) -> None:
+    dataset = _dataset()
+    aid = store.record_asset(SourceAsset(uri=f"it://{dataset}", sha256=uuid.uuid4().hex))
+    mine = store.record_caption(aid, Caption(final_caption="mine"))
+    other = store.record_caption(aid, Caption(final_caption="other"))
+    foreign_edit = store.record_edit(other, HumanEdit(edited_caption="other's fix"))
+    with pytest.raises(StoreError, match="not an edit of caption"):
+        store.add_to_dataset(dataset, mine, edit_id=foreign_edit)
+    own_edit = store.record_edit(mine, HumanEdit(edited_caption="my fix"))
+    store.add_to_dataset(dataset, mine, edit_id=own_edit)
+    assert store.caption_edit_pairs(dataset=dataset) == [("mine", "my fix")]
 
 
 def test_transaction_commits_together(store: PostgresLineageStore) -> None:

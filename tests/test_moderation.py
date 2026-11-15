@@ -357,6 +357,16 @@ def test_downscale_enforces_the_byte_limit() -> None:
         singguard.downscale(buf.getvalue(), max_bytes=100)
 
 
+@pytest.mark.parametrize("size", [(64, 64), (4000, 3000)])
+def test_downscale_refuses_multi_frame_images(size: tuple[int, int]) -> None:
+    """A benign first frame must not stand in for the frames after it, small or large."""
+    frames = [Image.new("RGB", size, c) for c in ("white", "red")]
+    buf = io.BytesIO()
+    frames[0].save(buf, "GIF", save_all=True, append_images=frames[1:])
+    with pytest.raises(GuardCheckFailed, match="2 frames"):
+        singguard.downscale(buf.getvalue())
+
+
 def test_singguard_without_pillow_fails_at_construction(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(singguard.importlib.util, "find_spec", lambda name: None)
     with pytest.raises(ModerationConfigError, match="images"):

@@ -41,6 +41,9 @@ VectorDistance = Literal["Cosine", "Euclid", "Dot", "Manhattan"]
 
 # Fixed namespace for deriving a Qdrant-valid UUID from an arbitrary string key.
 _POINT_ID_NAMESPACE = uuid.UUID("a5c0ffee-0000-4000-8000-000000000001")
+# Reserved payload field carrying a caller's key that normalise_point_id rewrote,
+# so a search hit's ``id`` is the key the caller upserted, not its UUID5.
+POINT_ID_FIELD = "_point_id"
 
 
 def normalise_point_id(point_id: str | int) -> str | int:
@@ -49,9 +52,10 @@ def normalise_point_id(point_id: str | int) -> str | int:
     Qdrant only allows an integer or a UUID as a point id, so an arbitrary string
     key (e.g. a lineage ``caption_id`` that happens not to be a UUID) is mapped
     **deterministically** to a UUID5 in :data:`_POINT_ID_NAMESPACE`. The mapping is
-    stable, so re-upserting the same key overwrites the same point. Carry the
-    original key in the payload if you need to read it back — the returned/searched
-    ``VectorHit.id`` is this normalised id, not the original string.
+    stable, so re-upserting the same key overwrites the same point.
+    :meth:`QdrantVectorStore.upsert` keeps the original key in the payload under
+    :data:`POINT_ID_FIELD`, and :meth:`QdrantVectorStore.search` returns it as
+    ``VectorHit.id``.
     """
     if isinstance(point_id, int):
         return point_id
@@ -83,10 +87,10 @@ class VectorHit(BaseModel):
     """One search result: the point id, its similarity score, and its payload.
 
     ``payload`` is where the lineage ids live, so a hit joins back to the phase-1
-    Postgres rows (``caption_id`` → caption, ``asset_id`` → source_asset). Prefer
-    joining on a payload id over ``id``: ``id`` is the string form of the Qdrant
-    point id (an int comes back stringified, and a non-UUID key was normalised to
-    a UUID5 at upsert), so it may not equal the key you passed.
+    Postgres rows (``caption_id`` → caption, ``asset_id`` → source_asset). ``id``
+    is the key passed to ``upsert`` as a string (an int comes back stringified, a
+    UUID in canonical form); a key normalised to a UUID5 is restored from the
+    reserved :data:`POINT_ID_FIELD`, which is stripped from ``payload``.
     """
 
     id: str
@@ -254,11 +258,17 @@ class QdrantVectorStore:
     ) -> None:
         # Qdrant only accepts an int or UUID id; map any other string key to a
         # stable UUID5 so a lineage caption_id/asset_id "just works" (see
-        # normalise_point_id). Carry the original key in payload to read it back.
+        # normalise_point_id), and carry the original key in the payload so
+        # search() can hand it back.
         def op() -> None:
             client = self._client()
             m = self._models()
-            point = m.PointStruct(id=normalise_point_id(point_id), vector=list(vector), payload=dict(payload or {}))
+            qdrant_id = normalise_point_id(point_id)
+            body = dict(payload or {})
+            body.pop(POINT_ID_FIELD, None)
+            if qdrant_id != point_id:
+                body[POINT_ID_FIELD] = point_id
+            point = m.PointStruct(id=qdrant_id, vector=list(vector), payload=body)
             client.upsert(collection_name=collection, points=[point])
 
         wrap_errors(op, errors=_qdrant_error_types(), label="upsert")
@@ -282,14 +292,18 @@ class QdrantVectorStore:
             # query_points returns a QueryResponse(.points); tolerate a bare list,
             # and a None .points (empty/error variant) collapses to no hits.
             points = getattr(resp, "points", resp) or []
-            return [
-                VectorHit(
-                    id=str(p.id),
-                    score=float(p.score) if p.score is not None else 0.0,
-                    payload=dict(p.payload or {}),
+            hits = []
+            for p in points:
+                body = dict(p.payload or {})
+                original = body.pop(POINT_ID_FIELD, None)
+                hits.append(
+                    VectorHit(
+                        id=str(original) if original is not None else str(p.id),
+                        score=float(p.score) if p.score is not None else 0.0,
+                        payload=body,
+                    )
                 )
-                for p in points
-            ]
+            return hits
 
         return wrap_errors(op, errors=_qdrant_error_types(), label="search")
 

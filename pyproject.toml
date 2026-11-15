@@ -38,6 +38,9 @@ images = ["pillow>=10.0"]
 # NVML (nvidia-ml-py, imported as pynvml), for argus_cortex.gpu's free-VRAM probe;
 # imported only when probed. Without it the lease skips the VRAM wait.
 gpu = ["nvidia-ml-py>=12.535"]
+# PyYAML, for argus_cortex.gpu_wire.load_tenant_manifest reading a gpu-tenant.yaml;
+# imported only there. JSON manifests need nothing.
+yaml = ["pyyaml>=6.0"]
 # The store drivers are in dev so each store's real client path (pool/enum/client
 # construction, error wrapping) is exercised in CI, not just via fakes.
 # starlette + httpx power the pure-ASGI guard tests (Starlette TestClient).
@@ -53,6 +56,7 @@ dev = [
     "httpx2>=2.7",
     "pillow>=10.0",
     "nvidia-ml-py>=12.535",
+    "pyyaml>=6.0",
     "certifi>=2026.10.19",
 ]
 
@@ -67,6 +71,9 @@ version-file = "src/argus_cortex/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/argus_cortex"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["brand/"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

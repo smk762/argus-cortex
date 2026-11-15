@@ -44,6 +44,37 @@ def test_lock_file_is_world_writable_despite_umask(tmp_path: Path) -> None:
     assert mode == 0o666
 
 
+def test_lock_path_symlink_is_refused_and_its_target_left_alone(tmp_path: Path) -> None:
+    """A symlink planted at the shared lock path must not make its target world-writable."""
+    target = tmp_path / "secret.cfg"
+    target.write_text("token")
+    target.chmod(0o600)
+    link = tmp_path / "gpu.lock"
+    link.symlink_to(target)
+    with (
+        pytest.raises(RuntimeError, match="symlink"),
+        gpu.LeaseCoordinator(lock_path=str(link), timeout_s=1, probe=lambda device: None).lease(
+            caller="a", min_vram_mb=0
+        ),
+    ):
+        pass
+    assert target.stat().st_mode & 0o777 == 0o600
+
+
+def test_lock_path_that_is_not_a_regular_file_is_refused(tmp_path: Path) -> None:
+    fifo = tmp_path / "gpu.lock"
+    os.mkfifo(fifo)
+    os.chmod(fifo, 0o600)
+    with (
+        pytest.raises(RuntimeError, match="not a regular file"),
+        gpu.LeaseCoordinator(lock_path=str(fifo), timeout_s=1, probe=lambda device: None).lease(
+            caller="a", min_vram_mb=0
+        ),
+    ):
+        pass
+    assert fifo.stat().st_mode & 0o777 == 0o600
+
+
 def test_lease_released_when_the_body_raises(tmp_path: Path) -> None:
     with (
         pytest.raises(RuntimeError, match="boom"),

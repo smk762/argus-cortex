@@ -95,7 +95,9 @@ def test_mode_is_by_name() -> None:
     assert policies.mode("default") == "sfw"
     assert policies.mode("sfw-strict") == "sfw"  # a later SFW policy needs no table entry
     assert [policies.mode(n) for n in policies.POLICIES[1:]] == ["nsfw"] * 4
-    assert policies.mode("defaults") == "nsfw"
+    for unknown in ("defaults", "adult-lax", "", "Default"):  # a typo fails closed, never to nsfw
+        with pytest.raises(ModerationConfigError, match="unknown SingGuard policy"):
+            policies.mode(unknown)
 
 
 def test_unknown_policy_names_are_refused() -> None:

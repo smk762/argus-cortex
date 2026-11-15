@@ -107,6 +107,14 @@ def test_parse_endpoint_forms() -> None:
     assert _parse_endpoint("minio.example.com:9000") == ("minio.example.com:9000", True)
 
 
+@pytest.mark.parametrize("endpoint", ["htps://minio:9000", "s3://minio:9000", "tls://minio:9000"])
+def test_parse_endpoint_rejects_unknown_schemes(endpoint: str) -> None:
+    """Only an explicit http:// means plaintext; anything unrecognised must not downgrade."""
+    with pytest.raises(StoreError, match="scheme must be"):
+        _parse_endpoint(endpoint)
+    assert _parse_endpoint("HTTPS://minio") == ("minio", True)
+
+
 def test_parse_endpoint_rejects_embedded_credentials() -> None:
     with pytest.raises(StoreError, match="must not embed credentials"):
         _parse_endpoint("http://key:secret@minio:9000")
