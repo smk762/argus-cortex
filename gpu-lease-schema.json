@@ -1,0 +1,476 @@
+{
+  "$defs": {
+    "GpuConstraints": {
+      "additionalProperties": false,
+      "description": "Where a lease may be placed, beyond fitting its VRAM. Unset fields do not constrain.",
+      "properties": {
+        "bf16": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "True: only a GPU with native bf16.",
+          "title": "Bf16"
+        },
+        "min_cc": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Minimum CUDA compute capability, e.g. 7.0 (no Pascal).",
+          "title": "Min Cc"
+        },
+        "node": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "pattern": "^[a-z0-9][a-z0-9._-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Only this node (e.g. a process pinned to its host's GPU).",
+          "title": "Node"
+        }
+      },
+      "title": "GpuConstraints",
+      "type": "object"
+    },
+    "Heartbeat": {
+      "description": "``POST /leases/{id}/heartbeat``: keep a granted lease alive.",
+      "properties": {
+        "lease_version": {
+          "default": "1.0",
+          "title": "Lease Version",
+          "type": "string"
+        },
+        "peak_vram_mb": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Peak VRAM the caller saw since the last heartbeat.",
+          "title": "Peak Vram Mb"
+        }
+      },
+      "title": "Heartbeat",
+      "type": "object"
+    },
+    "HeartbeatReply": {
+      "description": "The broker's answer to a heartbeat. ``yield_requested``: release at the next safe point.",
+      "properties": {
+        "lease_version": {
+          "default": "1.0",
+          "title": "Lease Version",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "state": {
+          "enum": [
+            "queued",
+            "granted",
+            "refused",
+            "expired",
+            "released"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "ttl_s": {
+          "default": 60.0,
+          "exclusiveMinimum": 0,
+          "title": "Ttl S",
+          "type": "number"
+        },
+        "yield_requested": {
+          "default": false,
+          "title": "Yield Requested",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "title": "HeartbeatReply",
+      "type": "object"
+    },
+    "LeaseRelease": {
+      "description": "``POST /leases/{id}/release``: give a lease back (or give up a queued one, with ``cancelled``).",
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "lease_version": {
+          "default": "1.0",
+          "title": "Lease Version",
+          "type": "string"
+        },
+        "outcome": {
+          "default": "ok",
+          "enum": [
+            "ok",
+            "failed",
+            "oom",
+            "cancelled"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "peak_vram_mb": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Peak Vram Mb"
+        }
+      },
+      "title": "LeaseRelease",
+      "type": "object"
+    },
+    "LeaseRequest": {
+      "description": "``POST /leases``: ask for *vram_mb* on a node that serves *target*.\n\n``priority`` and ``preemptible`` left unset take the tenant manifest's default for *kind*. ``resume`` re-attaches\na lease whose work is already running (the broker restarted and lost it): the broker accounts for it at once\ninstead of queueing it.",
+      "properties": {
+        "caller": {
+          "default": "",
+          "description": "Free-form detail for logs and the dashboard.",
+          "maxLength": 200,
+          "title": "Caller",
+          "type": "string"
+        },
+        "constraints": {
+          "$ref": "#/$defs/GpuConstraints",
+          "default": {
+            "bf16": null,
+            "min_cc": null,
+            "node": null
+          }
+        },
+        "deadline": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Refuse rather than grant after this time.",
+          "title": "Deadline"
+        },
+        "kind": {
+          "default": "default",
+          "maxLength": 100,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "title": "Kind",
+          "type": "string"
+        },
+        "lease_version": {
+          "default": "1.0",
+          "title": "Lease Version",
+          "type": "string"
+        },
+        "model_mb": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The part of vram_mb that is model weights the service keeps loaded after the lease (a ComfyUI checkpoint, an Ollama model). The rest, vram_mb - model_mb, is the working set held only while the job runs. Unset: the broker treats all of vram_mb as working set.",
+          "title": "Model Mb"
+        },
+        "not_before": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Not Before"
+        },
+        "preemptible": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Preemptible"
+        },
+        "priority": {
+          "anyOf": [
+            {
+              "enum": [
+                "realtime",
+                "interactive",
+                "batch",
+                "background"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Priority"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Client-generated id that makes a retried POST idempotent: the broker answers a repeated (tenant, request_id) with the lease it already made.",
+          "title": "Request Id"
+        },
+        "resume": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The id of a lease whose work is already running.",
+          "title": "Resume"
+        },
+        "target": {
+          "default": "in-process",
+          "maxLength": 200,
+          "pattern": "^[a-z][a-z0-9-]*(:\\S+)?$",
+          "title": "Target",
+          "type": "string"
+        },
+        "tenant": {
+          "maxLength": 100,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "title": "Tenant",
+          "type": "string"
+        },
+        "ttl_s": {
+          "default": 60.0,
+          "description": "The lease expires this long after the last heartbeat.",
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Ttl S",
+          "type": "number"
+        },
+        "vram_mb": {
+          "default": 0,
+          "description": "The whole footprint: model weights plus the working set.",
+          "minimum": 0,
+          "title": "Vram Mb",
+          "type": "integer"
+        },
+        "wait_s": {
+          "default": 0.0,
+          "description": "How long the broker may hold this request before answering.",
+          "maximum": 300,
+          "minimum": 0,
+          "title": "Wait S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "tenant"
+      ],
+      "title": "LeaseRequest",
+      "type": "object"
+    },
+    "LeaseStatus": {
+      "description": "The broker's answer to a request or a status poll (``GET /leases/{id}``).",
+      "properties": {
+        "base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For a service target: the URL to call on the granted node.",
+          "title": "Base Url"
+        },
+        "device": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The NVML index of the GPU on *node*.",
+          "title": "Device"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "lease_id": {
+          "maxLength": 100,
+          "title": "Lease Id",
+          "type": "string"
+        },
+        "lease_version": {
+          "default": "1.0",
+          "title": "Lease Version",
+          "type": "string"
+        },
+        "node": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "pattern": "^[a-z0-9][a-z0-9._-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Node"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "While queued: how many leases are ahead.",
+          "title": "Position"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why it was refused or expired, or what it is waiting for.",
+          "title": "Reason"
+        },
+        "state": {
+          "enum": [
+            "queued",
+            "granted",
+            "refused",
+            "expired",
+            "released"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "ttl_s": {
+          "default": 60.0,
+          "exclusiveMinimum": 0,
+          "title": "Ttl S",
+          "type": "number"
+        },
+        "vram_mb": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Vram Mb",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "lease_id",
+        "state"
+      ],
+      "title": "LeaseStatus",
+      "type": "object"
+    }
+  },
+  "title": "Argus GPU lease"
+}

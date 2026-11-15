@@ -14,7 +14,7 @@ GitHub: `smk762/<repo>`. Ports are each service's default.
 
 | Repo | Kind | Port | What it is for |
 |---|---|---|---|
-| **argus-cortex** | library | n/a | Shared foundation: taxonomy, wire-schema versioning, AI-backend contract, server guards, GPU lease, XMP, moderation clients, likeness provenance and consent records, optional lineage/vector/blob stores. |
+| **argus-cortex** | library | n/a | Shared foundation: taxonomy, wire-schema versioning, AI-backend contract, server guards, GPU lease and the GPU broker client, XMP, moderation clients, likeness provenance and consent records, optional lineage/vector/blob stores. |
 | **argus-quarry** | service | 8102 | Acquire public-domain / CC0 images with provenance and licence into a category-sorted raw pool. Searches local metadata archives of PD12M and Megalith-10m (filters, plus CLIP semantic and "more like this" search over PD12M) and lands chosen slices, with Megalith's Drawthings mirror as a fallback for photos gone from Flickr. Acquisition only. |
 | **argus-curator** | service | 8101 | Decide which images belong in a LoRA training set (quality, near-dup, faces, NSFW, diversity) and export them with a `manifest.jsonl` (2.3: each row's primary face and the set's age). Its `face_source` preset shortlists source portraits for mask: one adult identity, frontal, sharp, eyes open, close to a reference. PyPI `argus-curator`. |
 | **argus-lens** | service | 8100 (8080 standalone) | Structured, category-bucketed captions, `.txt` sidecars and XMP keywords. Records live captions to the cortex lineage store (the tape lightbox and replay read); runs read-only with `LENS_READ_ONLY`. Each caption request may pick its backend (`backend`, pinned with `ARGUS_ALLOWED_BACKENDS`). `serve` binds loopback unless given `--host`, and `POST /caption/url` fetches only public hosts or those in `LENS_URL_ALLOWED_HOSTS`. PyPI `argus-lens`, image `ghcr.io/smk762/argus-lens`. |
@@ -52,7 +52,7 @@ Studio has a page for lens, curator, quarry, forge, proof, atlas and darkroom, a
 |---|---|---|
 | Generate an image (a plate, a background, art, a sample), or rework or inpaint one | **darkroom** `POST /generate/stream` (SSE; `init_image`, with `mask_base64` to inpaint), `GET /image/{id}`. Its record id, model and seed are your provenance. Example client: mint's `DarkroomClient`. | Call ComfyUI directly or generate without checks. |
 | Check an image for nudity, or text/an image against a policy | `argus_cortex.moderation` (`NudeNetClient`, `SingGuardClient`, `policies`) | Write your own nudity definition or policy text. |
-| Share the GPU with other services | `argus_cortex.gpu` (`coordinator_from_env()`, `lease()`) | Assume the GPU is free. |
+| Share the GPU with other services | `argus_cortex.gpu` (`coordinator_from_env()`, `lease()`/`alease()`); `ARGUS_GPU_COORDINATOR=broker` asks argus-iris, which places, prioritises and makes room across nodes. Declare your GPU use in a committed `gpu-tenant.yaml` (`gpu-tenant-schema.json`). | Assume the GPU is free, or keep your own idle-unload or keep-alive policy. |
 | Call a local or hosted model | `argus_cortex.backends` (`LocalBackend`, `RemoteBackend`, `with_retries`) | Hand-roll an HTTP client per model. |
 | Version a wire payload, commit its schema | `argus_cortex.wire` (`make_versioned_base`, `render_schema`) | Ship an unversioned contract. |
 | Guard a FastAPI server's writes, or run read-only | `argus_cortex.server` (`WriteGuard`, `env_flag`) | Use `BaseHTTPMiddleware`, which buffers streams. |

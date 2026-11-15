@@ -1,0 +1,369 @@
+{
+  "$defs": {
+    "GpuConstraints": {
+      "additionalProperties": false,
+      "description": "Where a lease may be placed, beyond fitting its VRAM. Unset fields do not constrain.",
+      "properties": {
+        "bf16": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "True: only a GPU with native bf16.",
+          "title": "Bf16"
+        },
+        "min_cc": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Minimum CUDA compute capability, e.g. 7.0 (no Pascal).",
+          "title": "Min Cc"
+        },
+        "node": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "pattern": "^[a-z0-9][a-z0-9._-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Only this node (e.g. a process pinned to its host's GPU).",
+          "title": "Node"
+        }
+      },
+      "title": "GpuConstraints",
+      "type": "object"
+    },
+    "TenantKind": {
+      "additionalProperties": false,
+      "description": "One kind of GPU work a tenant does, and its defaults when a lease does not say.",
+      "properties": {
+        "constraints": {
+          "$ref": "#/$defs/GpuConstraints",
+          "default": {
+            "bf16": null,
+            "min_cc": null,
+            "node": null
+          }
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "kind": {
+          "maxLength": 100,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "title": "Kind",
+          "type": "string"
+        },
+        "model_mb": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The part of vram_mb that stays loaded after a lease.",
+          "title": "Model Mb"
+        },
+        "preemptible": {
+          "default": false,
+          "title": "Preemptible",
+          "type": "boolean"
+        },
+        "priority": {
+          "default": "interactive",
+          "enum": [
+            "realtime",
+            "interactive",
+            "batch",
+            "background"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "target": {
+          "default": "in-process",
+          "maxLength": 200,
+          "pattern": "^[a-z][a-z0-9-]*(:\\S+)?$",
+          "title": "Target",
+          "type": "string"
+        },
+        "vram_mb": {
+          "description": "Declared footprint, weights plus working set. The broker uses its learned p95 when larger.",
+          "minimum": 0,
+          "title": "Vram Mb",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "vram_mb"
+      ],
+      "title": "TenantKind",
+      "type": "object"
+    },
+    "TenantManifest": {
+      "additionalProperties": false,
+      "description": "A repo's ``gpu-tenant.yaml``: the GPU work it does and the models it keeps resident.",
+      "properties": {
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "kinds": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TenantKind"
+          },
+          "title": "Kinds",
+          "type": "array"
+        },
+        "node": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "pattern": "^[a-z0-9][a-z0-9._-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The node this tenant's own process runs on, if pinned to one.",
+          "title": "Node"
+        },
+        "repo": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "e.g. smk762/argus-darkroom",
+          "title": "Repo"
+        },
+        "residents": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TenantResident"
+          },
+          "title": "Residents",
+          "type": "array"
+        },
+        "tenant": {
+          "maxLength": 100,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "title": "Tenant",
+          "type": "string"
+        },
+        "tenant_version": {
+          "default": "1.0",
+          "title": "Tenant Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tenant"
+      ],
+      "title": "TenantManifest",
+      "type": "object"
+    },
+    "TenantResident": {
+      "additionalProperties": false,
+      "description": "A model a service keeps loaded between leases, how the broker reaches it, and hints for keeping or evicting it.\n\nA manifest lists GPU residents only. The comfyui and ollama adapters use their services' own routes (``/free``,\n``keep_alive``); the ``*_path`` fields are for the argus-http adapter, joined to ``base_url``, and called with\nPOST. The verbs are distinct: **unload** frees VRAM and host RAM; **evict** moves the model from GPU to CPU,\nfor services with a CPU stage (TTS, embedders), freeing VRAM but keeping it warm in RAM; **warm** loads it\nback. ``admin_auth`` says only whether those routes need ``Authorization: Bearer $ARGUS_ADMIN_TOKEN``; the token\nlives in the broker's config, never in a committed manifest. The operator's policy file on the broker overrides\nthe hints.",
+      "properties": {
+        "adapter": {
+          "enum": [
+            "comfyui",
+            "ollama",
+            "argus-http",
+            "immich",
+            "container"
+          ],
+          "title": "Adapter",
+          "type": "string"
+        },
+        "admin_auth": {
+          "default": false,
+          "description": "The admin routes need Authorization: Bearer $ARGUS_ADMIN_TOKEN.",
+          "title": "Admin Auth",
+          "type": "boolean"
+        },
+        "base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where the adapter reaches the service, if not the tenant's own.",
+          "title": "Base Url"
+        },
+        "container": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The compose container name. The broker's node agent matches GPU processes to this resident by it, for every adapter, and starts it to warm a stopped service (e.g. ComfyUI).",
+          "title": "Container"
+        },
+        "evict_path": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "pattern": "^/\\S*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "argus-http: move the model from GPU to CPU, keeping it warm.",
+          "title": "Evict Path"
+        },
+        "health_path": {
+          "default": "/health",
+          "description": "argus-http: status route (model state, busy, idle).",
+          "maxLength": 200,
+          "pattern": "^/\\S*$",
+          "title": "Health Path",
+          "type": "string"
+        },
+        "host_ram_restart_mb": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Restart the container when it is idle and its cgroup anonymous memory exceeds this (ComfyUI keeps offloaded weights in host RAM; voluptas#16).",
+          "title": "Host Ram Restart Mb"
+        },
+        "idle_kill_s": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Hint: evict after this long without a lease.",
+          "title": "Idle Kill S"
+        },
+        "name": {
+          "maxLength": 100,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "pinned": {
+          "default": false,
+          "description": "Hint: never evict (e.g. SingGuard's model, a2f during a broadcast).",
+          "title": "Pinned",
+          "type": "boolean"
+        },
+        "target": {
+          "default": "in-process",
+          "maxLength": 200,
+          "pattern": "^[a-z][a-z0-9-]*(:\\S+)?$",
+          "title": "Target",
+          "type": "string"
+        },
+        "unload_path": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "pattern": "^/\\S*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "argus-http: free VRAM and host RAM, e.g. /admin/unload.",
+          "title": "Unload Path"
+        },
+        "vram_mb": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vram Mb"
+        },
+        "warm_path": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "pattern": "^/\\S*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "argus-http: load the model back, e.g. /admin/wake.",
+          "title": "Warm Path"
+        }
+      },
+      "required": [
+        "name",
+        "adapter"
+      ],
+      "title": "TenantResident",
+      "type": "object"
+    }
+  },
+  "title": "Argus GPU tenant manifest"
+}
