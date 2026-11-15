@@ -43,8 +43,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   guides and package docs moved to argus-handbook, and the old paths 301 there.
 - `release.yml` also sends `cortex-released` to argus-mint, whose image installs cortex from its `server` extra's
   range and now rebuilds on it (argus-mint#29).
+- **Behaviour changes a stage may notice on this bump (#73):**
+  - `cross_site_refuse()` no longer trusts a same-host write by bare hostname (DNS rebinding). A same-host
+    `Origin` passes only when the host is an IP literal, `localhost`, or listed in the new `trusted_hosts`
+    argument; a server reached by a DNS name must pass it (or list the origin in `trusted_origins`).
+  - `RemoteBackend.post_json()` retries only failures where the request never reached the server (connect
+    errors, pool timeouts), not a `ReadTimeout`; pass `idempotent=True` to keep the old retries.
+  - `policies.mode()` raises `ModerationConfigError` for an unknown policy name instead of returning `nsfw`.
+  - `QdrantVectorStore.search()` returns the key passed to `upsert()` as `VectorHit.id`, not its UUID5; the
+    original key rides in the reserved `_point_id` payload field (`POINT_ID_FIELD`), stripped from `payload`.
+  - `SingGuardClient` refuses a multi-frame image (animated GIF/WebP/APNG, multi-page TIFF) with
+    `GuardCheckFailed` instead of judging frame 0.
+  - `CORTEX_S3_ENDPOINT` refuses a scheme other than `http://`/`https://`.
 
 ### Fixed
+- `LeaseCoordinator` refuses a symlinked or non-regular lock file and chmods it only when it owns it (#73).
+- The lineage schema refuses a dataset membership whose `edit_id` belongs to another caption (a trigger, so it
+  reaches existing tables) (#73).
+- XMP: regions are written as valid RDF (no `parseType` on attribute-form structs) and read back from nested
+  `rdf:Description` forms; a sidecar's prefixes no longer rebind the process-wide ElementTree registry; concurrent
+  `write_xmp()` merges into one directory take an exclusive lock so neither drops the other's properties (#73).
+- `ensure_schema()` serialises on a Postgres advisory lock and creates the membership trigger in one statement, so
+  several stages starting against one database no longer fail with "tuple concurrently updated" or "trigger
+  already exists".
+- `BrokerCoordinator` gives up a queued request whenever the wait ends without a grant (a 5xx or a dropped
+  connection mid-poll, a bad payload, an interrupt), not only on timeout or cancellation, so the broker never grants
+  an orphaned lease while the work runs on the fallback.
+- `LeaseCoordinator.alease()` waits on its own thread instead of the loop's default executor, so more concurrent
+  waiters than executor threads can no longer starve the holder's release.
 - Docs: `slow` and `cascade` are supported by agent-composer's guard router as well as argus-cull's `singguard`
   service, not by argus-cull's alone (`SingGuardClient` docstrings, README). Code is unchanged.
 

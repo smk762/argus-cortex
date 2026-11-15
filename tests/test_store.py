@@ -299,9 +299,13 @@ def test_ensure_schema_runs_every_statement() -> None:
     conn = _FakeConn()
     store = _store_with(conn)
     store.ensure_schema()
-    assert len(conn.executed) == len(SCHEMA_STATEMENTS)
-    # every statement is idempotent: CREATE ... IF NOT EXISTS / OR REPLACE, or a DROP ... IF EXISTS
-    assert all("CREATE" in sql or "DROP TRIGGER IF EXISTS" in sql for sql, _ in conn.executed)
+    # the DDL runs between a session advisory lock and its unlock, so concurrent stages take turns
+    lock, *ddl, unlock = conn.executed
+    assert "pg_advisory_lock" in lock[0] and "pg_advisory_unlock" in unlock[0] and lock[1] == unlock[1]
+    assert len(ddl) == len(SCHEMA_STATEMENTS)
+    # every statement is idempotent: CREATE ... IF NOT EXISTS / OR REPLACE, or a CREATE that tolerates duplicate_object
+    assert all("CREATE" in sql for sql, _ in ddl)
+    assert not any("DROP" in sql for sql, _ in ddl)  # a DROP + CREATE pair races across processes
 
 
 def test_schema_ties_a_membership_edit_to_its_caption() -> None:

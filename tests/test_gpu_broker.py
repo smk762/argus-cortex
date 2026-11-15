@@ -262,6 +262,29 @@ def test_timeout_while_queued_cancels_the_request() -> None:
     assert broker.releases["L1"]["outcome"] == "cancelled"
 
 
+class _FailPolls(FakeBroker):
+    """Queues the lease, then answers every status poll with a 503."""
+
+    def _handle(self, request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(503, text="busy")
+        return super()._handle(request)
+
+
+def test_broker_failing_mid_poll_gives_up_the_queued_request_before_falling_back() -> None:
+    broker = _FailPolls(polls_before_grant=10**6)
+    with _coordinator(broker).lease(caller="x", min_vram_mb=100) as handle:
+        assert handle.via == "fallback"
+    assert broker.releases["L1"]["outcome"] == "cancelled"
+
+
+async def test_async_broker_failing_mid_poll_gives_up_the_queued_request() -> None:
+    broker = _FailPolls(polls_before_grant=10**6)
+    async with _coordinator(broker).alease(caller="x", min_vram_mb=100) as handle:
+        assert handle.via == "fallback"
+    assert broker.releases["L1"]["outcome"] == "cancelled"
+
+
 def test_refusal_raises_and_is_not_a_timeout() -> None:
     broker = FakeBroker(refuse="needs 30000 MB; the largest node has 24576")
     with (
@@ -448,6 +471,24 @@ async def test_cancelled_async_file_lease_does_not_strand_the_lock(tmp_path: Pat
         caller="after", min_vram_mb=0
     ):
         pass
+
+
+async def test_async_file_lease_waiters_do_not_starve_the_holders_release(tmp_path: Path) -> None:
+    """More waiters than the default executor has threads must not block the holder's release."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    loop = asyncio.get_running_loop()
+    loop.set_default_executor(ThreadPoolExecutor(max_workers=2))
+    lock = str(tmp_path / "gpu.lock")
+
+    def coordinator() -> LeaseCoordinator:
+        return LeaseCoordinator(lock_path=lock, timeout_s=5, poll_s=0.01, probe=lambda device: None)
+
+    async def job() -> None:
+        async with coordinator().alease(caller="job", min_vram_mb=0):
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(asyncio.gather(*(job() for _ in range(6))), timeout=4)
 
 
 # --- configuration -------------------------------------------------------------------------------------------------

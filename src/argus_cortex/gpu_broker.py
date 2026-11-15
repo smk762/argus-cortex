@@ -92,6 +92,15 @@ def _outcome(exc: BaseException) -> tuple[ReleaseOutcome, str]:
     return "failed", detail
 
 
+def _gave_up(exc: BaseException) -> str:
+    """The release detail for a queued lease abandoned because of *exc*."""
+    if isinstance(exc, GpuLeaseTimeout):
+        return "timed out waiting for a grant"
+    if isinstance(exc, asyncio.CancelledError):
+        return "caller cancelled"
+    return f"gave up while queued: {type(exc).__name__}: {exc}"[:2000]
+
+
 class BrokerCoordinator:
     """Leases from the GPU broker at *url*, falling back to *fallback* when it cannot be reached.
 
@@ -344,21 +353,27 @@ class BrokerCoordinator:
     def _acquire(self, client: Any, req: LeaseRequest) -> LeaseStatus:
         deadline = time.monotonic() + self.timeout_s
         status = self._first_post(client, req.model_copy(update={"wait_s": self._poll_wait(deadline)}))
-        while status.state == "queued":
-            if self._remaining(deadline) <= 0:
-                self._release(client, status.lease_id, "cancelled", None, "timed out waiting for a grant")
-                raise self._timed_out(req, status)
-            wait = self._poll_wait(deadline)
-            started = time.monotonic()
-            response = self._send(
-                client.get, f"/leases/{status.lease_id}", params={"wait_s": wait}, timeout=self._timeout(wait)
-            )
-            polled = self._parse(response, LeaseStatus)
-            if polled is not None and polled.state == "queued":
-                time.sleep(self._pause_after(started, deadline))
-            if polled is None:  # the broker restarted and lost the queued request: ask again
-                polled = self._post_lease(client, req.model_copy(update={"wait_s": self._poll_wait(deadline)}))
-            status = polled
+        try:
+            while status.state == "queued":
+                if self._remaining(deadline) <= 0:
+                    raise self._timed_out(req, status)
+                wait = self._poll_wait(deadline)
+                started = time.monotonic()
+                response = self._send(
+                    client.get, f"/leases/{status.lease_id}", params={"wait_s": wait}, timeout=self._timeout(wait)
+                )
+                polled = self._parse(response, LeaseStatus)
+                if polled is not None and polled.state == "queued":
+                    time.sleep(self._pause_after(started, deadline))
+                if polled is None:  # the broker restarted and lost the queued request: ask again
+                    polled = self._post_lease(client, req.model_copy(update={"wait_s": self._poll_wait(deadline)}))
+                status = polled
+        except BaseException as exc:
+            # Whatever ended the wait (timeout, a 5xx mid-poll that sends us to the fallback, a bad payload,
+            # Ctrl-C), don't leave the request queued: the broker would grant it later and hold VRAM nobody uses.
+            if status.state == "queued":
+                self._release(client, status.lease_id, "cancelled", None, _gave_up(exc))
+            raise
         return self._granted_or_raise(status)
 
     def _beat(self, client: Any, req: LeaseRequest, handle: GpuLease) -> HeartbeatReply | None:
@@ -496,7 +511,6 @@ class BrokerCoordinator:
         try:
             while status.state == "queued":
                 if self._remaining(deadline) <= 0:
-                    await self._arelease(client, status.lease_id, "cancelled", None, "timed out waiting for a grant")
                     raise self._timed_out(req, status)
                 wait = self._poll_wait(deadline)
                 started = time.monotonic()
@@ -511,9 +525,10 @@ class BrokerCoordinator:
                         client, req.model_copy(update={"wait_s": self._poll_wait(deadline)})
                     )
                 status = polled
-        except asyncio.CancelledError:  # the caller gave up while queued: don't leave the request in the queue
-            with contextlib.suppress(Exception):
-                await asyncio.shield(self._arelease(client, status.lease_id, "cancelled", None, "caller cancelled"))
+        except BaseException as exc:  # see _acquire: never leave the request in the queue
+            if status.state == "queued":
+                with contextlib.suppress(Exception):
+                    await asyncio.shield(self._arelease(client, status.lease_id, "cancelled", None, _gave_up(exc)))
             raise
         return self._granted_or_raise(status)
 

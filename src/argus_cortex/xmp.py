@@ -242,7 +242,11 @@ def _serialise(meta: ET.Element, declared: list[tuple[str, str]]) -> str:
             return ET.tostring(meta, encoding="unicode")
         finally:
             if registry is not None and saved is not None:
-                registry.clear()
+                # Restore in place, never via clear(): an ElementTree serialisation
+                # on another thread (outside our lock) must not see an empty map
+                # and fall back to ns0:/ns1: prefixes for every namespace.
+                for uri in [u for u in registry if u not in saved]:
+                    registry.pop(uri, None)
                 registry.update(saved)
 
 

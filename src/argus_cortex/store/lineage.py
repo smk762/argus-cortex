@@ -30,6 +30,9 @@ from argus_cortex.store.config import StoreConfig
 from argus_cortex.store.errors import StoreError, require_extra, resolve_error_types, wrap_errors
 from argus_cortex.store.schema import SCHEMA_STATEMENTS
 
+# pg_advisory_lock key serialising ensure_schema() across processes ("argus-cx" in ASCII).
+_SCHEMA_LOCK_KEY = 0x61726775732D6378
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from contextlib import AbstractContextManager
@@ -299,8 +302,15 @@ class PostgresLineageStore:
     def ensure_schema(self) -> None:
         def op() -> None:
             with self._acquire() as conn, conn.cursor() as cur:
-                for statement in SCHEMA_STATEMENTS:
-                    cur.execute(statement)
+                # Several stages run this against one database at startup. DDL is
+                # not safe to race (CREATE OR REPLACE FUNCTION fails with "tuple
+                # concurrently updated"), so take turns on a session advisory lock.
+                cur.execute("SELECT pg_advisory_lock(%s)", (_SCHEMA_LOCK_KEY,))
+                try:
+                    for statement in SCHEMA_STATEMENTS:
+                        cur.execute(statement)
+                finally:
+                    cur.execute("SELECT pg_advisory_unlock(%s)", (_SCHEMA_LOCK_KEY,))
 
         wrap_errors(op, errors=self._db_errors(), label="ensure_schema")
 

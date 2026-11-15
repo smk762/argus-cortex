@@ -94,10 +94,20 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     END
     $$
     """,
-    "DROP TRIGGER IF EXISTS dataset_membership_edit_matches_caption ON dataset_membership",
+    # Not DROP + CREATE: connections are autocommit and several stages run
+    # ensure_schema() against one database at startup, so a separate DROP and
+    # CREATE race ("trigger already exists"). One DO block is one statement, and
+    # a concurrent creator's duplicate_object is the outcome we wanted anyway.
+    # The logic lives in the function above, which CREATE OR REPLACE updates.
     """
-    CREATE TRIGGER dataset_membership_edit_matches_caption
-        BEFORE INSERT OR UPDATE OF edit_id, caption_id ON dataset_membership
-        FOR EACH ROW EXECUTE FUNCTION dataset_membership_edit_matches_caption()
+    DO $$
+    BEGIN
+        CREATE TRIGGER dataset_membership_edit_matches_caption
+            BEFORE INSERT OR UPDATE OF edit_id, caption_id ON dataset_membership
+            FOR EACH ROW EXECUTE FUNCTION dataset_membership_edit_matches_caption();
+    EXCEPTION WHEN duplicate_object THEN
+        NULL;
+    END
+    $$
     """,
 )

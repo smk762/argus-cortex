@@ -154,33 +154,63 @@ class GpuCoordinator(Protocol):
         ...
 
 
+def _in_own_thread(fn: Callable[..., object], *args: object) -> asyncio.Future:
+    """Run blocking *fn* on a dedicated daemon thread and await it from the loop.
+
+    Not ``asyncio.to_thread``: a lease can block for its whole timeout, and
+    waiters parked on the loop's shared default executor would starve the very
+    ``__exit__`` call the holder needs to release the lock (and every other
+    ``to_thread`` user in the process).
+    """
+    loop = asyncio.get_running_loop()
+    fut: asyncio.Future = loop.create_future()
+
+    def _settle(result: object, exc: BaseException | None) -> None:
+        if fut.cancelled():
+            return
+        if exc is not None:
+            fut.set_exception(exc)
+        else:
+            fut.set_result(result)
+
+    def _target() -> None:
+        try:
+            result, exc = fn(*args), None
+        except BaseException as caught:  # noqa: BLE001 - handed to the awaiting task
+            result, exc = None, caught
+        with contextlib.suppress(RuntimeError):  # the loop closed while we waited
+            loop.call_soon_threadsafe(_settle, result, exc)
+
+    threading.Thread(target=_target, daemon=True, name="gpu-lease").start()
+    return fut
+
+
 @contextlib.asynccontextmanager
 async def _sync_lease_in_thread(cm: contextlib.AbstractContextManager[GpuLease]) -> AsyncIterator[GpuLease]:
-    """Hold a blocking lease from async code: enter and exit it in a worker thread.
+    """Hold a blocking lease from async code: enter and exit it on a dedicated thread.
 
     If the task is cancelled while the thread is still waiting for the lease, the
     thread is left to finish and the lease it gets is released at once, so a
     cancelled caller never strands the lock.
     """
-    loop = asyncio.get_running_loop()
-    entering = asyncio.ensure_future(asyncio.to_thread(cm.__enter__))
+    entering = _in_own_thread(cm.__enter__)
     try:
         handle = await asyncio.shield(entering)
     except asyncio.CancelledError:
 
         def _undo(fut: asyncio.Future[GpuLease]) -> None:
             if not fut.cancelled() and fut.exception() is None:
-                loop.run_in_executor(None, cm.__exit__, None, None, None)
+                threading.Thread(target=cm.__exit__, args=(None, None, None), daemon=True).start()
 
         entering.add_done_callback(_undo)
         raise
     try:
         yield handle
     except BaseException as exc:
-        if not await asyncio.to_thread(cm.__exit__, type(exc), exc, exc.__traceback__):
+        if not await _in_own_thread(cm.__exit__, type(exc), exc, exc.__traceback__):
             raise
     else:
-        await asyncio.to_thread(cm.__exit__, None, None, None)
+        await _in_own_thread(cm.__exit__, None, None, None)
 
 
 class NullCoordinator:
