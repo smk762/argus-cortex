@@ -60,6 +60,7 @@ _SLUG_PATTERN = r"^[a-z0-9][a-z0-9._-]*$"
 Target = Annotated[str, Field(pattern=TARGET_PATTERN, max_length=200)]
 Slug = Annotated[str, Field(pattern=_SLUG_PATTERN, max_length=100)]
 Megabytes = Annotated[int, Field(ge=0)]
+RoutePath = Annotated[str, Field(pattern=r"^/\S*$", max_length=200)]
 
 
 def target_service(target: str) -> str:
@@ -228,9 +229,15 @@ class TenantKind(BaseModel):
 
 
 class TenantResident(BaseModel):
-    """A model the tenant keeps loaded between leases, and the hints for keeping or evicting it.
+    """A model a service keeps loaded between leases, how the broker reaches it, and hints for keeping or evicting it.
 
-    The operator's policy file on the broker overrides these hints.
+    A manifest lists GPU residents only. The comfyui and ollama adapters use their services' own routes (``/free``,
+    ``keep_alive``); the ``*_path`` fields are for the argus-http adapter, joined to ``base_url``, and called with
+    POST. The verbs are distinct: **unload** frees VRAM and host RAM; **evict** moves the model from GPU to CPU,
+    for services with a CPU stage (TTS, embedders), freeing VRAM but keeping it warm in RAM; **warm** loads it
+    back. ``admin_auth`` says only whether those routes need ``Authorization: Bearer $ARGUS_ADMIN_TOKEN``; the token
+    lives in the broker's config, never in a committed manifest. The operator's policy file on the broker overrides
+    the hints.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -242,8 +249,24 @@ class TenantResident(BaseModel):
     pinned: bool = Field(False, description="Hint: never evict (e.g. SingGuard's model, a2f during a broadcast).")
     idle_kill_s: float | None = Field(None, ge=0, description="Hint: evict after this long without a lease.")
     base_url: str | None = Field(None, description="Where the adapter reaches the service, if not the tenant's own.")
-    unload_path: str | None = Field(None, description="argus-http adapter: the unload route, e.g. /admin/unload.")
-    container: str | None = Field(None, description="container adapter: the compose container name.")
+    container: str | None = Field(
+        None,
+        max_length=200,
+        description="The compose container name. The broker's node agent matches GPU processes to this resident by "
+        "it, for every adapter, and starts it to warm a stopped service (e.g. ComfyUI).",
+    )
+    health_path: RoutePath = Field("/health", description="argus-http: status route (model state, busy, idle).")
+    unload_path: RoutePath | None = Field(None, description="argus-http: free VRAM and host RAM, e.g. /admin/unload.")
+    evict_path: RoutePath | None = Field(
+        None, description="argus-http: move the model from GPU to CPU, keeping it warm."
+    )
+    warm_path: RoutePath | None = Field(None, description="argus-http: load the model back, e.g. /admin/wake.")
+    admin_auth: bool = Field(False, description="The admin routes need Authorization: Bearer $ARGUS_ADMIN_TOKEN.")
+    host_ram_restart_mb: Megabytes | None = Field(
+        None,
+        description="Restart the container when it is idle and its cgroup anonymous memory exceeds this "
+        "(ComfyUI keeps offloaded weights in host RAM; voluptas#16).",
+    )
 
 
 class TenantManifest(TenantVersioned):

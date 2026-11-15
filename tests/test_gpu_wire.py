@@ -135,3 +135,59 @@ def test_model_mb_cannot_exceed_the_total() -> None:
         LeaseRequest(tenant="t", vram_mb=1000, model_mb=1001)
     with pytest.raises(ValidationError, match="cannot exceed"):
         TenantManifest.model_validate({"tenant": "t", "kinds": [{"kind": "g", "vram_mb": 1, "model_mb": 2}]})
+
+
+VOLUPTAS = {
+    "tenant": "voluptas",
+    "node": "morpheus",
+    "residents": [
+        {
+            "name": "comfyui",
+            "adapter": "comfyui",
+            "target": "comfyui",
+            "container": "voluptas_comfyui",
+            "base_url": "http://morpheus:8188",
+            "host_ram_restart_mb": 12288,
+        },
+        {
+            "name": "image-gen-diffusers",
+            "adapter": "argus-http",
+            "container": "voluptas_image_gen_diffusers",
+            "base_url": "http://morpheus:8011",
+            "unload_path": "/admin/unload",
+            "warm_path": "/admin/wake",
+            "admin_auth": True,
+        },
+        {
+            "name": "miso",
+            "adapter": "argus-http",
+            "container": "voluptas_miso",
+            "base_url": "http://morpheus:8034",
+            "unload_path": "/admin/unload",
+            "evict_path": "/admin/evict",
+            "warm_path": "/admin/wake",
+        },
+    ],
+}
+
+
+def test_resident_contract_matches_the_merged_services() -> None:
+    manifest = TenantManifest.model_validate(VOLUPTAS)
+    comfy, diffusers, miso = manifest.residents
+    assert comfy.host_ram_restart_mb == 12288 and comfy.container == "voluptas_comfyui"
+    assert diffusers.health_path == "/health" and diffusers.admin_auth and diffusers.evict_path is None
+    assert miso.evict_path == "/admin/evict" and not miso.admin_auth
+
+
+@pytest.mark.parametrize("field", ["health_path", "unload_path", "evict_path", "warm_path"])
+@pytest.mark.parametrize("path", ["admin/unload", "http://x/admin", "/admin unload", ""])
+def test_resident_routes_are_absolute_paths(field: str, path: str) -> None:
+    resident = {"name": "svc", "adapter": "argus-http", field: path}
+    with pytest.raises(ValidationError):
+        TenantManifest.model_validate({"tenant": "t", "residents": [resident]})
+
+
+def test_resident_refuses_informational_fields() -> None:
+    resident = {"name": "nudenet", "adapter": "argus-http", "gpu": False}  # manifests list GPU residents only
+    with pytest.raises(ValidationError, match="gpu"):
+        TenantManifest.model_validate({"tenant": "t", "residents": [resident]})
