@@ -28,8 +28,9 @@ and an Ollama-backed SingGuard) takes the same lease.
 Every ``lease()`` yields a :class:`GpuLease`. Code that ignores it keeps working;
 code that reads it learns where the broker placed the work (``node``,
 ``base_url``) and whether it should give the GPU back early (``should_yield()``).
-The optional ``priority``/``target``/``kind``/``preemptible``/``constraints``
-arguments only mean something to the broker; the local coordinators ignore them.
+The optional ``priority``/``target``/``kind``/``preemptible``/``constraints``/``model_mb``
+arguments only mean something to the broker (``model_mb``: the part of
+``min_vram_mb`` that is weights the service keeps loaded after the lease); the local coordinators ignore them.
 
 The VRAM check is a snapshot, not a reservation: a tenant outside the lock can
 still allocate between the check and the job. Each stage owns its footprint
@@ -132,6 +133,7 @@ class GpuCoordinator(Protocol):
         kind: str | None = None,
         preemptible: bool | None = None,
         constraints: GpuConstraints | None = None,
+        model_mb: int | None = None,
     ) -> contextlib.AbstractContextManager[GpuLease]:
         """A context manager that holds a GPU slot for its body."""
         ...
@@ -146,6 +148,7 @@ class GpuCoordinator(Protocol):
         kind: str | None = None,
         preemptible: bool | None = None,
         constraints: GpuConstraints | None = None,
+        model_mb: int | None = None,
     ) -> contextlib.AbstractAsyncContextManager[GpuLease]:
         """:meth:`lease` for async code: waiting never blocks the event loop."""
         ...

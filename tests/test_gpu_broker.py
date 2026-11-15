@@ -108,7 +108,7 @@ def _coordinator(broker: FakeBroker, **kwargs: Any) -> BrokerCoordinator:
         "fallback": NullCoordinator(),
     }
     options.update(kwargs)
-    return BrokerCoordinator("http://iris:8110/", transport=transport, async_transport=transport, **options)
+    return BrokerCoordinator("http://iris:8120/", transport=transport, async_transport=transport, **options)
 
 
 def test_is_a_gpu_coordinator() -> None:
@@ -117,7 +117,7 @@ def test_is_a_gpu_coordinator() -> None:
 
 def test_bad_tenant_slug_fails_at_construction() -> None:
     with pytest.raises(ValueError):
-        BrokerCoordinator("http://iris:8110", tenant="Argus Darkroom")
+        BrokerCoordinator("http://iris:8120", tenant="Argus Darkroom")
 
 
 def test_granted_lease_reports_placement_and_releases_ok() -> None:
@@ -135,6 +135,78 @@ def test_granted_lease_reports_placement_and_releases_ok() -> None:
         "peak_vram_mb": 5400,
         "detail": None,
     }
+
+
+def test_request_carries_model_mb_and_a_fresh_request_id() -> None:
+    broker = FakeBroker()
+    coordinator = _coordinator(broker)
+    for _ in range(2):
+        with coordinator.lease(caller="gen", min_vram_mb=9000, model_mb=6500, target="comfyui"):
+            pass
+    first, second = broker.requests
+    assert (first["vram_mb"], first["model_mb"]) == (9000, 6500)
+    assert first["request_id"] and second["request_id"] and first["request_id"] != second["request_id"]
+
+
+def test_model_mb_is_clamped_to_the_total() -> None:
+    broker = FakeBroker()
+    with _coordinator(broker).lease(caller="gen", min_vram_mb=1000, model_mb=5000):
+        pass
+    assert broker.requests[0]["model_mb"] == 1000
+
+
+def test_lost_post_response_is_retried_once_with_the_same_request_id() -> None:
+    broker = FakeBroker()
+    original = broker._handle
+    timed_out = []
+
+    def lose_first_response(request: httpx.Request) -> httpx.Response:
+        response = original(request)
+        if request.url.path == "/leases" and not timed_out:
+            timed_out.append(True)
+            raise httpx.ReadTimeout("response lost", request=request)  # the broker made the lease; we never heard
+        return response
+
+    broker._handle = lose_first_response  # type: ignore[method-assign]
+    with _coordinator(broker).lease(caller="x", min_vram_mb=1) as handle:
+        assert handle.via == "broker"
+    assert len(broker.requests) == 2
+    assert broker.requests[0]["request_id"] == broker.requests[1]["request_id"]
+
+
+def test_refused_connection_is_not_retried() -> None:
+    broker = FakeBroker(down=True)
+    calls = []
+    original = broker.__call__
+
+    def counting(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        return original(request)
+
+    coordinator = BrokerCoordinator(
+        "http://iris:8120", tenant="t", transport=httpx.MockTransport(counting), fallback=NullCoordinator()
+    )
+    with coordinator.lease(caller="x", min_vram_mb=1) as handle:
+        assert handle.via == "fallback"
+    assert calls == ["/leases"]
+
+
+async def test_async_lost_post_response_is_retried_once() -> None:
+    broker = FakeBroker()
+    original = broker._handle
+    timed_out = []
+
+    def lose_first_response(request: httpx.Request) -> httpx.Response:
+        response = original(request)
+        if request.url.path == "/leases" and not timed_out:
+            timed_out.append(True)
+            raise httpx.ReadTimeout("response lost", request=request)
+        return response
+
+    broker._handle = lose_first_response  # type: ignore[method-assign]
+    async with _coordinator(broker).alease(caller="x", min_vram_mb=1) as handle:
+        assert handle.via == "broker"
+    assert broker.requests[0]["request_id"] == broker.requests[1]["request_id"]
 
 
 def test_manifest_registered_once() -> None:
@@ -393,7 +465,7 @@ def test_coordinator_from_env_builds_the_broker(monkeypatch: pytest.MonkeyPatch,
     manifest = tmp_path / "gpu-tenant.json"
     manifest.write_text(MANIFEST.model_dump_json(), encoding="utf-8")
     monkeypatch.setenv("ARGUS_GPU_COORDINATOR", "broker")
-    monkeypatch.setenv("ARGUS_GPU_BROKER_URL", "http://iris:8110")
+    monkeypatch.setenv("ARGUS_GPU_BROKER_URL", "http://iris:8120")
     monkeypatch.setenv("ARGUS_GPU_BROKER_TOKEN", "s3cret")
     monkeypatch.setenv("ARGUS_GPU_TENANT_MANIFEST", str(manifest))
     monkeypatch.setenv("ARGUS_GPU_BROKER_FALLBACK", "none")
@@ -415,7 +487,7 @@ def test_unreadable_manifest_does_not_stop_the_service(
     bad.write_text("{not json", encoding="utf-8")
     with caplog.at_level(logging.WARNING):
         coordinator = gpu.build_coordinator(
-            "broker", broker_url="http://iris:8110", tenant="argus-lens", manifest_path=str(bad)
+            "broker", broker_url="http://iris:8120", tenant="argus-lens", manifest_path=str(bad)
         )
     assert isinstance(coordinator, BrokerCoordinator) and coordinator.manifest is None
     assert "not loaded" in caplog.text

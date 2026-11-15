@@ -4,7 +4,8 @@ A :class:`~argus_cortex.gpu.GpuCoordinator` like the others, so a stage switches
 (``ARGUS_GPU_COORDINATOR=broker``, see :func:`~argus_cortex.gpu.coordinator_from_env`). A lease:
 
 1. registers the tenant manifest once (``POST /tenants``), if one was given;
-2. asks for the lease (``POST /leases``) and, while it is queued, long-polls ``GET /leases/{id}?wait_s=`` until it is
+2. asks for the lease (``POST /leases``, with a fresh ``request_id`` so the one retry after a lost response is
+   idempotent) and, while it is queued, long-polls ``GET /leases/{id}?wait_s=`` until it is
    granted, refused, or the coordinator's ``timeout_s`` runs out (then it cancels the queued request and raises
    :class:`~argus_cortex.gpu.GpuLeaseTimeout`);
 3. while the body runs, heartbeats every third of the lease's TTL in the background (``POST /leases/{id}/heartbeat``),
@@ -29,6 +30,7 @@ import contextlib
 import logging
 import threading
 import time
+import uuid
 from collections.abc import AsyncIterator, Iterator
 from typing import TYPE_CHECKING, Any
 
@@ -145,13 +147,17 @@ class BrokerCoordinator:
         kind: str | None,
         preemptible: bool | None,
         constraints: GpuConstraints | None,
+        model_mb: int | None,
     ) -> LeaseRequest:
+        vram_mb = max(0, int(min_vram_mb))
         return LeaseRequest(
             tenant=self.tenant,
             caller=caller[:200],
             kind=kind or "default",
             target=target or "in-process",
-            vram_mb=max(0, int(min_vram_mb)),
+            vram_mb=vram_mb,
+            model_mb=None if model_mb is None else min(max(0, int(model_mb)), vram_mb),
+            request_id=uuid.uuid4().hex,  # one per lease() call, so a retried POST is answered with the same lease
             priority=priority,
             preemptible=preemptible,
             constraints=constraints or GpuConstraints(),
@@ -251,8 +257,15 @@ class BrokerCoordinator:
         kind: str | None = None,
         preemptible: bool | None = None,
         constraints: GpuConstraints | None = None,
+        model_mb: int | None = None,
     ) -> Iterator[GpuLease]:
-        options = {"priority": priority, "target": target, "kind": kind, "preemptible": preemptible}
+        options = {
+            "priority": priority,
+            "target": target,
+            "kind": kind,
+            "preemptible": preemptible,
+            "model_mb": model_mb,
+        }
         req = self._request(caller=caller, min_vram_mb=min_vram_mb, constraints=constraints, **options)
         httpx = _httpx()
         with httpx.Client(transport=self._transport, timeout=self.request_timeout_s, **self._client_kwargs()) as client:
@@ -318,9 +331,19 @@ class BrokerCoordinator:
             raise _Unreachable("no /leases route at the broker URL")
         return status
 
+    def _first_post(self, client: Any, req: LeaseRequest) -> LeaseStatus:
+        """The first POST, retried once if its response was lost to a timeout: ``request_id`` makes that safe."""
+        try:
+            return self._post_lease(client, req)
+        except _Unreachable as exc:
+            if not isinstance(exc.__cause__, _httpx().TimeoutException):
+                raise
+            _log.debug("GPU broker POST /leases timed out; retrying request %s once", req.request_id)
+            return self._post_lease(client, req)
+
     def _acquire(self, client: Any, req: LeaseRequest) -> LeaseStatus:
         deadline = time.monotonic() + self.timeout_s
-        status = self._post_lease(client, req.model_copy(update={"wait_s": self._poll_wait(deadline)}))
+        status = self._first_post(client, req.model_copy(update={"wait_s": self._poll_wait(deadline)}))
         while status.state == "queued":
             if self._remaining(deadline) <= 0:
                 self._release(client, status.lease_id, "cancelled", None, "timed out waiting for a grant")
@@ -388,8 +411,15 @@ class BrokerCoordinator:
         kind: str | None = None,
         preemptible: bool | None = None,
         constraints: GpuConstraints | None = None,
+        model_mb: int | None = None,
     ) -> AsyncIterator[GpuLease]:
-        options = {"priority": priority, "target": target, "kind": kind, "preemptible": preemptible}
+        options = {
+            "priority": priority,
+            "target": target,
+            "kind": kind,
+            "preemptible": preemptible,
+            "model_mb": model_mb,
+        }
         req = self._request(caller=caller, min_vram_mb=min_vram_mb, constraints=constraints, **options)
         httpx = _httpx()
         async with httpx.AsyncClient(
@@ -451,9 +481,18 @@ class BrokerCoordinator:
             raise _Unreachable("no /leases route at the broker URL")
         return status
 
+    async def _afirst_post(self, client: Any, req: LeaseRequest) -> LeaseStatus:
+        try:
+            return await self._apost_lease(client, req)
+        except _Unreachable as exc:
+            if not isinstance(exc.__cause__, _httpx().TimeoutException):
+                raise
+            _log.debug("GPU broker POST /leases timed out; retrying request %s once", req.request_id)
+            return await self._apost_lease(client, req)
+
     async def _aacquire(self, client: Any, req: LeaseRequest) -> LeaseStatus:
         deadline = time.monotonic() + self.timeout_s
-        status = await self._apost_lease(client, req.model_copy(update={"wait_s": self._poll_wait(deadline)}))
+        status = await self._afirst_post(client, req.model_copy(update={"wait_s": self._poll_wait(deadline)}))
         try:
             while status.state == "queued":
                 if self._remaining(deadline) <= 0:

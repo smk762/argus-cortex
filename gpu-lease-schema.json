@@ -218,6 +218,20 @@
           "title": "Lease Version",
           "type": "string"
         },
+        "model_mb": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The part of vram_mb that is model weights the service keeps loaded after the lease (a ComfyUI checkpoint, an Ollama model). The rest, vram_mb - model_mb, is the working set held only while the job runs. Unset: the broker treats all of vram_mb as working set.",
+          "title": "Model Mb"
+        },
         "not_before": {
           "anyOf": [
             {
@@ -261,6 +275,20 @@
           "default": null,
           "title": "Priority"
         },
+        "request_id": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Client-generated id that makes a retried POST idempotent: the broker answers a repeated (tenant, request_id) with the lease it already made.",
+          "title": "Request Id"
+        },
         "resume": {
           "anyOf": [
             {
@@ -298,6 +326,7 @@
         },
         "vram_mb": {
           "default": 0,
+          "description": "The whole footprint: model weights plus the working set.",
           "minimum": 0,
           "title": "Vram Mb",
           "type": "integer"

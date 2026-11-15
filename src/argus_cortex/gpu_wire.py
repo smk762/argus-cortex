@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Annotated, Literal, get_args
+from typing import Annotated, Any, Literal, get_args
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -73,6 +73,13 @@ def target_model(target: str) -> str | None:
     return model if sep else None
 
 
+def _check_model_mb(model: Any) -> Any:
+    model_mb, vram_mb = getattr(model, "model_mb", None), getattr(model, "vram_mb", 0)
+    if model_mb is not None and model_mb > vram_mb:
+        raise ValueError(f"model_mb ({model_mb}) cannot exceed vram_mb ({vram_mb}), the whole footprint")
+    return model
+
+
 class GpuConstraints(BaseModel):
     """Where a lease may be placed, beyond fitting its VRAM. Unset fields do not constrain."""
 
@@ -102,15 +109,36 @@ class LeaseRequest(LeaseVersioned):
     caller: str = Field("", max_length=200, description="Free-form detail for logs and the dashboard.")
     kind: Slug = "default"
     target: Target = IN_PROCESS
-    vram_mb: Megabytes = 0
+    vram_mb: Megabytes = Field(0, description="The whole footprint: model weights plus the working set.")
+    model_mb: Megabytes | None = Field(
+        None,
+        description="The part of vram_mb that is model weights the service keeps loaded after the lease (a ComfyUI "
+        "checkpoint, an Ollama model). The rest, vram_mb - model_mb, is the working set held only while the job runs. "
+        "Unset: the broker treats all of vram_mb as working set.",
+    )
     priority: PriorityClass | None = None
     preemptible: bool | None = None
     constraints: GpuConstraints = GpuConstraints()
+    request_id: str | None = Field(
+        None,
+        max_length=100,
+        description="Client-generated id that makes a retried POST idempotent: the broker answers a repeated "
+        "(tenant, request_id) with the lease it already made.",
+    )
     ttl_s: float = Field(60.0, gt=0, le=3600, description="The lease expires this long after the last heartbeat.")
     wait_s: float = Field(0.0, ge=0, le=300, description="How long the broker may hold this request before answering.")
     not_before: AwareDatetime | None = None
     deadline: AwareDatetime | None = Field(None, description="Refuse rather than grant after this time.")
     resume: str | None = Field(None, max_length=100, description="The id of a lease whose work is already running.")
+
+    @model_validator(mode="after")
+    def _model_within_total(self) -> LeaseRequest:
+        return _check_model_mb(self)
+
+    @property
+    def working_mb(self) -> int:
+        """The working set: ``vram_mb - model_mb``, or all of ``vram_mb`` when ``model_mb`` is unset."""
+        return self.vram_mb - (self.model_mb or 0)
 
 
 class LeaseStatus(LeaseVersioned):
@@ -180,11 +208,23 @@ class TenantKind(BaseModel):
 
     kind: Slug
     target: Target = IN_PROCESS
-    vram_mb: Megabytes = Field(description="Declared footprint. The broker uses its learned p95 when that is larger.")
+    vram_mb: Megabytes = Field(
+        description="Declared footprint, weights plus working set. The broker uses its learned p95 when larger."
+    )
+    model_mb: Megabytes | None = Field(None, description="The part of vram_mb that stays loaded after a lease.")
     priority: PriorityClass = "interactive"
     preemptible: bool = False
     constraints: GpuConstraints = GpuConstraints()
     description: str = ""
+
+    @model_validator(mode="after")
+    def _model_within_total(self) -> TenantKind:
+        return _check_model_mb(self)
+
+    @property
+    def working_mb(self) -> int:
+        """The working set: ``vram_mb - model_mb``, or all of ``vram_mb`` when ``model_mb`` is unset."""
+        return self.vram_mb - (self.model_mb or 0)
 
 
 class TenantResident(BaseModel):

@@ -73,6 +73,20 @@
           "title": "Kind",
           "type": "string"
         },
+        "model_mb": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The part of vram_mb that stays loaded after a lease.",
+          "title": "Model Mb"
+        },
         "preemptible": {
           "default": false,
           "title": "Preemptible",
@@ -97,7 +111,7 @@
           "type": "string"
         },
         "vram_mb": {
-          "description": "Declared footprint. The broker uses its learned p95 when that is larger.",
+          "description": "Declared footprint, weights plus working set. The broker uses its learned p95 when larger.",
           "minimum": 0,
           "title": "Vram Mb",
           "type": "integer"

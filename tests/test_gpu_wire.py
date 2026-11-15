@@ -118,3 +118,20 @@ def test_load_manifest_refuses_a_non_mapping(tmp_path: Path) -> None:
     path.write_text("[1, 2]", encoding="utf-8")
     with pytest.raises(ValueError, match="mapping"):
         load_tenant_manifest(path)
+
+
+def test_model_mb_splits_the_footprint() -> None:
+    req = LeaseRequest(tenant="argus-darkroom", target="comfyui", vram_mb=9000, model_mb=6500)
+    assert req.working_mb == 2500
+    assert LeaseRequest(tenant="t", vram_mb=900).working_mb == 900  # unset: all working set
+    kind = TenantManifest.model_validate(
+        {"tenant": "t", "kinds": [{"kind": "g", "target": "comfyui", "vram_mb": 9000, "model_mb": 6500}]}
+    ).kind_for("g")
+    assert kind.working_mb == 2500
+
+
+def test_model_mb_cannot_exceed_the_total() -> None:
+    with pytest.raises(ValidationError, match="cannot exceed"):
+        LeaseRequest(tenant="t", vram_mb=1000, model_mb=1001)
+    with pytest.raises(ValidationError, match="cannot exceed"):
+        TenantManifest.model_validate({"tenant": "t", "kinds": [{"kind": "g", "vram_mb": 1, "model_mb": 2}]})
