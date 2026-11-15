@@ -13,11 +13,23 @@ and an Ollama-backed SingGuard) takes the same lease.
   ``min_vram_mb`` free. The lock orders argus jobs among themselves; the VRAM wait
   is what accounts for tenants that never take the lock (ComfyUI, Ollama), since
   NVML reports free memory across every process on the card.
-* :func:`coordinator_from_env`: ``ARGUS_GPU_COORDINATOR`` (``none``/``lease``),
+* :class:`~argus_cortex.gpu_broker.BrokerCoordinator`: asks the suite's GPU broker
+  (argus-iris) over HTTP, which places the lease on a node, queues it by priority
+  and evicts idle models to make room. Behind ``[remote]``; when the broker cannot
+  be reached it falls back to another coordinator rather than failing.
+* :func:`coordinator_from_env`: ``ARGUS_GPU_COORDINATOR`` (``none``/``lease``/``broker``),
   ``ARGUS_GPU_LEASE_PATH``, ``ARGUS_GPU_LEASE_TIMEOUT_S``, ``ARGUS_GPU_DEVICE``.
   The names are host-wide, not per stage: every process must agree on them.
   One lock serialises every argus GPU job on the host; ``ARGUS_GPU_DEVICE``
-  only selects which card NVML probes.
+  only selects which card NVML probes. ``broker`` adds ``ARGUS_GPU_BROKER_URL``,
+  ``ARGUS_GPU_BROKER_TOKEN``, ``ARGUS_GPU_TENANT``, ``ARGUS_GPU_TENANT_MANIFEST`` and
+  ``ARGUS_GPU_BROKER_FALLBACK`` (``lease``, the default, or ``none``).
+
+Every ``lease()`` yields a :class:`GpuLease`. Code that ignores it keeps working;
+code that reads it learns where the broker placed the work (``node``,
+``base_url``) and whether it should give the GPU back early (``should_yield()``).
+The optional ``priority``/``target``/``kind``/``preemptible``/``constraints``
+arguments only mean something to the broker; the local coordinators ignore them.
 
 The VRAM check is a snapshot, not a reservation: a tenant outside the lock can
 still allocate between the check and the job. Each stage owns its footprint
@@ -32,6 +44,7 @@ mounts. ``flock`` works across containers on one host kernel. NVML is behind the
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 import math
@@ -40,14 +53,18 @@ import stat
 import tempfile
 import threading
 import time
-from collections.abc import Callable, Iterator
-from typing import Protocol, runtime_checkable
+from collections.abc import AsyncIterator, Callable, Iterator
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from argus_cortex.gpu_wire import GpuConstraints, PriorityClass
 
 _log = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_S = 300.0
 DEFAULT_POLL_S = 0.5
-COORDINATORS = ("none", "lease")
+COORDINATORS = ("none", "lease", "broker")
 
 _nvml_lock = threading.Lock()
 _nvml_ready: bool | None = None  # None: not tried yet; False: NVML cannot run here
@@ -61,15 +78,106 @@ class GpuLeaseTimeout(TimeoutError):
     """
 
 
+class GpuLeaseRefused(RuntimeError):
+    """The broker refused the lease outright: it can never fit, or its deadline passed.
+
+    Unlike :class:`GpuLeaseTimeout`, retrying the same request will not help.
+    """
+
+
+@dataclass
+class GpuLease:
+    """What a held lease tells its body. The local coordinators fill in only ``via``.
+
+    * ``via``: ``local`` (none/lease coordinator), ``broker``, or ``fallback`` (the
+      broker could not be reached and another coordinator granted it).
+    * ``node``/``device``: where the broker placed the work.
+    * ``base_url``: for a service target (``ollama:<model>``, ``comfyui``), the URL
+      to call on that node. ``None`` means "use your configured URL".
+    * :meth:`should_yield`: the broker asked for the GPU back; release at the next
+      safe point (between tiles, seeds, batches). Nothing is killed if you don't.
+    * :meth:`report_peak_vram`: tell the broker the peak you saw, so it learns the
+      real footprint.
+    """
+
+    via: Literal["local", "broker", "fallback"] = "local"
+    lease_id: str | None = None
+    node: str | None = None
+    device: int | None = None
+    base_url: str | None = None
+    peak_vram_mb: int | None = None
+    _yield: threading.Event = field(default_factory=threading.Event, repr=False, compare=False)
+
+    def should_yield(self) -> bool:
+        return self._yield.is_set()
+
+    def report_peak_vram(self, mb: int) -> None:
+        if mb >= 0:
+            self.peak_vram_mb = max(self.peak_vram_mb or 0, int(mb))
+
+
 @runtime_checkable
 class GpuCoordinator(Protocol):
     """Gates a block of GPU work behind a lease."""
 
     name: str
 
-    def lease(self, *, caller: str, min_vram_mb: int) -> contextlib.AbstractContextManager[None]:
+    def lease(
+        self,
+        *,
+        caller: str,
+        min_vram_mb: int,
+        priority: PriorityClass | None = None,
+        target: str | None = None,
+        kind: str | None = None,
+        preemptible: bool | None = None,
+        constraints: GpuConstraints | None = None,
+    ) -> contextlib.AbstractContextManager[GpuLease]:
         """A context manager that holds a GPU slot for its body."""
         ...
+
+    def alease(
+        self,
+        *,
+        caller: str,
+        min_vram_mb: int,
+        priority: PriorityClass | None = None,
+        target: str | None = None,
+        kind: str | None = None,
+        preemptible: bool | None = None,
+        constraints: GpuConstraints | None = None,
+    ) -> contextlib.AbstractAsyncContextManager[GpuLease]:
+        """:meth:`lease` for async code: waiting never blocks the event loop."""
+        ...
+
+
+@contextlib.asynccontextmanager
+async def _sync_lease_in_thread(cm: contextlib.AbstractContextManager[GpuLease]) -> AsyncIterator[GpuLease]:
+    """Hold a blocking lease from async code: enter and exit it in a worker thread.
+
+    If the task is cancelled while the thread is still waiting for the lease, the
+    thread is left to finish and the lease it gets is released at once, so a
+    cancelled caller never strands the lock.
+    """
+    loop = asyncio.get_running_loop()
+    entering = asyncio.ensure_future(asyncio.to_thread(cm.__enter__))
+    try:
+        handle = await asyncio.shield(entering)
+    except asyncio.CancelledError:
+
+        def _undo(fut: asyncio.Future[GpuLease]) -> None:
+            if not fut.cancelled() and fut.exception() is None:
+                loop.run_in_executor(None, cm.__exit__, None, None, None)
+
+        entering.add_done_callback(_undo)
+        raise
+    try:
+        yield handle
+    except BaseException as exc:
+        if not await asyncio.to_thread(cm.__exit__, type(exc), exc, exc.__traceback__):
+            raise
+    else:
+        await asyncio.to_thread(cm.__exit__, None, None, None)
 
 
 class NullCoordinator:
@@ -78,8 +186,12 @@ class NullCoordinator:
     name = "none"
 
     @contextlib.contextmanager
-    def lease(self, *, caller: str, min_vram_mb: int) -> Iterator[None]:
-        yield
+    def lease(self, *, caller: str, min_vram_mb: int, **_: object) -> Iterator[GpuLease]:
+        yield GpuLease()
+
+    @contextlib.asynccontextmanager
+    async def alease(self, *, caller: str, min_vram_mb: int, **_: object) -> AsyncIterator[GpuLease]:
+        yield GpuLease()
 
 
 def free_vram_mb(device: int = 0) -> int | None:
@@ -143,8 +255,11 @@ class LeaseCoordinator:
         self.device = device
         self.probe = probe
 
+    def alease(self, *, caller: str, min_vram_mb: int, **_: object) -> contextlib.AbstractAsyncContextManager[GpuLease]:
+        return _sync_lease_in_thread(self.lease(caller=caller, min_vram_mb=min_vram_mb))
+
     @contextlib.contextmanager
-    def lease(self, *, caller: str, min_vram_mb: int) -> Iterator[None]:
+    def lease(self, *, caller: str, min_vram_mb: int, **_: object) -> Iterator[GpuLease]:
         try:
             import fcntl  # noqa: PLC0415 - POSIX only
         except ImportError as exc:  # pragma: no cover - non-POSIX host
@@ -187,7 +302,7 @@ class LeaseCoordinator:
             try:
                 self._wait_for_room(caller, min_vram_mb, deadline)
                 _log.debug("gpu lease acquired by %s (min %d MB, %s)", caller, min_vram_mb, self.lock_path)
-                yield
+                yield GpuLease()
             finally:
                 with contextlib.suppress(OSError):
                     fcntl.flock(fd, fcntl.LOCK_UN)
@@ -214,8 +329,18 @@ def build_coordinator(
     lock_path: str | None = None,
     timeout_s: float | None = None,
     device: int = 0,
+    broker_url: str | None = None,
+    broker_token: str | None = None,
+    tenant: str | None = None,
+    manifest_path: str | None = None,
+    fallback: str = "lease",
 ) -> GpuCoordinator:
-    """A coordinator by name, one of :data:`COORDINATORS` (empty is ``none``)."""
+    """A coordinator by name, one of :data:`COORDINATORS` (empty is ``none``).
+
+    ``broker`` needs *broker_url*; without one it logs a warning and returns the
+    *fallback* coordinator (``lease`` or ``none``), which is also what the broker
+    coordinator falls back to whenever the broker cannot be reached.
+    """
     key = (name or "none").strip().lower()
     if key == "none":
         return NullCoordinator()
@@ -224,6 +349,36 @@ def build_coordinator(
             lock_path=lock_path,
             timeout_s=DEFAULT_TIMEOUT_S if timeout_s is None else timeout_s,
             device=device,
+        )
+    if key == "broker":
+        fallback_key = (fallback or "lease").strip().lower()
+        if fallback_key not in ("none", "lease"):
+            _log.warning("GPU broker fallback %r is not 'lease' or 'none'; using 'lease'", fallback)
+            fallback_key = "lease"
+        local = build_coordinator(fallback_key, lock_path=lock_path, timeout_s=timeout_s, device=device)
+        if not broker_url:
+            _log.warning("ARGUS_GPU_COORDINATOR=broker but no broker URL is set; using the %r coordinator", local.name)
+            return local
+        from argus_cortex.gpu_broker import BrokerCoordinator  # noqa: PLC0415 - keeps the client out of the import
+        from argus_cortex.gpu_wire import load_tenant_manifest  # noqa: PLC0415
+
+        manifest = None
+        if manifest_path:
+            try:
+                manifest = load_tenant_manifest(manifest_path)
+            except Exception as exc:  # noqa: BLE001 - a bad manifest must not stop the service
+                _log.warning("GPU tenant manifest %s not loaded: %s", manifest_path, exc)
+        resolved_tenant = tenant or (manifest.tenant if manifest else None)
+        if not resolved_tenant:
+            _log.warning("no GPU tenant name (ARGUS_GPU_TENANT or a manifest); the broker will see 'unknown'")
+            resolved_tenant = "unknown"
+        return BrokerCoordinator(
+            broker_url,
+            tenant=resolved_tenant,
+            token=broker_token,
+            manifest=manifest,
+            fallback=local,
+            timeout_s=DEFAULT_TIMEOUT_S if timeout_s is None else timeout_s,
         )
     raise ValueError(f"unknown GPU coordinator {name!r}; choose from: {', '.join(COORDINATORS)}")
 
@@ -253,4 +408,9 @@ def coordinator_from_env() -> GpuCoordinator:
         lock_path=os.environ.get("ARGUS_GPU_LEASE_PATH") or None,
         timeout_s=_env_number("ARGUS_GPU_LEASE_TIMEOUT_S", float),
         device=0 if device is None else int(device),
+        broker_url=os.environ.get("ARGUS_GPU_BROKER_URL", "").strip() or None,
+        broker_token=os.environ.get("ARGUS_GPU_BROKER_TOKEN", "").strip() or None,
+        tenant=os.environ.get("ARGUS_GPU_TENANT", "").strip() or None,
+        manifest_path=os.environ.get("ARGUS_GPU_TENANT_MANIFEST", "").strip() or None,
+        fallback=os.environ.get("ARGUS_GPU_BROKER_FALLBACK", "lease"),
     )
