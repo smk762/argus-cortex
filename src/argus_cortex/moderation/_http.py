@@ -58,7 +58,7 @@ def post_json(
     Every transport or decoding problem is raised as *failed*, so a caller
     checking many images can record it against the one image.
     """
-    return _request_json(url, body, {"Content-Type": content_type}, timeout, service, failed)
+    return _request_json("POST", url, body, {"Content-Type": content_type}, timeout, service, failed)
 
 
 def get_json(url: str, timeout: float, service: str, failed: type[CheckFailed], *, missing_ok: bool = False) -> object:
@@ -66,10 +66,11 @@ def get_json(url: str, timeout: float, service: str, failed: type[CheckFailed], 
 
     Failures are raised as *failed*, as in :func:`post_json`.
     """
-    return _request_json(url, None, {}, timeout, service, failed, missing_ok=missing_ok)
+    return _request_json("GET", url, None, {}, timeout, service, failed, missing_ok=missing_ok)
 
 
 def _request_json(
+    method: str,
     url: str,
     body: bytes | None,
     headers: dict[str, str],
@@ -80,7 +81,6 @@ def _request_json(
     missing_ok: bool = False,
 ) -> object:
     url, auth = _split_credentials(url)
-    method = "GET" if body is None else "POST"
     req = urllib.request.Request(url, data=body, headers={**headers, **auth}, method=method)
     try:
         with _OPENER.open(req, timeout=timeout) as resp:  # noqa: S310 - caller-configured URL
