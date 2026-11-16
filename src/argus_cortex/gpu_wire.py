@@ -1,6 +1,6 @@
-"""Wire models for the suite's GPU broker (argus-iris): leases and tenant manifests.
+"""Wire models for the suite's GPU broker (argus-iris): leases, tenant manifests and resident replies.
 
-Two contracts, each versioned with :mod:`argus_cortex.wire` and committed as a JSON Schema so non-Python clients can
+Three contracts, each versioned with :mod:`argus_cortex.wire` and committed as a JSON Schema so non-Python clients can
 generate types from them:
 
 * **Lease** (``lease_version``, ``gpu-lease-schema.json``): what a caller and the broker exchange over HTTP.
@@ -10,6 +10,9 @@ generate types from them:
 * **Tenant manifest** (``tenant_version``, ``gpu-tenant-schema.json``): the ``gpu-tenant.yaml`` every repo that uses a
   GPU commits, saying what work it does, on which target, at what priority and VRAM, and which models it keeps
   resident. A service registers it with the broker on startup.
+* **Resident replies** (``resident_version``, ``gpu-resident-schema.json``): what a resident's routes return to the
+  broker's argus-http adapter. :class:`ResidentHealth` is the ``GET /health`` body, :class:`ResidentActionReply`
+  answers ``POST /admin/unload|evict|wake``, and :class:`ResidentBusyReply` is the 409 body for "busy, retry later".
 
 The HTTP routes are the broker's (argus-iris); the client is :class:`argus_cortex.gpu_broker.BrokerCoordinator`.
 Times on the wire are timezone-aware and compared in UTC. Pydantic only: no httpx, no YAML parser at import time.
@@ -30,9 +33,12 @@ LEASE_VERSION = "1.0"
 LEASE_MAJORS = ("1",)
 TENANT_VERSION = "1.0"
 TENANT_MAJORS = ("1",)
+RESIDENT_VERSION = "1.0"
+RESIDENT_MAJORS = ("1",)
 
 LEASE_SCHEMA_TITLE = "Argus GPU lease"
 TENANT_SCHEMA_TITLE = "Argus GPU tenant manifest"
+RESIDENT_SCHEMA_TITLE = "Argus GPU resident"
 
 PriorityClass = Literal["realtime", "interactive", "batch", "background"]
 """Highest first. ``realtime`` is never asked to yield; ``batch`` and ``background`` may be, cooperatively."""
@@ -50,6 +56,11 @@ RELEASE_OUTCOMES: tuple[str, ...] = get_args(ReleaseOutcome)
 AdapterKind = Literal["comfyui", "ollama", "argus-http", "immich", "container"]
 """How the broker reads and evicts a resident model (see argus-iris DESIGN.md, "Adapters")."""
 ADAPTER_KINDS: tuple[str, ...] = get_args(AdapterKind)
+
+ResidentState = Literal["unloaded", "loading", "cpu", "gpu", "error"]
+"""Where a resident's model is: not loaded; loading; warm in host RAM (evicted, or a CPU-only stage); on the GPU; or
+failed to load."""
+RESIDENT_STATES: tuple[str, ...] = get_args(ResidentState)
 
 IN_PROCESS = "in-process"
 TARGET_PATTERN = r"^[a-z][a-z0-9-]*(:\S+)?$"
@@ -255,7 +266,9 @@ class TenantResident(BaseModel):
         description="The compose container name. The broker's node agent matches GPU processes to this resident by "
         "it, for every adapter, and starts it to warm a stopped service (e.g. ComfyUI).",
     )
-    health_path: RoutePath = Field("/health", description="argus-http: status route (model state, busy, idle).")
+    health_path: RoutePath = Field(
+        "/health", description="argus-http: status route, answering a ResidentHealth (model state, busy, idle)."
+    )
     unload_path: RoutePath | None = Field(None, description="argus-http: free VRAM and host RAM, e.g. /admin/unload.")
     evict_path: RoutePath | None = Field(
         None, description="argus-http: move the model from GPU to CPU, keeping it warm."
@@ -331,6 +344,95 @@ def load_tenant_manifest(path: str | Path) -> TenantManifest:
     return TenantManifest.model_validate(data)
 
 
+# --- resident replies --------------------------------------------------------------------------------------------
+
+ResidentVersioned = make_versioned_base(
+    "resident_version", RESIDENT_VERSION, RESIDENT_MAJORS, label="GPU resident reply", class_name="ResidentVersioned"
+)
+
+MemoryMb = Annotated[float, Field(ge=0)]
+
+
+class ResidentGpu(BaseModel):
+    """The ``gpu`` block of :class:`ResidentHealth`: memory only. A field the service cannot measure is left out.
+
+    The model's state lives at the top level, not here. ``extra="allow"``, so a field a service still sends during a
+    migration (argus-lens's ``gpu.loaded``) is kept rather than refused.
+    """
+
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    free_vram_mb: MemoryMb | None = Field(None, description="Free VRAM on the device, across every process.")
+    allocated_mb: MemoryMb | None = Field(None, description="VRAM this process's tensors occupy.")
+    reserved_mb: MemoryMb | None = Field(None, description="VRAM this process's allocator holds, allocated or cached.")
+    total_mb: MemoryMb | None = Field(None, description="The device's total VRAM.")
+
+
+class ResidentHealth(ResidentVersioned):
+    """A resident's ``GET /health`` body, which the broker's argus-http adapter reads.
+
+    ``extra="allow"``: a service keeps its own fields (``status``, ``version``, per-model detail) alongside these.
+    A service that has not moved to this shape fails validation on ``model_state`` and ``busy``, which is the point:
+    the broker reads one shape. ``resident_version`` defaults to 1.0, so a service need not send it.
+    """
+
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    model_state: ResidentState
+    busy: bool = Field(description="Work is running now. An unload sent while busy is answered 409 or waits.")
+    idle_s: float | None = Field(
+        None,
+        ge=0,
+        description="Seconds since the last work finished. Null while busy or unloaded, and when the service does "
+        "not track it.",
+    )
+    gpu: ResidentGpu | None = Field(None, description="Memory figures; omitted when the service has no CUDA device.")
+
+    @property
+    def on_gpu(self) -> bool:
+        """The model holds VRAM now (``model_state == 'gpu'``)."""
+        return self.model_state == "gpu"
+
+
+class ResidentActionReply(ResidentVersioned):
+    """The 200 body of ``POST /admin/unload``, ``/admin/evict`` and ``/admin/wake``.
+
+    ``model_state`` is the state after the action. ``unloaded`` says whether the call freed anything: false when the
+    model was already unloaded (or already on the CPU, for evict), null on wake. A service with several models lists
+    them under a field of its own, never in ``unloaded``. While loading or unavailable a route answers 503; while busy,
+    409 with a :class:`ResidentBusyReply`.
+    """
+
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    status: str = Field("ok", max_length=200)
+    model_state: ResidentState
+    unloaded: bool | None = Field(None, description="True when the call freed memory; null when it does not apply.")
+
+
+class ResidentBusyReply(ResidentVersioned):
+    """The 409 body an admin route returns while work is running: nothing was done; retry after the work finishes.
+
+    A service may instead wait for the work and then act; it never interrupts it.
+    """
+
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    status: Literal["busy"] = "busy"
+    active: int = Field(ge=0, description="How many requests are running.")
+
+
+RESIDENT_MODELS: tuple[type[BaseModel], ...] = (ResidentHealth, ResidentActionReply, ResidentBusyReply)
+
+
+def resident_schema() -> str:
+    """The canonical JSON Schema for the resident replies, as committed in ``gpu-resident-schema.json``.
+
+    ``tests/test_gpu_wire.py`` fails if the committed file drifts; regenerate it with ``make schema``.
+    """
+    return render_schema(RESIDENT_MODELS, title=RESIDENT_SCHEMA_TITLE)
+
+
 __all__ = [
     "ADAPTER_KINDS",
     "IN_PROCESS",
@@ -341,6 +443,11 @@ __all__ = [
     "LEASE_VERSION",
     "PRIORITY_CLASSES",
     "RELEASE_OUTCOMES",
+    "RESIDENT_MAJORS",
+    "RESIDENT_MODELS",
+    "RESIDENT_SCHEMA_TITLE",
+    "RESIDENT_STATES",
+    "RESIDENT_VERSION",
     "TARGET_PATTERN",
     "TARGET_RE",
     "TENANT_MAJORS",
@@ -357,11 +464,17 @@ __all__ = [
     "LeaseStatus",
     "PriorityClass",
     "ReleaseOutcome",
+    "ResidentActionReply",
+    "ResidentBusyReply",
+    "ResidentGpu",
+    "ResidentHealth",
+    "ResidentState",
     "TenantKind",
     "TenantManifest",
     "TenantResident",
     "lease_schema",
     "load_tenant_manifest",
+    "resident_schema",
     "target_model",
     "target_service",
     "tenant_schema",
