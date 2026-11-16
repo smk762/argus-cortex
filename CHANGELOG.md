@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `argus_cortex.fs`: `safe_join` (a path from outside, resolved and kept under its root), `safe_name` (one safe
+  id or slug, `fullmatch`), `safe_basename` (an upload's filename), `is_within`, and `PathRefused`. The first of the
+  suite's paved roads (ai-code-auditor#56), with property-based tests (hypothesis). Design: `docs/paved-roads.md`.
+
 ## [0.7.0] - 2026-11-16
 
 ### Added
