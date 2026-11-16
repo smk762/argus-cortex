@@ -58,13 +58,37 @@ def post_json(
     Every transport or decoding problem is raised as *failed*, so a caller
     checking many images can record it against the one image.
     """
-    url, headers = _split_credentials(url)
-    req = urllib.request.Request(url, data=body, headers={"Content-Type": content_type, **headers}, method="POST")
+    return _request_json("POST", url, body, {"Content-Type": content_type}, timeout, service, failed)
+
+
+def get_json(url: str, timeout: float, service: str, failed: type[CheckFailed], *, missing_ok: bool = False) -> object:
+    """GET *url* and return the decoded JSON answer; ``None`` on a 404 when *missing_ok*.
+
+    Failures are raised as *failed*, as in :func:`post_json`.
+    """
+    return _request_json("GET", url, None, {}, timeout, service, failed, missing_ok=missing_ok)
+
+
+def _request_json(
+    method: str,
+    url: str,
+    body: bytes | None,
+    headers: dict[str, str],
+    timeout: float,
+    service: str,
+    failed: type[CheckFailed],
+    *,
+    missing_ok: bool = False,
+) -> object:
+    url, auth = _split_credentials(url)
+    req = urllib.request.Request(url, data=body, headers={**headers, **auth}, method=method)
     try:
         with _OPENER.open(req, timeout=timeout) as resp:  # noqa: S310 - caller-configured URL
             return json.loads(resp.read())
     except urllib.error.HTTPError as exc:
         exc.close()  # the exception outlives the request as __cause__; its socket need not
+        if missing_ok and exc.code == 404:
+            return None
         raise failed(f"{service} returned HTTP {exc.code}") from exc
     except (urllib.error.URLError, http.client.HTTPException, TimeoutError, OSError) as exc:
         raise failed(f"{service} request failed: {exc}") from exc

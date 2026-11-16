@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-16
+
+### Added
+- **`NudeNetClient.info()`.** Asks a NudeNet server which model it runs (`GET /health`) and returns a `NudeNetInfo`
+  (`model`, `resolution`, and `detector`: `640m`, `320n` or `None`). The upstream 320n image has no `/health` and
+  gives an empty `NudeNetInfo`; an unreachable server raises `NudeNetCheckFailed`. 320n and 640m score the same
+  image differently, so record the detector with the scores and tune thresholds per model. The suite is moving to
+  one shared 640m server (#79).
+- **Resident replies (`argus_cortex.gpu_wire`).** What a resident's routes return, so the broker reads one shape
+  instead of three: `ResidentHealth` for `GET /health` (top-level `model_state`, one of `unloaded`/`loading`/`cpu`/
+  `gpu`/`error`; `busy`; `idle_s`, null while busy or unloaded; an optional memory-only `gpu` block with
+  `free_vram_mb`/`allocated_mb`/`reserved_mb`/`total_mb`), `ResidentActionReply` for `POST /admin/unload|evict|wake`
+  (`status`, `model_state` after the action, `unloaded: bool | None`), and `ResidentBusyReply`, the 409 body
+  (`{"status": "busy", "active": n}`: nothing was done, retry after the work finishes); 503 means loading or
+  unavailable. `resident_version` 1.0, defaulted, so a service need not send it. Replies allow extra fields, so
+  services keep their own. Committed `gpu-resident-schema.json` (#84).
+
 ## [0.6.0] - 2026-11-15
 
 ### Added
@@ -322,7 +339,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/smk762/argus-cortex/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/smk762/argus-cortex/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/smk762/argus-cortex/compare/v0.4.7...v0.5.0
 [0.4.7]: https://github.com/smk762/argus-cortex/compare/v0.4.6...v0.4.7

@@ -16,6 +16,7 @@ from argus_cortex.moderation.nudenet import (
     NsfwResult,
     NudeNetCheckFailed,
     NudeNetClient,
+    NudeNetInfo,
     NudeNetLabel,
     exposed_score,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "NsfwResult",
     "NudeNetCheckFailed",
     "NudeNetClient",
+    "NudeNetInfo",
     "NudeNetLabel",
     "SingGuardClient",
     "exposed_score",

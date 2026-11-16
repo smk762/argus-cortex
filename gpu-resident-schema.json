@@ -1,0 +1,202 @@
+{
+  "$defs": {
+    "ResidentActionReply": {
+      "additionalProperties": true,
+      "description": "The 200 body of ``POST /admin/unload``, ``/admin/evict`` and ``/admin/wake``.\n\n``model_state`` is the state after the action. ``unloaded`` says whether the call freed anything: false when the\nmodel was already unloaded (or already on the CPU, for evict), null on wake. A service with several models lists\nthem under a field of its own, never in ``unloaded``. While loading or unavailable a route answers 503; while busy,\n409 with a :class:`ResidentBusyReply`.",
+      "properties": {
+        "model_state": {
+          "enum": [
+            "unloaded",
+            "loading",
+            "cpu",
+            "gpu",
+            "error"
+          ],
+          "title": "Model State",
+          "type": "string"
+        },
+        "resident_version": {
+          "default": "1.0",
+          "title": "Resident Version",
+          "type": "string"
+        },
+        "status": {
+          "default": "ok",
+          "maxLength": 200,
+          "title": "Status",
+          "type": "string"
+        },
+        "unloaded": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "True when the call freed memory; null when it does not apply.",
+          "title": "Unloaded"
+        }
+      },
+      "required": [
+        "model_state"
+      ],
+      "title": "ResidentActionReply",
+      "type": "object"
+    },
+    "ResidentBusyReply": {
+      "additionalProperties": true,
+      "description": "The 409 body an admin route returns while work is running: nothing was done; retry after the work finishes.\n\nA service may instead wait for the work and then act; it never interrupts it.",
+      "properties": {
+        "active": {
+          "description": "How many requests are running.",
+          "minimum": 0,
+          "title": "Active",
+          "type": "integer"
+        },
+        "resident_version": {
+          "default": "1.0",
+          "title": "Resident Version",
+          "type": "string"
+        },
+        "status": {
+          "const": "busy",
+          "default": "busy",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "active"
+      ],
+      "title": "ResidentBusyReply",
+      "type": "object"
+    },
+    "ResidentGpu": {
+      "additionalProperties": true,
+      "description": "The ``gpu`` block of :class:`ResidentHealth`: memory only. A field the service cannot measure is left out.\n\nThe model's state lives at the top level, not here. ``extra=\"allow\"``, so a field a service still sends during a\nmigration (argus-lens's ``gpu.loaded``) is kept rather than refused.",
+      "properties": {
+        "allocated_mb": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "VRAM this process's tensors occupy.",
+          "title": "Allocated Mb"
+        },
+        "free_vram_mb": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Free VRAM on the device, across every process.",
+          "title": "Free Vram Mb"
+        },
+        "reserved_mb": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "VRAM this process's allocator holds, allocated or cached.",
+          "title": "Reserved Mb"
+        },
+        "total_mb": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The device's total VRAM.",
+          "title": "Total Mb"
+        }
+      },
+      "title": "ResidentGpu",
+      "type": "object"
+    },
+    "ResidentHealth": {
+      "additionalProperties": true,
+      "description": "A resident's ``GET /health`` body, which the broker's argus-http adapter reads.\n\n``extra=\"allow\"``: a service keeps its own fields (``status``, ``version``, per-model detail) alongside these.\nA service that has not moved to this shape fails validation on ``model_state`` and ``busy``, which is the point:\nthe broker reads one shape. ``resident_version`` defaults to 1.0, so a service need not send it.",
+      "properties": {
+        "busy": {
+          "description": "Work is running now. An unload sent while busy is answered 409 or waits.",
+          "title": "Busy",
+          "type": "boolean"
+        },
+        "gpu": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResidentGpu"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Memory figures; omitted when the service has no CUDA device."
+        },
+        "idle_s": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds since the last work finished. Null while busy or unloaded, and when the service does not track it.",
+          "title": "Idle S"
+        },
+        "model_state": {
+          "enum": [
+            "unloaded",
+            "loading",
+            "cpu",
+            "gpu",
+            "error"
+          ],
+          "title": "Model State",
+          "type": "string"
+        },
+        "resident_version": {
+          "default": "1.0",
+          "title": "Resident Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model_state",
+        "busy"
+      ],
+      "title": "ResidentHealth",
+      "type": "object"
+    }
+  },
+  "title": "Argus GPU resident"
+}

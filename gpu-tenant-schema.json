@@ -260,7 +260,7 @@
         },
         "health_path": {
           "default": "/health",
-          "description": "argus-http: status route (model state, busy, idle).",
+          "description": "argus-http: status route, answering a ResidentHealth (model state, busy, idle).",
           "maxLength": 200,
           "pattern": "^/\\S*$",
           "title": "Health Path",
