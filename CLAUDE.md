@@ -27,7 +27,7 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 | Never | Enforced by |
 |---|---|
 | Change `taxonomy.py`, `provenance.py`, `consent.py` or `gpu_wire.py` without `make schema` in the same commit | `test_taxonomy::test_committed_schema_matches_taxonomy`, `test_provenance::test_committed_schema_matches_provenance`, `test_consent::test_committed_schema_matches_consent`, `test_gpu_wire::test_committed_schema_is_current` |
-| Ship a breaking wire change as anything but a major version | **UNENFORCED** (#105) |
+| Ship a breaking change to a committed schema in anything but a major release (and, for a `*_version` schema, a new wire major) | `test_schema_compat::test_committed_schemas_break_only_in_a_major_release`: compares each `*-schema.json` with the last `v*` tag; the release is the newest CHANGELOG heading |
 | Import NudeNet (AGPL-3.0): HTTP only | ruff `TID251` banned-api (`pyproject.toml`); `test_rules::test_cortex_never_imports_a_stage_or_nudenet` |
 | Import a stage from cortex | `test_rules::test_cortex_never_imports_a_stage_or_nudenet` |
 | `import argus_cortex` pulling in an optional extra (httpx, starlette, psycopg, qdrant, minio, Pillow, NVML, PyYAML) | `test_rules::test_top_level_import_loads_no_optional_extra` |
