@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-16
+
+### Added
+- `argus_cortex.fs`: `safe_join` (a path from outside, resolved and kept under its root), `safe_name` (one safe
+  id or slug, `fullmatch`), `safe_basename` (an upload's filename), `is_within`, and `PathRefused`. The first of the
+  suite's paved roads (ai-code-auditor#56), with property-based tests (hypothesis). Design: `docs/paved-roads.md`.
+- `argus_cortex.net`: `fetch` / `afetch` for URLs from outside (every resolved address must be global, the connection
+  is pinned to the checked address, GET/HEAD redirects re-checked per hop with credentials dropped off-origin, body capped after decoding and total
+  time capped, IDN hosts fetched by their ASCII name), plus
+  `check_url`, `is_public_ip`, `Reply`, `UrlRefused`, `FetchFailed`. httpx behind `[remote]`.
+- `argus_cortex.auth`: `bearer()`, an admin-route dependency that fails closed when its token is unset (unless
+  `open_when_unset=True`) and compares in constant time; `check_bearer()`.
+- `argus_cortex.limits`: `read_body`, `read_upload`, `decode_base64`, `open_image`, `TooLarge`, `BadInput`.
+- `SUITE.md`: rows for argus-retina (the shared detector servers, with its OCR image) and argus-herald (the release
+  broadcaster, with a "Need it? Use it" entry for announcements), and "Need it? Use it" entries for the four helpers
+  above. argus-herald's package mark in `brand/`.
+
+### Changed
+- `SUITE.md`: argus-assay's row for v0.2.0, and argus-lens's for 0.13.0 (claim checks, argus-iris GPU leases, the
+  affiliation check and `LENS_TRUSTED_HOSTS`).
+- CI runs the argus-ci suite rules (`suite-rules.yml@v1`) with an empty `.suite-rules-baseline.json`.
+- `CLAUDE.md` states what must never happen, and names the test or lint behind each rule (#98). New checks:
+  `import argus_cortex` loads no optional extra, cortex imports no stage and no NudeNet (also a ruff `TID251` ban),
+  the `argus` XMP namespace URI is pinned, `consent_valid` reads no clock, an age check can't hold the ID, and an
+  allow-listed `net` host is still pinned. `SUITE.md`'s shared rules say which have a suite-level check.
+
 ## [0.7.0] - 2026-11-16
 
 ### Added
@@ -339,7 +365,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/smk762/argus-cortex/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/smk762/argus-cortex/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/smk762/argus-cortex/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/smk762/argus-cortex/compare/v0.4.7...v0.5.0

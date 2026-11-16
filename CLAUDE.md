@@ -18,44 +18,55 @@ their own rows land here. Keep it short, because it is loaded into every session
 
 @SUITE.md
 
-## Layout
+## Must never happen
 
-`src/argus_cortex/` (top level is pydantic-only; everything heavier is behind an extra and lazily imported):
+Each row names what enforces it. An **UNENFORCED** row is a known gap, linked to the issue that closes it: rely on
+review until then, and close it with a check rather than more prose. A rule about code shape across the suite (a banned
+import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test here.
 
-- `taxonomy.py` — the "moat" types every stage inherits verbatim: `TargetProfile`, `TargetStyle`/`TargetCategory` literals, and `taxonomy_schema()` (the source of the committed `taxonomy-schema.json`). Keep it dependency-light; a change here retrains everyone's expectations.
-- `provenance.py` — `Provenance`/`ProvenanceKind`/`CLEARED_KINDS` for face, voice and image sources, hoisted from argus-mask (#19/#57): `personal` (never cleared) vs cleared `stock`/`synthetic`/`consented` (licence required; `consented` needs `subject` + `release_sha256`); `curated` reserved. **argus-mask owns the meaning of each field — change it only in step with mask.** Optional `generator` (model, sha256, seed, prompt) on `synthetic`/`personal` only. `provenance_schema()` renders the committed `provenance-schema.json` (`make schema`; drift-tested).
-- `consent.py` — `ConsentRecord` (keyed by `release_sha256`, the join to a `consented` `Provenance`), `consent_valid()` → `ConsentVerdict` with a closed `ConsentRefusal` reason (checks in a fixed order; the first failure wins), `consent_matches()`, and `consent_schema()` → the committed `consent-schema.json`. Defined in argus-mask#26; **mask owns the meaning — change it only in step with mask.** `consent_valid` takes `at` from the caller (tz-aware, compared as a UTC day) and never reads the clock; an unknown use is refused, not raised. A record names a person: services return verdicts, never records.
-- `wire.py` — the versioned wire-schema toolkit consumers build their contracts on: `make_versioned_base(field_name, current, majors)` (a Pydantic base that stamps + version-checks a field like `proof_version`/`manifest_version`), `check_version()` (the major-compatibility gate), `render_schema()`/`wire_schema()` (the canonical committed-schema string behind each consumer's `schema --check` CLI), and `VersionError`.
-- `backends.py` — the AI-backend contract: `Backend`/`LocalBackend`/`RemoteBackend` (point at a hosted service via `from_host(host, port)` or `from_provider(RemoteProvider.…)`), plus `with_retries()` and `resolve_device()`. httpx is lazy, behind `[remote]`.
-- `server.py` — the shared FastAPI/ASGI scaffolding other repos' micro-servers mount: `WriteGuard` (pure-ASGI method gate), the `constant_refuse()` (read-only/replay) and `cross_site_refuse()` (cross-origin write) predicates, `env_flag()`, and the `UNSAFE_METHODS`/`TRUTHY`/`FALSY` constants. Starlette is behind `[server]`.
-- `gpu.py` — GPU tenancy (from argus-lens): the `GpuCoordinator` protocol (`lease(caller=, min_vram_mb=, priority=, target=, kind=, preemptible=, constraints=)` and async `alease()`, both yielding a `GpuLease` handle; local coordinators ignore the broker-only arguments), `NullCoordinator`, `LeaseCoordinator` (host-wide `flock` **then** a wait for NVML free VRAM, so tenants outside the lock like ComfyUI and Ollama are accounted for), `free_vram_mb()`, `coordinator_from_env()` (`ARGUS_GPU_*` — host-wide names on purpose: every process must agree). NVML lazily, behind `[gpu]`; a probe that cannot run grants the lease. **The lock file must be on a volume every GPU container mounts** — per-container `/tmp` coordinates nothing.
-- `gpu_wire.py` — the GPU broker's wire models (pydantic only): `LeaseRequest`/`LeaseStatus`/`Heartbeat`/`HeartbeatReply`/`LeaseRelease` (`lease_version`), `TenantManifest` (`tenant_version`, the `gpu-tenant.yaml` every GPU-using repo commits), and the resident replies `ResidentHealth`/`ResidentActionReply`/`ResidentBusyReply` (`resident_version`, what a resident's `/health` and `/admin/*` routes return), with `lease_schema()`/`tenant_schema()`/`resident_schema()` rendering the committed `gpu-lease-schema.json`/`gpu-tenant-schema.json`/`gpu-resident-schema.json`. **argus-iris serves this contract — change it only in step with iris**, and additively within a major (replies ignore unknown fields; manifests forbid them, so a new manifest field needs the schema regenerated and iris bumped).
-- `gpu_broker.py` — `BrokerCoordinator`, the client for argus-iris (`ARGUS_GPU_COORDINATOR=broker`): register manifest → `POST /leases` → long-poll `GET /leases/{id}?wait_s=` → background heartbeat (sets `should_yield()`, re-attaches with `resume` on 404) → `POST /leases/{id}/release` with outcome and peak VRAM. **Fails open** to its fallback coordinator on transport errors, 5xx or a missing route; raises `BrokerError` on other 4xx or an incompatible major. httpx lazily, behind `[remote]`.
-- `xmp.py` — the suite's XMP sidecar read/merge/write (`write_xmp`/`read_xmp`/`merge_xmp`/`parse_xmp`, `XmpData`/`XmpRegions`, `XmpError`), used by lens (keywords/caption) and curator (faces, content rating). Stdlib `xml.etree` only. **Writes merge — latest wins per property, foreign properties preserved; keep that.** `None` = leave untouched, empty = remove. A DTD is refused and an unparseable sidecar raises rather than being overwritten. The `argus` namespace URI is a wire contract — don't change it.
-- `moderation/` — content-moderation clients over HTTP: `nudenet.py` (`NudeNetClient` incl. `info()` → `NudeNetInfo`, the server's model, `NsfwResult`, `DEFAULT_EXPOSED_LABELS` — **the suite's one definition of nudity; don't widen it casually**, every stage's NSFW numbers move with it), `singguard.py` (`SingGuardClient` incl. text-only `check_text()`, `GuardResult`, `rule_matches`), `policies.py` (the named policy texts, the per-policy illegal-rule table and `mode()`: `default`/`sfw-*` are SFW, the known adult policies NSFW, any other name raises — **a policy's text and its illegal letters change together**), `_http.py` (shared POST/GET, proxy-free opener, `CheckFailed`/`ModerationConfigError`). Stdlib + pydantic; Pillow lazily, behind `[images]`. Never import NudeNet (AGPL) — HTTP only. URLs are passed in; stages own their env config.
-- `store/` — the optional stateful-services layer, opt-in per `CORTEX_*` env var: `lineage.py` (Phase 1 Postgres DAG, `open_lineage_store()`), `vector.py` (Phase 2 Qdrant, `open_vector_store()`), `blob.py` (Phase 3 MinIO/S3, `open_blob_store()`), over `config.py`/`models.py`/`errors.py`. Each `open_*()` returns a `Null*` no-op when its URL is unset. Drivers are behind `[postgres]`/`[qdrant]`/`[s3]`.
+| Never | Enforced by |
+|---|---|
+| Change `taxonomy.py`, `provenance.py`, `consent.py` or `gpu_wire.py` without `make schema` in the same commit | `test_taxonomy::test_committed_schema_matches_taxonomy`, `test_provenance::test_committed_schema_matches_provenance`, `test_consent::test_committed_schema_matches_consent`, `test_gpu_wire::test_committed_schema_is_current` |
+| Ship a breaking wire change as anything but a major version | **UNENFORCED** (#105) |
+| Import NudeNet (AGPL-3.0): HTTP only | ruff `TID251` banned-api (`pyproject.toml`); `test_rules::test_cortex_never_imports_a_stage_or_nudenet` |
+| Import a stage from cortex | `test_rules::test_cortex_never_imports_a_stage_or_nudenet` |
+| `import argus_cortex` pulling in an optional extra (httpx, starlette, psycopg, qdrant, minio, Pillow, NVML, PyYAML) | `test_rules::test_top_level_import_loads_no_optional_extra` |
+| Widen `DEFAULT_EXPOSED_LABELS` (every stage's NSFW numbers move with it) | `test_moderation::test_exposed_set_is_the_five_exposed_nudity_classes` |
+| A policy text without its illegal-rule letters, or the reverse | `test_policies::test_every_policy_has_a_text_and_an_illegal_table` |
+| Treat an unchecked moderation result as safe: a failed check raises `CheckFailed`, never returns a result | `test_moderation::test_nudenet_bad_responses_are_failures`, `::test_unreachable_server_is_a_failed_check`, `::test_nudenet_info_unreachable_is_a_failed_check` |
+| `ModerationConfigError` echoing the URL (it can carry credentials) | `test_moderation::test_nudenet_url` |
+| An XMP write dropping foreign properties, accepting a DTD, or overwriting an unparseable sidecar | `test_xmp::test_merge_preserves_foreign_properties_and_latest_wins`, `::test_dtd_is_refused`, `::test_malformed_sidecar_is_refused_not_clobbered` |
+| Change the `argus` XMP namespace URI (sidecars on disk carry it) | `test_rules::test_argus_xmp_namespace_is_pinned` |
+| A consent record holding the ID or the release document (it keeps who checked the ID and when, and `release_sha256`) | `test_consent::test_unknown_fields_are_refused_and_the_record_is_frozen`, `test_rules::test_an_age_check_cannot_hold_the_id` |
+| `consent_valid` reading the clock, or raising on an unknown use | `test_rules::test_consent_valid_never_reads_the_clock`, `test_consent::test_an_unknown_use_is_refused_not_raised` |
+| A store raising when its `CORTEX_*` URL is unset (it returns a `Null*` no-op) | `test_store::test_open_lineage_store_no_url_returns_null`, `test_vector::test_open_vector_store_no_url_returns_null`, `test_blob::test_open_blob_store_unconfigured_returns_null` |
+| The broker client failing closed on a transport error, 5xx or missing route | `test_gpu_broker::test_unreachable_broker_falls_back`, `::test_broker_without_url_falls_back_with_a_warning` |
+| `WriteGuard` buffering a stream (it stays pure ASGI, not `BaseHTTPMiddleware`) | `test_server::test_guard_leaves_streaming_responses_intact` |
+| `env_flag` silently disabling a protection on a typo | `test_server::test_env_flag_unrecognised_warns_and_is_off` |
+| `safe_join` returning the caller's spelling instead of the resolved path it checked | `test_fs::test_paths_under_the_root_are_returned_resolved` |
+| A "skip pinning" option in `net`: an allow-listed host is still pinned | `test_net::test_an_allow_listed_host_is_still_pinned`, `::test_dns_rebinding_after_the_check_changes_nothing` |
+| `net` forwarding `Authorization` or `Cookie` across a redirect to another origin, or inflating a body past `max_bytes` | `test_net::test_credentials_are_not_forwarded_to_another_origin`, `::test_a_compression_bomb_is_never_inflated_past_the_cap` |
+| `bearer()` leaving a route open when its token is unset, unless the route passes `open_when_unset=True` | `test_auth::test_unset_token_closes_the_route`, `::test_open_when_unset_is_explicit_and_logged` |
 
-There is **no CLI in this repo**. The committed schemas are `taxonomy-schema.json` (from `taxonomy_schema()`), `provenance-schema.json` (from `provenance_schema()`), `consent-schema.json` (from `consent_schema()`), and `gpu-lease-schema.json` / `gpu-tenant-schema.json` / `gpu-resident-schema.json` (from `gpu_wire`); `make schema` regenerates all six and `tests/test_taxonomy.py` / `tests/test_provenance.py` / `tests/test_consent.py` / `tests/test_gpu_wire.py` fail when one is stale. Studio generates its taxonomy types from the first, so a `taxonomy.py`, `provenance.py`, `consent.py` or `gpu_wire.py` change needs `make schema` in the same commit.
+## Facts the code doesn't make obvious
 
-## Commands
+[README.md](README.md) is the source of truth for what each module does; read it before changing one.
 
-```bash
-make install   # uv venv + editable install with [dev]
-make test      # uv run --no-sync pytest --tb=short -q
-make lint      # ruff check + format --check (pinned ruff 0.15.16)
-make format    # ruff format + check --fix
-```
-
-Run one test: `uv run --no-sync pytest tests/test_wire.py::test_name -q`.
-
-## Conventions & gotchas
-
-- **This is shared code — changes ripple.** A `taxonomy.py` edit or a `wire.py`/`backends.py` semantics change lands in every stage on their next bump. Prefer additive, backward-compatible changes; if you break the wire contract, that is a **major** version (`check_version` is what refuses the old major downstream).
-- **Keep the top-level import pydantic-only.** `import argus_cortex` must not pull in starlette/httpx/psycopg/qdrant/minio — those are optional extras, imported lazily inside the module that needs them (see the `try/except ImportError` → "install `argus-cortex[extra]`" pattern). Don't hoist an optional import to module top level.
-- **Stores fail *open* to a no-op, not an error.** `open_*()` returns a `Null*` store when the `CORTEX_*` URL is unset, so a stage with no DB configured still runs. Preserve that; blob identity is content-addressed on sha256 (`content_key()` == `source_asset.sha256`) — storage, dedup, and lineage join share one identity.
-- **`WriteGuard` is pure ASGI on purpose** (not `BaseHTTPMiddleware`), so it never buffers the SSE/NDJSON streams downstream servers return. Register it *before* `CORSMiddleware`. `env_flag()` warns on a mistyped protection flag rather than silently disabling it — keep that fail-safe behaviour.
-- **Versioning is git-tag-derived** (`hatch-vcs`). Never hand-edit a version; `src/argus_cortex/_version.py` is generated (gitignored). Tag `vX.Y.Z` to release.
-- Pydantic v2 everywhere; async tests via `asyncio_mode = auto`. Ruff pinned **0.15.16**, line-length 120, target py311.
+- **Contracts owned elsewhere.** argus-mask owns the meaning of `provenance` and `consent` fields, and argus-iris serves
+  `gpu_wire`: change them only in step with that repo. `gpu_wire` stays additive within a major. Replies ignore unknown
+  fields, but manifests forbid them, so a new manifest field needs the schema regenerated and iris bumped.
+- **GPU lease lock.** `LeaseCoordinator` takes a host-wide `flock`, then waits for NVML free VRAM, so tenants outside
+  the lock (ComfyUI, Ollama) are counted. The lock file must be on a volume every GPU container mounts: a per-container
+  `/tmp` coordinates nothing. A probe that can't run grants the lease.
+- **Optional extras** are imported inside the function that needs them, raising "install `argus-cortex[extra]`" when
+  missing. Don't hoist one to module level (the import test above catches it).
+- **Blob identity** is the content's sha256 (`content_key()` == `source_asset.sha256`): storage, dedup and the lineage
+  join share it.
+- Register `WriteGuard` *before* `CORSMiddleware`.
+- `net`'s tests fake DNS (`resolve=`) and the network (`transport=`). The Hypothesis tests in `test_fs.py`,
+  `test_net.py` and `test_limits.py` are the hostile-input spec: keep them passing when you change a rule.
+- **Versioning** comes from git tags (hatch-vcs). `src/argus_cortex/_version.py` is generated and gitignored; tag
+  `vX.Y.Z` to release. No CLI; commands are in the `Makefile` (`make help`). Ruff is pinned to 0.15.16.
 
 ## Branches
 

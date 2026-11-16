@@ -203,6 +203,7 @@ def specimen():
         "quarry curator lens forge",
         "proof atlas cortex darkroom",
         "mint survey mask studio",
+        "herald",
     ]
     rows, width = [], 0
     for i, t in enumerate(lines):
@@ -345,6 +346,7 @@ PKG = {
     "mask": "apps",
     "cortex": "base",
     "studio": "base",
+    "herald": "base",
 }
 
 

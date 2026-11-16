@@ -46,6 +46,8 @@ yaml = ["pyyaml>=6.0"]
 # starlette + httpx power the pure-ASGI guard tests (Starlette TestClient).
 dev = [
     "pytest>=8.0",
+    "hypothesis>=6.100",
+    "fastapi>=0.110",
     "pytest-asyncio>=0.23",
     "ruff==0.15.16",
     "psycopg[binary,pool]>=3.1",
@@ -86,5 +88,8 @@ line-length = 120
 extend-exclude = ["src/argus_cortex/_version.py"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "TID251"]
 ignore = ["E501", "B008"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"nudenet".msg = "NudeNet is AGPL-3.0: talk to a NudeNet server over HTTP (argus_cortex.moderation.NudeNetClient)."
