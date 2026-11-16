@@ -51,7 +51,7 @@ def _declared(headers: Any) -> int | None:
     if raw is None:
         return None
     raw = raw.strip()
-    if not raw.isdigit():
+    if not (raw.isascii() and raw.isdigit()):  # "²" is isdigit() but int() refuses it
         raise BadInput("Content-Length is not a number")
     return int(raw)
 
@@ -94,6 +94,8 @@ def decode_base64(data: str | bytes, max_bytes: int, *, what: str = "base64 payl
     """Decode standard base64 (an optional ``data:...;base64,`` prefix, whitespace ignored),
     checking the encoded length before decoding. :class:`TooLarge` or :class:`BadInput`."""
     if isinstance(data, bytes):
+        if len(data) > 2 * _max_encoded(max_bytes) + 1024:  # before copying it into a str
+            raise TooLarge(what, max_bytes)
         try:
             data = data.decode("ascii")
         except UnicodeDecodeError as exc:
@@ -133,7 +135,9 @@ def open_image(
         raise TooLarge("image", max_bytes)
     try:
         img = Image.open(io.BytesIO(data), formats=list(formats) if formats else None)
-    except (UnidentifiedImageError, Image.DecompressionBombError, OSError, ValueError, SyntaxError) as exc:
+    except Image.DecompressionBombError as exc:  # over 2x Pillow's MAX_IMAGE_PIXELS: too large, not malformed
+        raise TooLarge("image", max_pixels, "pixels") from exc
+    except (UnidentifiedImageError, OSError, ValueError, SyntaxError) as exc:
         raise BadInput("not an image" + (f" in {', '.join(formats)}" if formats else "")) from exc
     w, h = img.size
     if w <= 0 or h <= 0:

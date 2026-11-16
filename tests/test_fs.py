@@ -205,3 +205,9 @@ def test_basename_is_always_one_harmless_segment(raw: str) -> None:
     assert "/" not in got and "\\" not in got and "\x00" not in got
     assert all(ch.isprintable() for ch in got)
     assert Path(got).name == got
+
+
+def test_basename_length_is_counted_in_bytes() -> None:
+    assert safe_basename("ф" * 127) == "ф" * 127
+    with pytest.raises(PathRefused, match="bytes"):
+        safe_basename("ф" * 128)  # 256 bytes in UTF-8: open() would fail with "File name too long"

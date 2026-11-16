@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import gzip
 import ipaddress
+import tracemalloc
+import zlib
 
 import httpx
 import pytest
@@ -297,3 +300,98 @@ def test_async_fetch_has_the_same_policy() -> None:
 def test_check_url_never_raises_anything_else(url: str) -> None:
     with contextlib.suppress(UrlRefused):  # refusing is fine; any other exception fails the test
         check_url(url, resolve=dns({}))
+
+
+def test_credentials_are_not_forwarded_to_another_origin() -> None:
+    net = Net(
+        {
+            PUBLIC: [
+                httpx.Response(302, headers={"location": "/same"}),
+                httpx.Response(302, headers={"location": "https://other.example/"}),
+            ],
+            "93.184.216.35": httpx.Response(200, content=b"ok"),
+        }
+    )
+    table = dns({"example.com": [PUBLIC], "other.example": ["93.184.216.35"]})
+    secret = {"Authorization": "Bearer s3cret", "Cookie": "sid=1", "X-Trace": "t"}
+    fetch("https://example.com/", headers=secret, resolve=table, transport=net.transport)
+    first, same, other = net.seen
+    assert same.headers["authorization"] == "Bearer s3cret" and same.headers["cookie"] == "sid=1"
+    assert "authorization" not in other.headers and "cookie" not in other.headers
+    assert other.headers["x-trace"] == "t" and other.headers["host"] == "other.example"
+
+
+def test_a_caller_host_header_cannot_override_the_checked_host() -> None:
+    net = Net({PUBLIC: httpx.Response(200)})
+    fetch(
+        "https://example.com/",
+        headers={"host": "inside"},
+        resolve=dns({"example.com": [PUBLIC]}),
+        transport=net.transport,
+    )
+    assert net.seen[0].headers.get_list("host") == ["example.com"]
+
+
+def test_a_compression_bomb_is_never_inflated_past_the_cap() -> None:
+    bomb = gzip.compress(b"\0" * (64 * 1024 * 1024))
+    net = Net({PUBLIC: httpx.Response(200, headers={"content-encoding": "gzip"}, content=iter([bomb]))})
+    tracemalloc.start()
+    try:
+        with pytest.raises(UrlRefused, match="larger than 1024"):
+            fetch(
+                "https://example.com/", max_bytes=1024, resolve=dns({"example.com": [PUBLIC]}), transport=net.transport
+            )
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert peak < 8 * 1024 * 1024
+
+
+@pytest.mark.parametrize("encoding", ["gzip", "deflate"])
+def test_compressed_bodies_within_the_cap_are_decoded(encoding: str) -> None:
+    data = b"hello " * 100
+    raw = gzip.compress(data) if encoding == "gzip" else zlib.compress(data)
+    net = Net({PUBLIC: httpx.Response(200, headers={"content-encoding": encoding}, content=iter([raw]))})
+    r = fetch(
+        "https://example.com/", max_bytes=len(data), resolve=dns({"example.com": [PUBLIC]}), transport=net.transport
+    )
+    assert r.body == data
+
+
+def test_an_unknown_content_encoding_is_refused() -> None:
+    net = Net({PUBLIC: httpx.Response(200, headers={"content-encoding": "br"}, content=iter([b"x"]))})
+    with pytest.raises(UrlRefused, match="encoding"):
+        fetch("https://example.com/", resolve=dns({"example.com": [PUBLIC]}), transport=net.transport)
+
+
+def test_a_non_ascii_content_length_is_not_a_crash() -> None:
+    net = Net({PUBLIC: httpx.Response(200, headers=[(b"content-length", "²".encode())])})
+    r = fetch("https://example.com/", resolve=dns({"example.com": [PUBLIC]}), transport=net.transport)
+    assert r.status == 200
+
+
+def test_a_connect_timeout_falls_back_to_the_next_address() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == PUBLIC6:
+            raise httpx.ConnectTimeout("blackholed")
+        return httpx.Response(200, content=b"v4")
+
+    r = fetch(
+        "https://dual.example/",
+        resolve=dns({"dual.example": [PUBLIC6, PUBLIC]}),
+        transport=httpx.MockTransport(handler),
+    )
+    assert r.body == b"v4"
+
+
+def test_an_idn_host_is_fetched_by_its_ascii_name() -> None:
+    net = Net({PUBLIC: httpx.Response(200, content=b"ok")})
+    seen: list[str] = []
+
+    def resolve(host: str, port: int) -> list[str]:
+        seen.append(host)
+        return [PUBLIC]
+
+    r = fetch("https://bücher.example/", resolve=resolve, transport=net.transport)
+    assert r.body == b"ok" and seen == ["xn--bcher-kva.example"]
+    assert net.seen[0].headers["host"] == "xn--bcher-kva.example"

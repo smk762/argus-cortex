@@ -11,9 +11,11 @@ When a URL comes from outside (a request, a manifest, a third-party catalogue), 
   and TLS SNI, so DNS rebinding can't swap in another address between check and connect.
 * **Redirects are followed by hand** (GET and HEAD only, at most *max_redirects*), and every hop is
   checked again. Any other method gets the 3xx back, so a request body is never re-sent to a host
-  nobody checked.
+  nobody checked. ``Authorization``, ``Cookie`` and ``Proxy-Authorization`` are dropped on a hop
+  to another origin.
 * **The body is capped** (*max_bytes*; a declared ``Content-Length`` over it is refused before
-  reading), and the whole fetch has a *deadline* across every hop and the body (*timeout* alone is
+  reading). gzip/deflate bodies are inflated here, at most up to the cap, so a compression bomb
+  never expands in memory; any other ``Content-Encoding`` is refused. The whole fetch has a *deadline* across every hop and the body (*timeout* alone is
   per read, so a slow drip would never end).
 * ``http``/``https`` only, no ``user:password@`` in the URL, and environment proxies are ignored.
 * An *allow_hosts* entry (``host`` or ``host:port``) lets an internal service by name skip the
@@ -29,6 +31,7 @@ import asyncio
 import ipaddress
 import socket
 import time
+import zlib
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from urllib.parse import urljoin, urlsplit
@@ -53,6 +56,7 @@ _PORTS = {"http": 80, "https": 443}
 _NAT64 = ipaddress.ip_network("64:ff9b::/96")
 _NAT64_LOCAL = ipaddress.ip_network("64:ff9b:1::/48")
 _FOLLOW = {"GET", "HEAD"}
+_CREDENTIALS = ("authorization", "cookie", "proxy-authorization")
 
 IP = ipaddress.IPv4Address | ipaddress.IPv6Address
 Resolver = Callable[[str, int], list[str]]
@@ -167,6 +171,11 @@ def _parse(url: str) -> tuple[str, str, int]:
     host = (parts.hostname or "").lower().rstrip(".")
     if not host:
         raise UrlRefused("the URL has no host")
+    if not host.isascii():  # an IDN: the Host header and SNI need its ASCII (punycode) form
+        try:
+            host = host.encode("idna").decode("ascii")
+        except UnicodeError as exc:
+            raise UrlRefused("the URL has an invalid host") from exc
     try:
         port = parts.port or _PORTS[scheme]
     except ValueError as exc:
@@ -212,8 +221,63 @@ async def _acheck_url(url: str, allow_hosts: Iterable[str], resolve: Resolver | 
 
 
 def _too_big(resp, max_bytes: int) -> bool:
-    declared = resp.headers.get("content-length", "")
-    return declared.isdigit() and int(declared) > max_bytes
+    declared = resp.headers.get("content-length", "").strip()
+    # isascii: "²" is isdigit() but int() refuses it
+    return declared.isascii() and declared.isdigit() and int(declared) > max_bytes
+
+
+def _hop_headers(base, checked: CheckedUrl, origin: tuple[str, str, int]):
+    """*base* (an ``httpx.Headers``) for one hop: the checked Host, and no credentials off-origin."""
+    h = base.copy()
+    if (checked.scheme, checked.host, checked.port) != origin:
+        for name in _CREDENTIALS:
+            h.pop(name, None)
+    h["Host"] = checked.host_header
+    return h
+
+
+class _Body:
+    """A response body read from the raw stream, capped at *max_bytes* after decoding.
+
+    httpx inflates a whole network chunk at once, so a few KB of gzip can become gigabytes before
+    any cap is checked; here gzip/deflate are inflated at most up to the cap."""
+
+    def __init__(self, encoding: str, max_bytes: int, end: float, deadline: float) -> None:
+        enc = encoding.strip().lower()
+        if enc in ("", "identity"):
+            self._z = None
+        elif enc in ("gzip", "x-gzip", "deflate"):
+            self._z = zlib.decompressobj(32 + zlib.MAX_WBITS)  # gzip or zlib header
+        else:
+            raise UrlRefused(f"the response has an unsupported content encoding ({enc})")
+        self.data = bytearray()
+        self._max, self._end, self._deadline = max_bytes, end, deadline
+
+    def _add(self, chunk: bytes) -> None:
+        self.data += chunk
+        if len(self.data) > self._max:
+            raise UrlRefused(f"the response is larger than {self._max} bytes")
+
+    def feed(self, chunk: bytes) -> None:
+        if self._z is None:
+            self._add(chunk)
+        else:
+            try:
+                while chunk and not self._z.eof:
+                    self._add(self._z.decompress(chunk, self._max + 1 - len(self.data)))
+                    chunk = self._z.unconsumed_tail
+            except zlib.error as exc:
+                raise UrlRefused("the response body could not be decoded") from exc
+        if time.monotonic() > self._end:
+            raise UrlRefused(f"the fetch took longer than {self._deadline:g}s")
+
+    def done(self) -> bytes:
+        if self._z is not None:
+            try:
+                self._add(self._z.flush())
+            except zlib.error as exc:
+                raise UrlRefused("the response body could not be decoded") from exc
+        return bytes(self.data)
 
 
 def fetch(
@@ -237,25 +301,30 @@ def fetch(
     method = method.upper()
     allow_hosts = list(allow_hosts)
     end = time.monotonic() + deadline
-    current, hops = url, []
+    current, hops, origin = url, [], None
+    base = httpx.Headers({"Accept-Encoding": "gzip, deflate"})
+    base.update(headers or {})
     with httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False, transport=transport) as client:
         for _ in range(max_redirects + 1):
             if time.monotonic() > end:
                 raise UrlRefused(f"the fetch took longer than {deadline:g}s")
             checked = check_url(current, allow_hosts=allow_hosts, resolve=resolve)
+            origin = origin or (checked.scheme, checked.host, checked.port)
             resp = None
             for ip in checked.addresses:
+                if time.monotonic() > end:
+                    raise UrlRefused(f"the fetch took longer than {deadline:g}s")
                 req = client.build_request(
                     method,
                     checked.pinned(ip),
                     content=content,
-                    headers={**(headers or {}), "Host": checked.host_header},
+                    headers=_hop_headers(base, checked, origin),
                     extensions={"sni_hostname": checked.host},
                 )
                 try:
                     resp = client.send(req, stream=True)
                     break
-                except httpx.ConnectError:
+                except (httpx.ConnectError, httpx.ConnectTimeout):  # this address is down: try the next
                     continue
                 except httpx.TransportError as exc:
                     raise UrlRefused(f"could not fetch from {checked.host}") from exc
@@ -271,14 +340,15 @@ def fetch(
                     continue
                 if _too_big(resp, max_bytes):
                     raise UrlRefused(f"the response is larger than {max_bytes} bytes")
-                body = bytearray()
-                for chunk in resp.iter_bytes():
-                    body += chunk
-                    if len(body) > max_bytes:
-                        raise UrlRefused(f"the response is larger than {max_bytes} bytes")
-                    if time.monotonic() > end:
-                        raise UrlRefused(f"the fetch took longer than {deadline:g}s")
-                return Reply(resp.status_code, dict(resp.headers), bytes(body), current, hops)
+                # A transport that hands back a body already read (httpx.MockTransport) has decoded it.
+                preread = resp.is_stream_consumed
+                body = _Body("" if preread else resp.headers.get("content-encoding", ""), max_bytes, end, deadline)
+                if preread:
+                    body.feed(resp.content)
+                else:
+                    for chunk in resp.iter_raw():
+                        body.feed(chunk)
+                return Reply(resp.status_code, dict(resp.headers), body.done(), current, hops)
             finally:
                 resp.close()
     raise UrlRefused(f"more than {max_redirects} redirects")
@@ -304,7 +374,9 @@ async def afetch(
     method = method.upper()
     allow_hosts = list(allow_hosts)
     end = time.monotonic() + deadline
-    current, hops = url, []
+    current, hops, origin = url, [], None
+    base = httpx.Headers({"Accept-Encoding": "gzip, deflate"})
+    base.update(headers or {})
     async with httpx.AsyncClient(
         timeout=timeout, follow_redirects=False, trust_env=False, transport=transport
     ) as client:
@@ -312,19 +384,22 @@ async def afetch(
             if time.monotonic() > end:
                 raise UrlRefused(f"the fetch took longer than {deadline:g}s")
             checked = await _acheck_url(current, allow_hosts, resolve)
+            origin = origin or (checked.scheme, checked.host, checked.port)
             resp = None
             for ip in checked.addresses:
+                if time.monotonic() > end:
+                    raise UrlRefused(f"the fetch took longer than {deadline:g}s")
                 req = client.build_request(
                     method,
                     checked.pinned(ip),
                     content=content,
-                    headers={**(headers or {}), "Host": checked.host_header},
+                    headers=_hop_headers(base, checked, origin),
                     extensions={"sni_hostname": checked.host},
                 )
                 try:
                     resp = await client.send(req, stream=True)
                     break
-                except httpx.ConnectError:
+                except (httpx.ConnectError, httpx.ConnectTimeout):  # this address is down: try the next
                     continue
                 except httpx.TransportError as exc:
                     raise UrlRefused(f"could not fetch from {checked.host}") from exc
@@ -340,14 +415,15 @@ async def afetch(
                     continue
                 if _too_big(resp, max_bytes):
                     raise UrlRefused(f"the response is larger than {max_bytes} bytes")
-                body = bytearray()
-                async for chunk in resp.aiter_bytes():
-                    body += chunk
-                    if len(body) > max_bytes:
-                        raise UrlRefused(f"the response is larger than {max_bytes} bytes")
-                    if time.monotonic() > end:
-                        raise UrlRefused(f"the fetch took longer than {deadline:g}s")
-                return Reply(resp.status_code, dict(resp.headers), bytes(body), current, hops)
+                # A transport that hands back a body already read (httpx.MockTransport) has decoded it.
+                preread = resp.is_stream_consumed
+                body = _Body("" if preread else resp.headers.get("content-encoding", ""), max_bytes, end, deadline)
+                if preread:
+                    body.feed(resp.content)
+                else:
+                    async for chunk in resp.aiter_raw():
+                        body.feed(chunk)
+                return Reply(resp.status_code, dict(resp.headers), body.done(), current, hops)
             finally:
                 await resp.aclose()
     raise UrlRefused(f"more than {max_redirects} redirects")

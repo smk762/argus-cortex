@@ -65,7 +65,8 @@ UrlRefused(ValueError), FetchFailed(RuntimeError)
 | Error status | Returned in the `Reply`; `raise_for_status()` turns 4xx/5xx into `FetchFailed` | Callers that proxy a status need it; callers that don't call one method |
 | Allow-list | Entries are `host` or `host:port`; an allow-listed host skips the public-address rule but is **still resolved and pinned** | An allow-list is for internal services by name, not a way to switch off pinning |
 | Userinfo in the URL | Refused | Different parsers disagree about where the host is |
-| Body | Capped (`max_bytes`); a declared `Content-Length` over the cap is refused before reading | The fetch must not become a memory exhaustion |
+| Body | Capped (`max_bytes`) after decoding; a declared `Content-Length` over the cap is refused before reading; gzip/deflate are inflated only up to the cap, and any other `Content-Encoding` is refused | The fetch must not become a memory exhaustion, and httpx inflates a whole network chunk before any cap is checked |
+| Credentials on redirect | `Authorization`, `Cookie` and `Proxy-Authorization` are dropped on a hop to another origin | A public URL must not be able to redirect a caller's token to a host of its choosing |
 | Time | Per-request `timeout` and an overall `deadline` across redirects | `timeout` alone is per read, so a slow drip never ends |
 | Proxies | Ignored (`trust_env=False`) | An environment proxy would reach the inside on our behalf |
 | Errors | `UrlRefused` with a generic message (the reason without the resolved address) | The message reaches clients; it shouldn't map the internal network |

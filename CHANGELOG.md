@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   id or slug, `fullmatch`), `safe_basename` (an upload's filename), `is_within`, and `PathRefused`. The first of the
   suite's paved roads (ai-code-auditor#56), with property-based tests (hypothesis). Design: `docs/paved-roads.md`.
 - `argus_cortex.net`: `fetch` / `afetch` for URLs from outside (every resolved address must be global, the connection
-  is pinned to the checked address, GET/HEAD redirects re-checked per hop, body and total time capped), plus
+  is pinned to the checked address, GET/HEAD redirects re-checked per hop with credentials dropped off-origin, body capped after decoding and total
+  time capped, IDN hosts fetched by their ASCII name), plus
   `check_url`, `is_public_ip`, `Reply`, `UrlRefused`, `FetchFailed`. httpx behind `[remote]`.
 - `argus_cortex.auth`: `bearer()`, an admin-route dependency that fails closed when its token is unset (unless
   `open_when_unset=True`) and compares in constant time; `check_bearer()`.

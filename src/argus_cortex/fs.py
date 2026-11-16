@@ -114,16 +114,16 @@ def safe_basename(filename: str, *, max_len: int = 255, label: str = "filename")
 
     Both ``/`` and ``\\`` count as separators (browsers send either), so ``..\\..\\x.png`` gives
     ``x.png``. The result must start with a letter or digit (Unicode included) and contain no
-    control characters; letters, digits, ``_``, spaces and ``.()+,=@~-`` are allowed. Otherwise
-    :class:`PathRefused`.
+    control characters; letters, digits, ``_``, spaces and ``.()+,=@~-`` are allowed, and it is at
+    most *max_len* bytes in UTF-8 (the filesystem's limit). Otherwise :class:`PathRefused`.
     """
     if not isinstance(filename, str):
         raise _refuse(label, "must be text")
     name = PureWindowsPath(PurePosixPath(filename.strip()).name).name.strip()
     if not name:
         raise _refuse(label, "has no name")
-    if len(name) > max_len:
-        raise _refuse(label, f"is longer than {max_len} characters")
+    if len(name.encode("utf-8")) > max_len:  # filesystems cap a name in bytes (NAME_MAX), not characters
+        raise _refuse(label, f"is longer than {max_len} bytes")
     if not _BASENAME.fullmatch(name):
         raise _refuse(label, "is not a safe filename")
     return name

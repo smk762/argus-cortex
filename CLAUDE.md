@@ -45,6 +45,7 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 | `env_flag` silently disabling a protection on a typo | `test_server::test_env_flag_unrecognised_warns_and_is_off` |
 | `safe_join` returning the caller's spelling instead of the resolved path it checked | `test_fs::test_paths_under_the_root_are_returned_resolved` |
 | A "skip pinning" option in `net`: an allow-listed host is still pinned | `test_net::test_an_allow_listed_host_is_still_pinned`, `::test_dns_rebinding_after_the_check_changes_nothing` |
+| `net` forwarding `Authorization` or `Cookie` across a redirect to another origin, or inflating a body past `max_bytes` | `test_net::test_credentials_are_not_forwarded_to_another_origin`, `::test_a_compression_bomb_is_never_inflated_past_the_cap` |
 | `bearer()` leaving a route open when its token is unset, unless the route passes `open_when_unset=True` | `test_auth::test_unset_token_closes_the_route`, `::test_open_when_unset_is_explicit_and_logged` |
 
 ## Facts the code doesn't make obvious

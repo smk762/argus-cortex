@@ -170,3 +170,20 @@ def test_formats_bytes_and_garbage() -> None:
         open_image(png(4, 4), max_bytes=10)
     with pytest.raises(BadInput):
         open_image(b"not an image")
+
+
+def test_a_non_ascii_digit_length_is_bad_input() -> None:
+    with pytest.raises(BadInput):
+        run(read_body(FakeRequest([b"x"], content_length="²"), 10))
+
+
+def test_oversized_base64_bytes_are_refused_before_decoding() -> None:
+    with pytest.raises(TooLarge):
+        decode_base64(b"\xff" * 100_000, 10)
+
+
+def test_a_decompression_bomb_image_is_too_large_not_bad_input() -> None:
+    buf = io.BytesIO()
+    Image.new("1", (20_000, 10_000)).save(buf, "PNG")  # 200M pixels: over 2x Pillow's MAX_IMAGE_PIXELS
+    with pytest.raises(TooLarge):
+        open_image(buf.getvalue(), max_pixels=10**12)
