@@ -27,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SUITE.md`: argus-assay's row for v0.2.0, and argus-lens's for 0.13.0 (claim checks, argus-iris GPU leases, the
   affiliation check and `LENS_TRUSTED_HOSTS`).
 - CI runs the argus-ci suite rules (`suite-rules.yml@v1`) with an empty `.suite-rules-baseline.json`.
+- `CLAUDE.md` states what must never happen, and names the test or lint behind each rule (#98). New checks:
+  `import argus_cortex` loads no optional extra, cortex imports no stage and no NudeNet (also a ruff `TID251` ban),
+  the `argus` XMP namespace URI is pinned, `consent_valid` reads no clock, an age check can't hold the ID, and an
+  allow-listed `net` host is still pinned. `SUITE.md`'s shared rules say which have a suite-level check.
 
 ## [0.7.0] - 2026-11-16
 

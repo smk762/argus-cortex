@@ -90,10 +90,16 @@ Studio has a page for lens, curator, quarry, forge, proof, atlas and darkroom, a
 
 ## Shared rules
 
-- Shared code lives in cortex: import it, don't copy it. A cortex change ripples into every stage on its next bump.
-- Provenance first. Anything the suite serves or trains on carries its source and licence; unlicensed input is refused.
-- Optional heavy dependencies are lazy imports behind extras. A missing service config fails open to a no-op, never a crash.
-- Talk across repos over HTTP or a versioned wire schema, never by reading another repo's files.
+An **UNENFORCED** rule has no suite-level check yet (argus-ci#19).
+
+| Rule | Enforced by |
+|---|---|
+| Shared code lives in cortex: import it, don't copy it. A cortex change ripples into every stage on its next bump. | **UNENFORCED** |
+| Provenance first. Anything the suite serves or trains on carries its source and licence; unlicensed input is refused. | Per repo (quarry, curator, mask); no suite check |
+| Optional heavy dependencies are lazy imports behind extras. | In cortex only (`test_rules::test_top_level_import_loads_no_optional_extra`); **UNENFORCED** suite-wide |
+| A missing service config fails open to a no-op, never a crash. | In cortex only (the `open_*_store` tests); **UNENFORCED** suite-wide |
+| Talk across repos over HTTP or a versioned wire schema, never by reading another repo's files. | **UNENFORCED** |
+| Never import NudeNet (AGPL-3.0); call a server over HTTP. | In cortex only (ruff `TID251`); **UNENFORCED** suite-wide |
 
 ## Local checkouts
 

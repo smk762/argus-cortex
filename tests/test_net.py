@@ -193,6 +193,20 @@ def test_connection_is_pinned_to_the_checked_address() -> None:
     assert req.extensions["sni_hostname"] == "example.com"
 
 
+def test_an_allow_listed_host_is_still_pinned() -> None:
+    """The allow-list skips the public-address rule, never the pinning."""
+    answers = [["10.0.0.9"], ["10.6.6.6"]]
+    net = Net({"10.0.0.9": httpx.Response(200, content=b"ok")})
+    fetch(
+        "http://inference:8000/x",
+        allow_hosts=["inference"],
+        resolve=lambda h, p: answers.pop(0),
+        transport=net.transport,
+    )
+    req = net.seen[0]
+    assert (req.url.host, req.headers["host"]) == ("10.0.0.9", "inference:8000")
+
+
 def test_dns_rebinding_after_the_check_changes_nothing() -> None:
     """The resolver answers public first and inside afterwards; only the first answer is used."""
     answers = [[PUBLIC], ["127.0.0.1"]]
