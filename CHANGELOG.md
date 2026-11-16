@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `argus_cortex.codemods` (the `[codemods]` extra, libcst), run as
+  `uv run --no-project --with 'argus-cortex[codemods]' python -m argus_cortex.codemods <codemod> PATH... [--check]`
+  (ai-code-auditor#56), from any repo without changing its pin:
+  - `fullmatch`: an anchored `^...$` id check written with `match`/`search` becomes `fullmatch`, so a
+    trailing newline no longer passes. It skips multiline, top-level alternation, prefix checks, `pos`
+    arguments, unknown patterns or flags, and patterns local to a function. It names checks that
+    `fs.safe_name` could replace. Review each hit: a line parser may rely on `$` before a newline.
+  - `read-upload`: `await upload.read()` on an `UploadFile` parameter, or a loop item of a
+    `list[UploadFile]`, becomes `read_upload(upload, MAX_UPLOAD_BYTES)`. It adds the import and a 50 MiB
+    constant, and reminds you to map `TooLarge`/`BadInput` to 413/400.
+  - `net` and `auth` have no codemod: their local shapes don't rewrite without changing behaviour, and
+    the argus-ci rule messages point at the helpers instead.
+
 ## [0.8.0] - 2026-11-16
 
 ### Added

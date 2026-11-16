@@ -65,6 +65,8 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 - Register `WriteGuard` *before* `CORSMiddleware`.
 - `net`'s tests fake DNS (`resolve=`) and the network (`transport=`). The Hypothesis tests in `test_fs.py`,
   `test_net.py` and `test_limits.py` are the hostile-input spec: keep them passing when you change a rule.
+- **Codemods** (`src/argus_cortex/codemods/`, the `[codemods]` extra) are dev tools. Nothing in the library imports them
+  (the import test above checks libcst stays out), and each one's output is reviewed per repo, never applied blind.
 - **Versioning** comes from git tags (hatch-vcs). `src/argus_cortex/_version.py` is generated and gitignored; tag
   `vX.Y.Z` to release. No CLI; commands are in the `Makefile` (`make help`). Ruff is pinned to 0.15.16.
 
