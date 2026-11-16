@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Resident replies (`argus_cortex.gpu_wire`).** What a resident's routes return, so the broker reads one shape
+  instead of three: `ResidentHealth` for `GET /health` (top-level `model_state`, one of `unloaded`/`loading`/`cpu`/
+  `gpu`/`error`; `busy`; `idle_s`, null while busy or unloaded; an optional memory-only `gpu` block with
+  `free_vram_mb`/`allocated_mb`/`reserved_mb`/`total_mb`), `ResidentActionReply` for `POST /admin/unload|evict|wake`
+  (`status`, `model_state` after the action, `unloaded: bool | None`), and `ResidentBusyReply`, the 409 body
+  (`{"status": "busy", "active": n}`: nothing was done, retry after the work finishes); 503 means loading or
+  unavailable. `resident_version` 1.0, defaulted, so a service need not send it. Replies allow extra fields, so
+  services keep their own. Committed `gpu-resident-schema.json` (#84).
+
 ## [0.6.0] - 2026-11-15
 
 ### Added

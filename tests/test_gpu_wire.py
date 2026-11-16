@@ -10,12 +10,17 @@ import pytest
 from pydantic import ValidationError
 
 from argus_cortex.gpu_wire import (
+    RESIDENT_STATES,
     TARGET_RE,
     LeaseRequest,
     LeaseStatus,
+    ResidentActionReply,
+    ResidentBusyReply,
+    ResidentHealth,
     TenantManifest,
     lease_schema,
     load_tenant_manifest,
+    resident_schema,
     target_model,
     target_service,
     tenant_schema,
@@ -36,7 +41,12 @@ DARKROOM = {
 
 
 @pytest.mark.parametrize(
-    ("filename", "render"), [("gpu-lease-schema.json", lease_schema), ("gpu-tenant-schema.json", tenant_schema)]
+    ("filename", "render"),
+    [
+        ("gpu-lease-schema.json", lease_schema),
+        ("gpu-tenant-schema.json", tenant_schema),
+        ("gpu-resident-schema.json", resident_schema),
+    ],
 )
 def test_committed_schema_is_current(filename: str, render) -> None:  # noqa: ANN001
     assert (ROOT / filename).read_text(encoding="utf-8") == render(), f"{filename} is stale: run make schema"
@@ -191,3 +201,70 @@ def test_resident_refuses_informational_fields() -> None:
     resident = {"name": "nudenet", "adapter": "argus-http", "gpu": False}  # manifests list GPU residents only
     with pytest.raises(ValidationError, match="gpu"):
         TenantManifest.model_validate({"tenant": "t", "residents": [resident]})
+
+
+# --- resident replies (#84) --------------------------------------------------------------------------------------
+
+
+def test_resident_states() -> None:
+    assert RESIDENT_STATES == ("unloaded", "loading", "cpu", "gpu", "error")
+
+
+def test_resident_health_keeps_service_fields_and_a_migrating_gpu_block() -> None:
+    reply = {
+        "status": "ok",
+        "model_state": "gpu",
+        "busy": False,
+        "idle_s": 42.5,
+        "gpu": {"free_vram_mb": 8123, "allocated_mb": 5120.5, "reserved_mb": 6144, "total_mb": 24576, "loaded": True},
+    }
+    health = ResidentHealth.model_validate(reply)
+    assert health.on_gpu and health.idle_s == 42.5 and health.resident_version == "1.0"
+    assert health.gpu.free_vram_mb == 8123 and health.gpu.model_extra == {"loaded": True}
+    assert health.model_extra == {"status": "ok"}
+    assert ResidentHealth.model_validate(health.model_dump(mode="json")) == health
+
+
+def test_resident_health_minimal_and_without_cuda() -> None:
+    health = ResidentHealth.model_validate({"model_state": "unloaded", "busy": False, "idle_s": None})
+    assert not health.on_gpu and health.gpu is None and health.idle_s is None
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        {"gpu": {"loaded": True, "idle_s": 3, "free_vram_mb": 900}},  # argus-lens today: state inside gpu
+        {"model_state": "gpu", "idle_s": 3},  # no busy
+        {"model_state": "loaded", "busy": False},  # not a ResidentState
+        {"model_state": "gpu", "busy": False, "idle_s": -1},
+        {"model_state": "gpu", "busy": False, "gpu": {"free_vram_mb": -5}},
+    ],
+)
+def test_resident_health_refuses_other_shapes(reply: dict) -> None:
+    with pytest.raises(ValidationError):
+        ResidentHealth.model_validate(reply)
+
+
+def test_resident_health_major_mismatch_is_refused() -> None:
+    with pytest.raises(VersionError):
+        ResidentHealth.model_validate({"resident_version": "2.0", "model_state": "gpu", "busy": False})
+
+
+def test_resident_action_reply() -> None:
+    reply = ResidentActionReply.model_validate({"status": "unloaded", "model_state": "unloaded", "unloaded": True})
+    assert reply.unloaded is True
+    wake = ResidentActionReply(model_state="gpu")
+    assert wake.status == "ok" and wake.unloaded is None
+    with pytest.raises(ValidationError):  # diffusers today: a list of model ids, which belongs under its own field
+        ResidentActionReply.model_validate({"status": "ok", "model_state": "unloaded", "unloaded": ["sdxl"]})
+    kept = ResidentActionReply.model_validate({"model_state": "unloaded", "unloaded": True, "models": ["sdxl"]})
+    assert kept.model_extra == {"models": ["sdxl"]}
+
+
+def test_resident_busy_reply() -> None:
+    busy = ResidentBusyReply.model_validate({"status": "busy", "active": 2})
+    assert busy.active == 2
+    with pytest.raises(ValidationError):
+        ResidentBusyReply.model_validate({"status": "ok", "active": 2})
+    with pytest.raises(ValidationError):
+        ResidentBusyReply.model_validate({"status": "busy"})

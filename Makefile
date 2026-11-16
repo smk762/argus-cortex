@@ -20,8 +20,8 @@ format:  ## Ruff autoformat + autofix
 test:  ## Run the test suite
 	$(UV) run --no-sync pytest --tb=short -q
 
-schema:  ## Regenerate the committed taxonomy, provenance, consent, gpu-lease and gpu-tenant schemas
-	$(UV) run --no-sync python -c "from pathlib import Path; from argus_cortex.taxonomy import taxonomy_schema; from argus_cortex.provenance import provenance_schema; from argus_cortex.consent import consent_schema; from argus_cortex.gpu_wire import lease_schema, tenant_schema; [Path(f).write_text(r(), encoding='utf-8') for f, r in (('taxonomy-schema.json', taxonomy_schema), ('provenance-schema.json', provenance_schema), ('consent-schema.json', consent_schema), ('gpu-lease-schema.json', lease_schema), ('gpu-tenant-schema.json', tenant_schema))]"
+schema:  ## Regenerate the committed taxonomy, provenance, consent, gpu-lease, gpu-tenant and gpu-resident schemas
+	$(UV) run --no-sync python -c "from pathlib import Path; from argus_cortex.taxonomy import taxonomy_schema; from argus_cortex.provenance import provenance_schema; from argus_cortex.consent import consent_schema; from argus_cortex.gpu_wire import lease_schema, tenant_schema, resident_schema; [Path(f).write_text(r(), encoding='utf-8') for f, r in (('taxonomy-schema.json', taxonomy_schema), ('provenance-schema.json', provenance_schema), ('consent-schema.json', consent_schema), ('gpu-lease-schema.json', lease_schema), ('gpu-tenant-schema.json', tenant_schema), ('gpu-resident-schema.json', resident_schema))]"
 
 build:  ## Build sdist + wheel
 	$(UV) build
