@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`NudeNetClient.info()`.** Asks a NudeNet server which model it runs (`GET /health`) and returns a `NudeNetInfo`
+  (`model`, `resolution`, and `detector`: `640m`, `320n` or `None`). The upstream 320n image has no `/health` and
+  gives an empty `NudeNetInfo`; an unreachable server raises `NudeNetCheckFailed`. 320n and 640m score the same
+  image differently, so record the detector with the scores and tune thresholds per model. The suite is moving to
+  one shared 640m server (#79).
+
+### Added
 - **Resident replies (`argus_cortex.gpu_wire`).** What a resident's routes return, so the broker reads one shape
   instead of three: `ResidentHealth` for `GET /health` (top-level `model_state`, one of `unloaded`/`loading`/`cpu`/
   `gpu`/`error`; `busy`; `idle_s`, null while busy or unloaded; an optional memory-only `gpu` block with

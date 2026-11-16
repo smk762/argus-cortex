@@ -1,9 +1,14 @@
 """NudeNet client: nudity detection through a NudeNet server over HTTP.
 
 The suite never imports NudeNet (AGPL-3.0): it posts images to a NudeNet
-server (``ghcr.io/notai-tech/nudenet`` or any server speaking the same API)
-and records the detections. Running that server is the deployer's choice;
-cortex and the stages stay MIT.
+server and records the detections. Running that server is the deployer's
+choice; cortex and the stages stay MIT.
+
+Use a server running NudeNet's **640m** detector (argus-cull's ``nudenet/``
+build, #79). The upstream ``ghcr.io/notai-tech/nudenet`` image bundles only
+320n. The two models score the same image differently, so a threshold tuned on
+one does not carry over to the other. :meth:`NudeNetClient.info` reports which
+model a server runs; record it with the scores.
 
 This module is also the suite's one definition of what counts as nudity:
 :data:`DEFAULT_EXPOSED_LABELS`. Faces, covered body parts, and exposed feet,
@@ -17,7 +22,9 @@ pixels, and the server drops detections scoring under
 :data:`MIN_REPORTED_SCORE` (as does :func:`to_result`, whatever the server).
 
 Note: the upstream ``ghcr.io/notai-tech/nudenet`` image reports ``y`` offset by
-the letterbox padding on non-square images (scores are unaffected).
+the letterbox padding on non-square images (scores are unaffected). It has no
+``/health`` route either, so :meth:`NudeNetClient.info` returns an empty
+:class:`NudeNetInfo` for it.
 """
 
 from __future__ import annotations
@@ -26,10 +33,11 @@ import math
 import re
 import uuid
 from typing import Literal
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, Field
 
-from argus_cortex.moderation._http import CheckFailed, post_json, service_url
+from argus_cortex.moderation._http import CheckFailed, get_json, post_json, service_url
 
 # NudeNet's 18 detector classes, verbatim (they are its API vocabulary).
 NudeNetLabel = Literal[
@@ -85,6 +93,19 @@ class NsfwResult(BaseModel):
     # Highest score per class, highest first.
     labels: dict[NudeNetLabel, float] = Field(default_factory=dict)
     exposed_score: float = 0.0
+
+
+class NudeNetInfo(BaseModel):
+    """What a NudeNet server says it runs (its ``GET /health``). ``None``: the server did not say."""
+
+    model: str | None = Field(None, description="The weights file, e.g. 640m.onnx.")
+    resolution: int | None = Field(None, description="The inference resolution in pixels, e.g. 640.")
+
+    @property
+    def detector(self) -> str | None:
+        """``'640m'`` or ``'320n'`` when :attr:`model` names one of NudeNet's detectors, else ``None``."""
+        stem = (self.model or "").rsplit("/", 1)[-1].lower()
+        return next((d for d in ("640m", "320n") if stem.startswith(d)), None)
 
 
 class NudeNetCheckFailed(CheckFailed):
@@ -148,7 +169,24 @@ class NudeNetClient:
 
     def __init__(self, base_url: str, timeout: float = 30.0) -> None:
         self.url = service_url(base_url, "/infer", "NudeNet")
+        parts = urlsplit(self.url)
+        self.health_url = urlunsplit(parts._replace(path=parts.path.removesuffix("/infer") + "/health"))
         self.timeout = timeout
+
+    def info(self) -> NudeNetInfo:
+        """The server's model and resolution, from ``GET /health``.
+
+        A server without the route (the upstream 320n image) or one that does not name its model gives an empty
+        :class:`NudeNetInfo`. An unreachable server raises :class:`NudeNetCheckFailed`.
+        """
+        payload = get_json(self.health_url, self.timeout, "NudeNet", NudeNetCheckFailed, missing_ok=True)
+        if not isinstance(payload, dict):
+            return NudeNetInfo()
+        model, resolution = payload.get("model"), payload.get("resolution")
+        return NudeNetInfo(
+            model=model if isinstance(model, str) and model else None,
+            resolution=resolution if isinstance(resolution, int) and not isinstance(resolution, bool) else None,
+        )
 
     def check(self, data: bytes, filename: str = "image") -> NsfwResult:
         """Post one image and parse the answer; raises :class:`NudeNetCheckFailed`."""

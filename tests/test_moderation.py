@@ -84,6 +84,15 @@ _DETECTIONS = {
 
 
 class _NudeNet(_Fake):
+    health: dict | None = None  # a test's GET /health answer; None: the route is missing (upstream 320n)
+
+    def do_GET(self) -> None:
+        type(self).seen.append({"path": self.path, "auth": self.headers["Authorization"]})
+        if self.path.split("?")[0] != "/health" or self.health is None:
+            self._send(404)
+        else:
+            self._send(200, self.health)
+
     def do_POST(self) -> None:
         body = self.rfile.read(int(self.headers["Content-Length"]))
         msg = BytesParser(policy=HTTP).parsebytes(
@@ -407,3 +416,55 @@ def test_unreachable_server_is_a_failed_check() -> None:
 def test_import_does_not_pull_in_pillow() -> None:
     code = "import sys, argus_cortex, argus_cortex.moderation; assert 'PIL' not in sys.modules"
     subprocess.run([sys.executable, "-c", code], check=True)
+
+
+# ---------------------------------------------------------------------------
+# NudeNet server info (#79)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("health", "model", "resolution", "detector"),
+    [
+        ({"ok": True, "model": "640m.onnx", "resolution": 640}, "640m.onnx", 640, "640m"),
+        ({"ok": True, "model": "/models/320n.onnx"}, "/models/320n.onnx", None, "320n"),
+        ({"ok": True, "model": "erax.pt", "resolution": "640"}, "erax.pt", None, None),
+        ({"ok": True, "model": 7, "resolution": True}, None, None, None),
+        ({"ok": True}, None, None, None),
+        ([1, 2], None, None, None),
+        (None, None, None, None),  # no /health route: the upstream 320n image
+    ],
+)
+def test_nudenet_info(nudenet_server, monkeypatch: pytest.MonkeyPatch, health, model, resolution, detector) -> None:
+    handler, url = nudenet_server
+    monkeypatch.setattr(handler, "health", health)
+    info = NudeNetClient(url).info()
+    assert (info.model, info.resolution, info.detector) == (model, resolution, detector)
+    assert handler.seen[-1]["path"] == "/health"
+
+
+@pytest.mark.parametrize("suffix", ["", "/", "/infer", "/infer?k=v"])
+def test_nudenet_health_url_sits_beside_infer(suffix: str) -> None:
+    client = NudeNetClient(f"http://user:pw@nudenet:8080/sub{suffix}")
+    query = "?k=v" if "?" in suffix else ""
+    assert client.url == f"http://user:pw@nudenet:8080/sub/infer{query}"
+    assert client.health_url == f"http://user:pw@nudenet:8080/sub/health{query}"
+
+
+def test_nudenet_info_sends_credentials(nudenet_server, monkeypatch: pytest.MonkeyPatch) -> None:
+    handler, url = nudenet_server
+    monkeypatch.setattr(handler, "health", {"model": "640m.onnx"})
+    NudeNetClient(url.replace("http://", "http://u:p@")).info()
+    assert handler.seen[-1]["auth"] == "Basic dTpw"
+
+
+def test_nudenet_info_unreachable_is_a_failed_check() -> None:
+    with pytest.raises(NudeNetCheckFailed, match="request failed"):
+        NudeNetClient("http://127.0.0.1:9", timeout=2).info()
+
+
+def test_nudenet_info_server_error_is_a_failed_check(nudenet_server, monkeypatch: pytest.MonkeyPatch) -> None:
+    handler, url = nudenet_server
+    monkeypatch.setattr(handler, "do_GET", lambda self: self._send(500))
+    with pytest.raises(NudeNetCheckFailed, match="HTTP 500"):
+        NudeNetClient(url).info()
