@@ -18,7 +18,19 @@ from argus_cortex.xmp import NS
 SRC = Path(argus_cortex.__file__).parent
 
 # Every optional extra's import name (pyproject [project.optional-dependencies]).
-EXTRAS = ("httpx", "psycopg", "psycopg_pool", "qdrant_client", "minio", "starlette", "fastapi", "PIL", "pynvml", "yaml")
+EXTRAS = (
+    "httpx",
+    "psycopg",
+    "psycopg_pool",
+    "qdrant_client",
+    "minio",
+    "starlette",
+    "fastapi",
+    "PIL",
+    "pynvml",
+    "yaml",
+    "libcst",
+)
 
 
 def _modules() -> list[tuple[Path, ast.Module]]:

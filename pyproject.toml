@@ -41,6 +41,9 @@ gpu = ["nvidia-ml-py>=12.535"]
 # PyYAML, for argus_cortex.gpu_wire.load_tenant_manifest reading a gpu-tenant.yaml;
 # imported only there. JSON manifests need nothing.
 yaml = ["pyyaml>=6.0"]
+# libcst, for the paved-road codemods (python -m argus_cortex.codemods); a dev tool, never
+# imported by the library itself.
+codemods = ["libcst>=1.4"]
 # The store drivers are in dev so each store's real client path (pool/enum/client
 # construction, error wrapping) is exercised in CI, not just via fakes.
 # starlette + httpx power the pure-ASGI guard tests (Starlette TestClient).
@@ -59,6 +62,7 @@ dev = [
     "pillow>=10.0",
     "nvidia-ml-py>=12.535",
     "pyyaml>=6.0",
+    "libcst>=1.4",
     "certifi>=2026.10.19",
 ]
 
