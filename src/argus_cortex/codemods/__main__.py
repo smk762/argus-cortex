@@ -55,6 +55,8 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             path.write_text(new, encoding="utf-8")
+    if changed and getattr(mod, "LEGEND", None):
+        print(mod.LEGEND, file=sys.stderr)
     print(f"{args.codemod}: {changed} file(s) {'would change' if args.check else 'changed'}", file=sys.stderr)
     return 1 if args.check and changed else 0
 

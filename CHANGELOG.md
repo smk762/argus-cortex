@@ -16,7 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `fullmatch`: an anchored `^...$` id check written with `match`/`search` becomes `fullmatch`, so a
     trailing newline no longer passes. It skips multiline, top-level alternation, prefix checks, `pos`
     arguments, unknown patterns or flags, and patterns local to a function. It names checks that
-    `fs.safe_name` could replace. Review each hit: a line parser may rely on `$` before a newline.
+    `fs.safe_name` could replace. It finds `import re` (and its aliases) at any depth. Each rewrite is reported
+    as **tightens** (`not X.match(v)` / `X.match(v) is None`) or **REVIEW** (anything else): a check that
+    refuses on a match is loosened by `fullmatch`, and a parser of lines that keep their newline stops
+    matching, so revert those. Patterns imported from another module and f-string patterns are not handled.
   - `read-upload`: `await upload.read()` on an `UploadFile` parameter, or a loop item of a
     `list[UploadFile]`, becomes `read_upload(upload, MAX_UPLOAD_BYTES)`. It adds the import and a 50 MiB
     constant, and reminds you to map `TooLarge`/`BadInput` to 413/400.

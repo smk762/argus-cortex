@@ -38,10 +38,53 @@ def test_compiled_and_direct_anchored_checks_become_fullmatch() -> None:
     new, report = fullmatch.transform(code)
     assert new.count(".fullmatch(") == 4 and ".match(" not in new and ".search(" not in new
     assert len(report.rewritten) == 4
-    assert report.safe_name == ["line 10: ^[A-Za-z0-9][A-Za-z0-9._-]*$"]
+    assert report.safe_name == ["line 10:12: ^[A-Za-z0-9][A-Za-z0-9._-]*$"]
     ns: dict = {}
     exec(new, ns)  # noqa: S102
     assert not ns["ok"]("abc\n") and not ns["ok"]("12")
+
+
+def test_a_function_local_re_import_is_seen() -> None:
+    code = src(
+        r"""
+        SLOT = r"^[a-z][a-z0-9_]{0,31}$"
+
+
+        def check(slot):
+            import re as _re
+
+            if not _re.match(SLOT, slot):
+                raise ValueError(slot)
+        """
+    )
+    new, report = fullmatch.transform(code)
+    assert "_re.fullmatch(SLOT, slot)" in new and report.review == []
+
+
+def test_each_rewrite_says_whether_it_only_tightens() -> None:
+    code = src(
+        r"""
+        import re
+
+        ID = re.compile(r"^[a-z]+$")
+        MODEL = re.compile(r"^(ckpt|lora)_name$")
+
+
+        def f(v, key, line):
+            if not ID.match(v):
+                raise ValueError
+            if ID.search(v) is None:
+                raise ValueError
+            if MODEL.match(key):
+                raise ValueError("names a model file")
+            return ID.match(line)
+        """
+    )
+    new, report = fullmatch.transform(code)
+    assert len(report.rewritten) == 4
+    assert [r.split(":")[0] for r in report.review] == ["line 12", "line 14"]  # refuses on match; returned
+    lines = fullmatch.summary(report)
+    assert sum(x.startswith("tightens") for x in lines) == 2 and sum(x.startswith("REVIEW") for x in lines) == 2
 
 
 @pytest.mark.parametrize(
