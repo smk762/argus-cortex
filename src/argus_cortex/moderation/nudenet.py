@@ -4,8 +4,8 @@ The suite never imports NudeNet (AGPL-3.0): it posts images to a NudeNet
 server and records the detections. Running that server is the deployer's
 choice; cortex and the stages stay MIT.
 
-Use a server running NudeNet's **640m** detector (argus-cull's ``nudenet/``
-build, #79). The upstream ``ghcr.io/notai-tech/nudenet`` image bundles only
+Use a server running NudeNet's **640m** detector: argus-retina's
+``ghcr.io/smk762/argus-retina-nudenet`` image (#79). The upstream ``ghcr.io/notai-tech/nudenet`` image bundles only
 320n. The two models score the same image differently, so a threshold tuned on
 one does not carry over to the other. :meth:`NudeNetClient.info` reports which
 model a server runs; record it with the scores.
