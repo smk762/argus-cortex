@@ -68,7 +68,8 @@ def _arg(call: cst.Call, pos: int, name: str) -> cst.BaseExpression | None:
 
 @dataclass
 class Report:
-    rewritten: list[str] = field(default_factory=list)  # "line N: <pattern>"
+    rewritten: list[str] = field(default_factory=list)  # "line N:C <pattern>" for every rewrite
+    review: list[str] = field(default_factory=list)  # rewrites whose direction a person must check
     safe_name: list[str] = field(default_factory=list)  # rewritten checks that look like a path segment
 
 
@@ -123,16 +124,35 @@ class _Patterns(cst.CSTVisitor):
 
 
 class _Rewrite(cst.CSTTransformer):
-    METADATA_DEPENDENCIES = (cst.metadata.PositionProvider,)
+    METADATA_DEPENDENCIES = (cst.metadata.PositionProvider, cst.metadata.ParentNodeProvider)
 
     def __init__(self, patterns: _Patterns, report: Report) -> None:
         self.p, self.report = patterns, report
 
+    def _refuses_on_no_match(self, node: cst.Call) -> bool:
+        """``not X.match(v)`` or ``X.match(v) is None``: the check refuses what doesn't match, so
+        ``fullmatch`` only tightens it. Any other use (refusing on a match, parsing, returning the
+        result) may loosen or change behaviour, and is listed for review."""
+        parent = self.get_metadata(cst.metadata.ParentNodeProvider, node, None)
+        if isinstance(parent, cst.UnaryOperation) and isinstance(parent.operator, cst.Not):
+            return True
+        if isinstance(parent, cst.Comparison) and parent.left is node and len(parent.comparisons) == 1:
+            target = parent.comparisons[0]
+            return (
+                isinstance(target.operator, cst.Is)
+                and isinstance(target.comparator, cst.Name)
+                and target.comparator.value == "None"
+            )
+        return False
+
     def _record(self, node: cst.Call, pattern: str) -> None:
-        line = self.get_metadata(cst.metadata.PositionProvider, node).start.line
-        self.report.rewritten.append(f"line {line}: {pattern}")
+        pos = self.get_metadata(cst.metadata.PositionProvider, node).start
+        where = f"line {pos.line}:{pos.column + 1}: {pattern}"
+        self.report.rewritten.append(where)
+        if not self._refuses_on_no_match(node):
+            self.report.review.append(where)
         if _SAFE_NAME.fullmatch(pattern):
-            self.report.safe_name.append(f"line {line}: {pattern}")
+            self.report.safe_name.append(where)
 
     def leave_Call(self, original: cst.Call, updated: cst.Call) -> cst.BaseExpression:
         func = updated.func
@@ -158,15 +178,22 @@ class _Rewrite(cst.CSTTransformer):
         return updated.with_changes(func=func.with_changes(attr=cst.Name("fullmatch")))
 
 
+class _ReImports(cst.CSTVisitor):
+    """Every name ``re`` is imported as, at any depth (a function-local ``import re as _re`` too)."""
+
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+
+    def visit_Import(self, node: cst.Import) -> None:
+        for alias in node.names:
+            if isinstance(alias.name, cst.Name) and alias.name.value == "re":
+                self.names.add(alias.asname.name.value if alias.asname else "re")  # type: ignore[union-attr]
+
+
 def _re_names(module: cst.Module) -> set[str]:
-    names: set[str] = set()
-    for stmt in module.body:
-        for small in stmt.body if isinstance(stmt, cst.SimpleStatementLine) else ():
-            if isinstance(small, cst.Import):
-                for alias in small.names:
-                    if isinstance(alias.name, cst.Name) and alias.name.value == "re":
-                        names.add(alias.asname.name.value if alias.asname else "re")  # type: ignore[union-attr]
-    return names
+    found = _ReImports()
+    module.visit(found)
+    return found.names
 
 
 def transform(source: str) -> tuple[str, Report]:
@@ -184,8 +211,14 @@ def transform(source: str) -> tuple[str, Report]:
 
 
 def summary(report: Report) -> list[str]:
-    out = [f"fullmatch: {r}" for r in report.rewritten]
+    review = set(report.review)
+    out = [f"{'REVIEW' if r in review else 'tightens'} fullmatch: {r}" for r in report.rewritten]
     out += [f"consider argus_cortex.fs.safe_name: {r}" for r in report.safe_name]
-    if report.rewritten:
-        out.append("review: a parser matching lines that keep their newline stops matching under fullmatch")
     return out
+
+
+LEGEND = (
+    "tightens: the check refuses a non-match (`not X.match`, `is None`), so a trailing newline is now refused too. "
+    "REVIEW: anything else. A check that refuses on a match is loosened by fullmatch, and a parser of lines that "
+    "keep their newline stops matching; revert those to .match. Run the formatter afterwards."
+)

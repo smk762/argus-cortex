@@ -10,9 +10,11 @@ Run one over a repo's source, then review the diff::
   Only patterns that start with ``^`` and end with ``$``, have no top-level ``|`` and aren't
   ``MULTILINE`` are touched. A plain single-segment id check is a candidate for
   :func:`argus_cortex.fs.safe_name`, which the summary names.
-  **Review each hit:** a *validator* (an id, a hash, a header value) is what this is for. A
-  *parser* matching lines read with their newline (``for line in f``) relied on ``$`` matching
-  before it, and ``fullmatch`` would stop matching: strip the line, or leave that call alone.
+  Each rewrite is reported as **tightens** (``not X.match(v)`` / ``X.match(v) is None``: a
+  non-match is refused, so ``fullmatch`` only refuses more) or **REVIEW** (anything else). Revert a
+  REVIEW hit to ``.match`` when it *refuses on a match* (``fullmatch`` would loosen it) or parses
+  lines that keep their newline (``fullmatch`` would stop matching them).
+  Not handled: patterns imported from another module, f-string patterns. Run the formatter after.
 * ``read-upload``: ``await upload.read()`` on an ``UploadFile`` parameter (or an item of a
   ``list[UploadFile]``) becomes ``await read_upload(upload, MAX_UPLOAD_BYTES)``
   (:mod:`argus_cortex.limits`), adding the import and a ``MAX_UPLOAD_BYTES`` constant when the module
