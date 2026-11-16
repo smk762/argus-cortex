@@ -1,6 +1,6 @@
 # Paved roads: one safe helper per dangerous operation
 
-Status: proposed (ai-code-auditor#56). This note settles the behaviour of four shared helpers
+Status: implemented in `fs`, `net`, `auth` and `limits` (ai-code-auditor#56). This note settles the behaviour of four shared helpers
 before code depends on them. Each one replaces several local copies that grew separately across
 the suite and disagree on the details.
 
@@ -49,9 +49,11 @@ into a directory other users can write to need `O_NOFOLLOW`/`openat`, not this h
 
 ```python
 check_url(url, *, allow_hosts=()) -> CheckedUrl
-fetch(url, *, allow_hosts=(), timeout=30, max_bytes=50 MiB, max_redirects=5, deadline=120) -> bytes
+fetch(url, *, method="GET", content=None, headers=None, allow_hosts=(), timeout=30,
+      max_bytes=50 MiB, max_redirects=5, deadline=120) -> Reply   # .status .headers .body .raise_for_status()
 afetch(...)  # the same, async
-UrlRefused(ValueError)
+is_public_ip(ip) -> bool
+UrlRefused(ValueError), FetchFailed(RuntimeError)
 ```
 
 | Question | Decision | Why |
@@ -59,7 +61,8 @@ UrlRefused(ValueError)
 | What is blocked | Every address that isn't **global** (private, loopback, link-local, CGNAT, multicast, reserved), checked on the **resolved** IPs; IPv4-mapped/compat IPv6, 6to4 and NAT64 forms are unwrapped and checked as IPv4 | Checking the hostname only (one local copy does) is beaten by any DNS name that points inside |
 | Every address or one | **All** resolved addresses must be global | A name with one public and one private record is how a rebinding attack starts |
 | Rebinding | The connection is **pinned** to the checked IP; the Host header and TLS SNI keep the original name | Checking then letting the client resolve again is a race |
-| Redirects | Followed by hand, up to 5, each hop checked again | A public URL redirecting to a metadata address is the common bypass |
+| Redirects | Followed by hand for GET/HEAD, up to 5, each hop checked again; any other method gets the 3xx back | A public URL redirecting to a metadata address is the common bypass, and a POST body must never be re-sent to a host nobody checked |
+| Error status | Returned in the `Reply`; `raise_for_status()` turns 4xx/5xx into `FetchFailed` | Callers that proxy a status need it; callers that don't call one method |
 | Allow-list | Entries are `host` or `host:port`; an allow-listed host skips the public-address rule but is **still resolved and pinned** | An allow-list is for internal services by name, not a way to switch off pinning |
 | Userinfo in the URL | Refused | Different parsers disagree about where the host is |
 | Body | Capped (`max_bytes`); a declared `Content-Length` over the cap is refused before reading | The fetch must not become a memory exhaustion |
@@ -73,7 +76,7 @@ need timeouts, not an SSRF policy; `timeout=` is required by the `missing-timeou
 ## 3. `argus_cortex.auth`: one token check that fails closed
 
 ```python
-bearer(env_var="ARGUS_ADMIN_TOKEN", *, open_when_unset=False)  # a FastAPI dependency
+bearer(env_var="ARGUS_ADMIN_TOKEN", *, open_when_unset=False)  # a FastAPI/Starlette dependency
 check_bearer(header, token) -> bool                           # the constant-time core
 ```
 
@@ -92,8 +95,8 @@ check_bearer(header, token) -> bool                           # the constant-tim
 await read_body(request, max_bytes) -> bytes
 await read_upload(upload, max_bytes) -> bytes
 decode_base64(data, max_bytes) -> bytes
-open_image(data, *, max_pixels=40_000_000, formats=None) -> PIL.Image.Image
-TooLarge(ValueError)
+open_image(data, *, max_pixels=40_000_000, max_bytes=None, formats=None) -> PIL.Image.Image
+TooLarge(ValueError), BadInput(ValueError)
 ```
 
 | Question | Decision | Why |
@@ -103,7 +106,7 @@ TooLarge(ValueError)
 | Multipart uploads | `read_upload` reads in chunks and stops at the cap | `UploadFile.read()` reads everything; no server caps it today |
 | Base64 | The encoded length is checked **before** decoding | Decoding first allocates the whole thing |
 | Images | The pixel count is checked from the header before `load()`; formats can be restricted | Pillow's global default is a warning threshold, not a limit |
-| Status | `TooLarge` → 413 at the edge | It's the standard code, and clients can tell it from a validation error |
+| Status | `TooLarge` → 413, `BadInput` (bad length, invalid base64, not an image) → 400 at the edge | 413 is the standard code, and clients can tell it from a validation error |
 
 ## Adoption
 
