@@ -33,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `import argus_cortex` loads no optional extra, cortex imports no stage and no NudeNet (also a ruff `TID251` ban),
   the `argus` XMP namespace URI is pinned, `consent_valid` reads no clock, an age check can't hold the ID, and an
   allow-listed `net` host is still pinned. `SUITE.md`'s shared rules say which have a suite-level check.
+- A committed wire schema may only break in a major release (#105). `test_schema_compat` compares each
+  `*-schema.json` with the last `v*` tag. A removed model or field, a newly required field, a narrowed type or enum,
+  a tightened bound or pattern, or newly refused extra fields fails unless the CHANGELOG's newest version is a new major
+  (and a `*_version` schema moves its wire major too).
 
 ## [0.7.0] - 2026-11-16
 
