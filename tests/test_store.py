@@ -299,9 +299,12 @@ def test_ensure_schema_runs_every_statement() -> None:
     conn = _FakeConn()
     store = _store_with(conn)
     store.ensure_schema()
-    # the DDL runs between a session advisory lock and its unlock, so concurrent stages take turns
-    lock, *ddl, unlock = conn.executed
-    assert "pg_advisory_lock" in lock[0] and "pg_advisory_unlock" in unlock[0] and lock[1] == unlock[1]
+    # the DDL runs in one transaction behind a transaction-scoped advisory lock, so concurrent stages take
+    # turns, and the lock goes with the commit or rollback: there is no unlock to fail or to skip
+    assert conn.tx_entered == 1
+    lock, *ddl = conn.executed
+    assert "pg_advisory_xact_lock" in lock[0]
+    assert not any("unlock" in sql for sql, _ in conn.executed)
     assert len(ddl) == len(SCHEMA_STATEMENTS)
     # every statement is idempotent: CREATE ... IF NOT EXISTS / OR REPLACE, or a CREATE that tolerates duplicate_object
     assert all("CREATE" in sql for sql, _ in ddl)

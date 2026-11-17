@@ -301,16 +301,19 @@ class PostgresLineageStore:
 
     def ensure_schema(self) -> None:
         def op() -> None:
-            with self._acquire() as conn, conn.cursor() as cur:
-                # Several stages run this against one database at startup. DDL is
-                # not safe to race (CREATE OR REPLACE FUNCTION fails with "tuple
-                # concurrently updated"), so take turns on a session advisory lock.
-                cur.execute("SELECT pg_advisory_lock(%s)", (_SCHEMA_LOCK_KEY,))
-                try:
-                    for statement in SCHEMA_STATEMENTS:
-                        cur.execute(statement)
-                finally:
-                    cur.execute("SELECT pg_advisory_unlock(%s)", (_SCHEMA_LOCK_KEY,))
+            # Several stages run this against one database at startup. DDL is not
+            # safe to race (two CREATE ... IF NOT EXISTS collide in the catalog, and
+            # CREATE OR REPLACE FUNCTION fails with "tuple concurrently updated"), so
+            # the statements run in one transaction behind a transaction-scoped
+            # advisory lock. The lock is held until the DDL commits and is released
+            # by a rollback too: no unlock to fail, no lock left on a pooled
+            # connection. Inside transaction() this is a savepoint and the lock is
+            # held until the outer transaction ends, so nobody sees it free before
+            # this DDL is committed.
+            with self._acquire() as conn, conn.transaction(), conn.cursor() as cur:
+                cur.execute("SELECT pg_advisory_xact_lock(%s)", (_SCHEMA_LOCK_KEY,))
+                for statement in SCHEMA_STATEMENTS:
+                    cur.execute(statement)
 
         wrap_errors(op, errors=self._db_errors(), label="ensure_schema")
 

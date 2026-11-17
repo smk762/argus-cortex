@@ -118,3 +118,55 @@ def test_concurrent_writes_are_isolated(store: PostgresLineageStore) -> None:
         ids = list(ex.map(make, range(32)))
     assert len(set(ids)) == 32
     assert all(i is not None for i in ids)
+
+
+def _schema_lock_is_free() -> bool:
+    import psycopg
+
+    from argus_cortex.store.lineage import _SCHEMA_LOCK_KEY
+
+    with psycopg.connect(_PG_URL, autocommit=True) as conn:  # type: ignore[arg-type]
+        got = conn.execute("SELECT pg_try_advisory_lock(%s)", (_SCHEMA_LOCK_KEY,)).fetchone()[0]
+        if got:
+            conn.execute("SELECT pg_advisory_unlock(%s)", (_SCHEMA_LOCK_KEY,))
+        return bool(got)
+
+
+def test_ensure_schema_failing_inside_a_transaction_frees_the_lock_and_keeps_its_error(
+    store: PostgresLineageStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed DDL inside transaction(): the real error surfaces, and no pooled connection keeps the lock."""
+    from argus_cortex.store import lineage
+
+    monkeypatch.setattr(lineage, "SCHEMA_STATEMENTS", (*lineage.SCHEMA_STATEMENTS, "SELECT 1 / 0"))
+    with pytest.raises(StoreError, match="division by zero"), store.transaction():
+        store.ensure_schema()
+    assert _schema_lock_is_free()
+
+
+def test_ensure_schema_in_a_transaction_holds_the_lock_until_it_commits(store: PostgresLineageStore) -> None:
+    with store.transaction():
+        store.ensure_schema()
+        assert not _schema_lock_is_free()  # the DDL isn't committed yet: another stage must still wait
+    assert _schema_lock_is_free()
+
+
+def test_concurrent_ensure_schema_on_a_fresh_database() -> None:
+    """Several stages bootstrapping one empty database at once all succeed."""
+    import psycopg
+    from psycopg.conninfo import conninfo_to_dict, make_conninfo
+
+    name = f"cortex_it_{uuid.uuid4().hex[:10]}"
+    with psycopg.connect(_PG_URL, autocommit=True) as admin:  # type: ignore[arg-type]
+        admin.execute(f'CREATE DATABASE "{name}"')
+    fresh = make_conninfo(**{**conninfo_to_dict(_PG_URL), "dbname": name})  # type: ignore[arg-type]
+    stores = [PostgresLineageStore(fresh, min_size=0, max_size=1) for _ in range(8)]
+    try:
+        with cf.ThreadPoolExecutor(max_workers=len(stores)) as ex:
+            list(ex.map(lambda s: s.ensure_schema(), stores))
+        assert stores[0].record_asset(SourceAsset(uri="fresh://1", sha256=uuid.uuid4().hex)) is not None
+    finally:
+        for s in stores:
+            s.close()
+        with psycopg.connect(_PG_URL, autocommit=True) as admin:  # type: ignore[arg-type]
+            admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
