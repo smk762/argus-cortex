@@ -106,7 +106,7 @@ TooLarge(ValueError), BadInput(ValueError)
 | Malformed `Content-Length` | Refused | It means a broken or hostile client |
 | Multipart uploads | `read_upload` reads in chunks and stops at the cap | `UploadFile.read()` reads everything; no server caps it today |
 | Base64 | The encoded length is checked **before** decoding | Decoding first allocates the whole thing |
-| Images | The pixel count is checked from the header before `load()`; formats can be restricted | Pillow's global default is a warning threshold, not a limit |
+| Images | The pixel count is checked from the header before `load()`. Only JPEG, PNG and WEBP are tried unless the caller passes `formats=`; EPS never | Pillow's global default is a warning threshold, not a limit; every other plugin is parser attack surface, and EPS runs Ghostscript |
 | Status | `TooLarge` → 413, `BadInput` (bad length, invalid base64, not an image) → 400 at the edge | 413 is the standard code, and clients can tell it from a validation error |
 
 ## Adoption
