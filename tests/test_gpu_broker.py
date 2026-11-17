@@ -429,6 +429,41 @@ async def test_async_heartbeat_sets_should_yield() -> None:
         assert handle.should_yield()
 
 
+async def test_async_heartbeat_error_neither_skips_the_release_nor_replaces_the_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An error the heartbeat doesn't expect (not a transport error) is logged; beats go on and the lease is released."""
+    broker = FakeBroker(ttl_s=0.03)
+    coordinator = _coordinator(broker, ttl_s=0.03)
+    beats: list[int] = []
+
+    async def garbled(*_: Any) -> None:
+        beats.append(1)
+        raise httpx.DecodingError("garbled heartbeat reply")
+
+    monkeypatch.setattr(coordinator, "_abeat", garbled)
+    async with coordinator.alease(caller="x", min_vram_mb=1) as handle:
+        await asyncio.sleep(0.1)
+    assert len(beats) >= 2  # the first error did not end the heartbeat
+    assert broker.releases[handle.lease_id]["outcome"] == "ok"
+
+
+def test_sync_heartbeat_error_does_not_end_the_heartbeat(monkeypatch: pytest.MonkeyPatch) -> None:
+    broker = FakeBroker(ttl_s=0.03)
+    coordinator = _coordinator(broker, ttl_s=0.03)
+    beats: list[int] = []
+
+    def garbled(*_: Any) -> None:
+        beats.append(1)
+        raise httpx.DecodingError("garbled heartbeat reply")
+
+    monkeypatch.setattr(coordinator, "_beat", garbled)
+    with coordinator.lease(caller="x", min_vram_mb=1) as handle:
+        time.sleep(0.1)
+    assert len(beats) >= 2
+    assert broker.releases[handle.lease_id]["outcome"] == "ok"
+
+
 async def test_async_oom_outcome() -> None:
     broker = FakeBroker()
     with pytest.raises(RuntimeError):
