@@ -163,7 +163,7 @@ def test_a_huge_declared_image_is_refused_before_decoding() -> None:
 
     bomb = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 8000, 8000, 8, 2, 0, 0, 0))
     bomb += chunk(b"IDAT", zlib.compress(b"")) + chunk(b"IEND", b"")
-    assert 8000 * 8000 < Image.MAX_IMAGE_PIXELS  # Pillow alone would let it through
+    assert Image.MAX_IMAGE_PIXELS > 8000 * 8000  # Pillow alone would let it through
     with pytest.raises(TooLarge, match="40000000 pixels"):
         open_image(bomb, max_pixels=40_000_000)
     assert open_image(bomb, max_pixels=64_000_000).size == (8000, 8000)  # the cap is what refused it

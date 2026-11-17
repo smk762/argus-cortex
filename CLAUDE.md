@@ -35,7 +35,7 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 | A policy text without its illegal-rule letters, or the reverse | `test_policies::test_every_policy_has_a_text_and_an_illegal_table` |
 | Treat an unchecked moderation result as safe: a failed check raises `CheckFailed`, never returns a result | `test_moderation::test_nudenet_bad_responses_are_failures`, `::test_unreachable_server_is_a_failed_check`, `::test_nudenet_info_unreachable_is_a_failed_check` |
 | `ModerationConfigError` echoing the URL (it can carry credentials) | `test_moderation::test_nudenet_url` |
-| An XMP write dropping foreign properties, accepting a DTD, or overwriting an unparseable sidecar | `test_xmp::test_merge_preserves_foreign_properties_and_latest_wins`, `::test_dtd_is_refused`, `::test_malformed_sidecar_is_refused_not_clobbered` |
+| An XMP write dropping foreign properties, accepting a DTD (in any encoding), or overwriting an unparseable sidecar | `test_xmp::test_merge_preserves_foreign_properties_and_latest_wins`, `::test_dtd_is_refused`, `::test_dtd_is_refused_in_any_encoding`, `::test_malformed_sidecar_is_refused_not_clobbered` |
 | Change the `argus` XMP namespace URI (sidecars on disk carry it) | `test_rules::test_argus_xmp_namespace_is_pinned` |
 | A consent record holding the ID or the release document (it keeps who checked the ID and when, and `release_sha256`) | `test_consent::test_unknown_fields_are_refused_and_the_record_is_frozen`, `test_rules::test_an_age_check_cannot_hold_the_id` |
 | `consent_valid` reading the clock, or raising on an unknown use | `test_rules::test_consent_valid_never_reads_the_clock`, `test_consent::test_an_unknown_use_is_refused_not_raised` |
