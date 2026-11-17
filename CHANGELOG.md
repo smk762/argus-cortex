@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `limits.open_image`: `formats=None` (or empty) now means `DEFAULT_FORMATS` (JPEG, PNG, WEBP) instead of
+  every Pillow plugin; pass `formats=` to opt in to more. EPS is refused even when asked for (Pillow runs
+  Ghostscript on it).
+- `gpu_wire.TenantResident.base_url` must be an http(s) URL with a host and no credentials, query or
+  fragment. No committed manifest in the suite changes; the schema change is the field's description.
+
+### Fixed
+- `gpu`: a file lease won by the worker thread after its event loop closed is released explicitly, not left
+  to the generator's finaliser.
+- `gpu_broker`: an unexpected heartbeat error (not a transport error) no longer ends the heartbeat, skips the
+  release, or replaces the body's own result.
+- `store`: `ensure_schema()` runs its DDL in one transaction behind `pg_advisory_xact_lock`. Inside
+  `transaction()` the lock is no longer released before the DDL commits, and a failed statement no longer
+  hides its error behind "current transaction is aborted" or leaves the lock on a pooled connection.
+- `xmp`: a DTD or entity declaration is refused in any encoding (a UTF-16 sidecar slipped past the byte scan),
+  and a non-finite `stDim` width or height drops the regions instead of raising `OverflowError`.
+- `test_schema_compat` also flags a committed schema file removed or renamed since the tag, a `*_version`
+  field on the root model, and a narrowed `additionalProperties` value schema. `test_limits` now catches an
+  upload returned over its cap and a missing `max_pixels` check.
+
 ## [0.9.0] - 2026-11-17
 
 ### Added

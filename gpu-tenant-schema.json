@@ -226,7 +226,7 @@
             }
           ],
           "default": null,
-          "description": "Where the adapter reaches the service, if not the tenant's own.",
+          "description": "Where the adapter reaches the service, if not the tenant's own: an http(s) URL with a host and no credentials, query or fragment. A broker sends its admin token only to hosts its operator configured, never on the strength of this field alone.",
           "title": "Base Url"
         },
         "container": {

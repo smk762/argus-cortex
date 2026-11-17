@@ -97,6 +97,7 @@ def test_upload_returned_iff_within_the_cap(data: bytes, cap: int, chunk: int) -
     except TooLarge:
         assert len(data) > cap
         return
+    assert len(data) <= cap, "an upload over the cap was returned instead of refused"
     assert got == data
 
 
@@ -149,17 +150,40 @@ def test_pixel_cap_is_checked_from_the_header() -> None:
 
 
 def test_a_huge_declared_image_is_refused_before_decoding() -> None:
-    """A PNG whose header claims 100k x 100k: refused from the header, no allocation."""
+    """A PNG whose header claims 8000 x 8000 (64M pixels): refused by *our* cap, from the header.
+
+    Under Pillow's own bomb threshold (2 x ``MAX_IMAGE_PIXELS``, ~179M), so only ``max_pixels`` can
+    refuse it, and with an empty IDAT, so any attempt to decode it would fail as ``BadInput`` instead.
+    """
     import struct
     import zlib
 
     def chunk(kind: bytes, data: bytes) -> bytes:
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
 
-    bomb = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 100_000, 100_000, 8, 2, 0, 0, 0))
+    bomb = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 8000, 8000, 8, 2, 0, 0, 0))
     bomb += chunk(b"IDAT", zlib.compress(b"")) + chunk(b"IEND", b"")
-    with pytest.raises((TooLarge, BadInput)):
+    assert Image.MAX_IMAGE_PIXELS > 8000 * 8000  # Pillow alone would let it through
+    with pytest.raises(TooLarge, match="40000000 pixels"):
         open_image(bomb, max_pixels=40_000_000)
+    assert open_image(bomb, max_pixels=64_000_000).size == (8000, 8000)  # the cap is what refused it
+
+
+@pytest.mark.parametrize("fmt", ["GIF", "BMP", "TIFF"])
+def test_only_the_default_formats_are_tried_unless_the_caller_opts_in(fmt: str) -> None:
+    with pytest.raises(BadInput, match="JPEG, PNG, WEBP"):
+        open_image(png(4, 4, fmt))
+    assert open_image(png(4, 4, fmt), formats=("JPEG", "PNG", "WEBP", fmt)).format == fmt
+    assert open_image(png(4, 4, "WEBP")).format == "WEBP"
+
+
+def test_eps_is_never_opened(monkeypatch) -> None:
+    """EPS goes to Ghostscript: refused even when a caller asks for it, before Pillow sees the bytes."""
+    monkeypatch.setattr(Image, "open", lambda *a, **k: pytest.fail("Pillow saw the bytes"))
+    eps = b"%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 4 4\n"
+    for formats in (("EPS",), ("png", "eps")):
+        with pytest.raises(ValueError, match="never opens EPS"):
+            open_image(eps, formats=formats)
 
 
 def test_formats_bytes_and_garbage() -> None:

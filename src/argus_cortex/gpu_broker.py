@@ -397,6 +397,8 @@ class BrokerCoordinator:
                     interval = self._after_beat(self._beat(client, req, handle), handle, lost)
                 except (_Unreachable, BrokerError) as exc:
                     _log.debug("GPU broker heartbeat for %s failed: %s", handle.lease_id, exc)
+                except Exception:  # noqa: BLE001 - one odd reply must not end the heartbeat for the rest of the lease
+                    _log.warning("GPU broker heartbeat for %s failed", handle.lease_id, exc_info=True)
 
     def _release(
         self, client: Any, lease_id: str | None, outcome: ReleaseOutcome, peak_vram_mb: int | None, detail: str | None
@@ -467,9 +469,13 @@ class BrokerCoordinator:
                 raise
             finally:
                 beat.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await beat
-                await self._arelease(client, handle.lease_id, outcome, handle.peak_vram_mb, detail)
+                try:
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await beat
+                except Exception:  # noqa: BLE001 - a dead heartbeat must not skip the release or replace the result
+                    _log.warning("GPU broker heartbeat for %s ended with an error", handle.lease_id, exc_info=True)
+                finally:
+                    await self._arelease(client, handle.lease_id, outcome, handle.peak_vram_mb, detail)
 
     async def _asend(self, call: Any, *args: Any, **kwargs: Any) -> Any:
         try:
@@ -555,6 +561,8 @@ class BrokerCoordinator:
                 interval = self._after_beat(await self._abeat(client, req, handle), handle, lost)
             except (_Unreachable, BrokerError) as exc:
                 _log.debug("GPU broker heartbeat for %s failed: %s", handle.lease_id, exc)
+            except Exception:  # noqa: BLE001 - one odd reply must not end the heartbeat for the rest of the lease
+                _log.warning("GPU broker heartbeat for %s failed", handle.lease_id, exc_info=True)
 
     async def _arelease(
         self, client: Any, lease_id: str | None, outcome: ReleaseOutcome, peak_vram_mb: int | None, detail: str | None

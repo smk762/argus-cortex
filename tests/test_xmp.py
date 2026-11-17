@@ -121,6 +121,41 @@ def test_dtd_is_refused() -> None:
         parse_xmp(evil)
 
 
+@pytest.mark.parametrize("encoding", ["utf-16", "utf-16-le", "utf-16-be"])
+def test_dtd_is_refused_in_any_encoding(encoding: str) -> None:
+    """The byte scan can't see ``<!DOCTYPE`` in UTF-16; the parser's own DTD handler does."""
+    evil = '<!DOCTYPE x [<!ENTITY a "aaaa">]><x:xmpmeta xmlns:x="adobe:ns:meta/">&a;</x:xmpmeta>'
+    if encoding == "utf-16":
+        evil = ('<?xml version="1.0" encoding="UTF-16"?>' + evil).encode(encoding)  # Python writes the BOM
+    else:
+        evil = ("\ufeff" + evil).encode(encoding)  # a BOM and no declaration: expat reads the byte order
+    assert b"<!DOCTYPE" not in evil
+    with pytest.raises(XmpError, match="DTD"):
+        parse_xmp(evil)
+    with pytest.raises(XmpError, match="DTD"):
+        merge_xmp(evil, XmpData(keywords=["cat"]))
+
+
+def test_a_utf16_sidecar_without_a_dtd_still_parses() -> None:
+    assert parse_xmp(render_xmp(XmpData(keywords=["cat"])).encode("utf-16")).keywords == ["cat"]
+
+
+def test_an_encoding_the_parser_cannot_read_is_an_xmp_error() -> None:
+    doc = '\ufeff<?xml version="1.0" encoding="UTF-16-LE"?><x:xmpmeta xmlns:x="adobe:ns:meta/"/>'
+    with pytest.raises(XmpError, match="encoding"):
+        parse_xmp(doc.encode("utf-16-le"))
+
+
+@pytest.mark.parametrize("bad", ["inf", "-Infinity", "1e400", "nan", "wide"])
+def test_unusable_region_dimensions_are_ignored_not_raised(bad: str) -> None:
+    doc = render_xmp(XmpData(keywords=["cat"], regions=XmpRegions(width=10, height=10, regions=[])))
+    doc = doc.replace('stDim:w="10"', f'stDim:w="{bad}"')
+    assert f'stDim:w="{bad}"' in doc
+    data = parse_xmp(doc)
+    assert data.regions is None
+    assert data.keywords == ["cat"]
+
+
 def test_non_xmp_root_is_refused() -> None:
     with pytest.raises(XmpError, match="not an XMP document"):
         parse_xmp("<html/>")
