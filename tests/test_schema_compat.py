@@ -6,9 +6,10 @@ difference passes only when the release is a major one: the newest version headi
 field (the GPU wire models) must also move that wire major, because that is what ``check_version``
 refuses downstream.
 
-Breaking: a model or field removed, a field newly required, a type narrowed, an enum value or a
-``null`` branch removed, a bound or pattern tightened, ``additionalProperties`` closed. Additive changes
-(a new optional field, a new enum value, a new model, a looser bound) pass.
+Breaking: a schema file, model or field removed, a field newly required, a type narrowed, an enum value
+or a ``null`` branch removed, a bound or pattern tightened, ``additionalProperties`` closed or its value
+schema narrowed (a ``dict[str, X]`` whose ``X`` changed). Additive changes (a new optional field, a new
+enum value, a new model, a new schema file, a looser bound) pass.
 
 CI checks out full history with tags (argus-ci's ``fetch-depth: 0``). Without tags the test fails in
 CI and skips locally.
@@ -73,8 +74,11 @@ def _one(old: dict[str, Any], new: dict[str, Any], path: str) -> list[str]:
     for k in ("pattern", "format"):
         if k in new and new.get(k) != old.get(k):
             out.append(f"{path}: {k} changed")
-    if old.get("additionalProperties", True) is not False and new.get("additionalProperties") is False:
+    oap, nap = old.get("additionalProperties", True), new.get("additionalProperties", True)
+    if oap is not False and nap is False:
         out.append(f"{path}: extra fields now refused")
+    elif oap is not False and isinstance(nap, dict):  # a map's value schema (dict[str, X]), now or newly typed
+        out += breaks(oap if isinstance(oap, dict) else {}, nap, f"{path}{{*}}")
     op, np_ = old.get("properties", {}), new.get("properties", {})
     out += [f"{path}.{name}: removed" for name in op if name not in np_]
     out += [
@@ -111,10 +115,13 @@ def schema_breaks(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
 
 
 def wire_majors(schema: dict[str, Any]) -> set[str]:
-    """The majors of every ``*_version`` field's default in *schema* (empty when unversioned)."""
+    """The majors of every ``*_version`` field's default in *schema* (empty when unversioned).
+
+    Both the root model's own fields and every model in ``$defs``: pydantic puts the root's fields at the top.
+    """
     return {
         str(p["default"]).split(".")[0]
-        for d in schema.get("$defs", {}).values()
+        for d in [schema, *schema.get("$defs", {}).values()]
         for name, p in d.get("properties", {}).items()
         if name.endswith("_version") and "default" in p
     }
@@ -130,14 +137,24 @@ def release_version(changelog: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _not_major(tag: str, releasing: str | None) -> str | None:
+    if releasing is None or _major(releasing) <= _major(tag):
+        return f"the release after {tag} is not a major one (CHANGELOG: {releasing or 'no new version heading'})"
+    return None
+
+
+def removed(at_tag: set[str], now: set[str], tag: str, releasing: str | None) -> list[str]:
+    """A schema file shipped at *tag* and gone now (deleted or renamed) is a break: allowed only in a major."""
+    why = _not_major(tag, releasing)
+    return [f"{name}: removed since {tag} — {why}" for name in sorted(at_tag - now)] if why else []
+
+
 def verdict(old: dict[str, Any], new: dict[str, Any], tag: str, releasing: str | None) -> list[str]:
     """The reasons this schema change can't ship in *releasing* (empty when it can)."""
     found = schema_breaks(old, new)
     if not found:
         return []
-    why = []
-    if releasing is None or _major(releasing) <= _major(tag):
-        why.append(f"the release after {tag} is not a major one (CHANGELOG: {releasing or 'no new version heading'})")
+    why = [w] if (w := _not_major(tag, releasing)) else []
     if (om := wire_majors(old)) and wire_majors(new) == om:
         why.append(f"the wire major is still {sorted(om)}")
     return [f"{b} — {' and '.join(why)}" for b in found] if why else []
@@ -165,7 +182,8 @@ def test_committed_schemas_break_only_in_a_major_release() -> None:
             pytest.fail("no v* tag: CI must check out full history with tags (fetch-depth: 0)")
         pytest.skip("no v* tags in this checkout")
     releasing = release_version((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"))
-    problems = []
+    at_tag = {n for n in _git("ls-tree", "--name-only", tag).split() if n.endswith("-schema.json")}
+    problems = removed(at_tag, {p.name for p in ROOT.glob("*-schema.json")}, tag, releasing)
     for path in sorted(ROOT.glob("*-schema.json")):
         try:
             old = json.loads(_git("show", f"{tag}:{path.name}"))
@@ -208,6 +226,22 @@ KIND = {"enum": ["a", "b"], "type": "string"}
         (obj({"r": {"$ref": "#/$defs/A"}}), obj({"r": {"$ref": "#/$defs/B"}}), "now refers to"),
         (obj({"l": {"type": "array", "items": KIND}}), obj({"l": {"type": "array", "items": STR}}), ""),
         (obj({"l": {"type": "array", "items": STR}}), obj({"l": {"type": "array", "items": KIND}}), "l[]"),
+        # dict[str, int] -> dict[str, str]: the map's value type changed
+        (
+            obj({"m": {"type": "object", "additionalProperties": {"type": "integer"}}}),
+            obj({"m": {"type": "object", "additionalProperties": STR}}),
+            "m{*}: no longer accepts type ['integer']",
+        ),
+        (
+            obj({"m": {"type": "object", "additionalProperties": STR}}),
+            obj({"m": {"type": "object", "additionalProperties": KIND}}),
+            "m{*}: now restricted to fixed values",
+        ),
+        (
+            obj({"m": {"type": "object"}}),
+            obj({"m": {"type": "object", "additionalProperties": STR}}),
+            "m{*}: now restricted to type",
+        ),
     ],
 )
 def test_breaking_changes_are_found(old: dict, new: dict, expect: str) -> None:
@@ -228,6 +262,12 @@ def test_breaking_changes_are_found(old: dict, new: dict, expect: str) -> None:
         (obj({"a": STR}, ("a",)), obj({"a": STR})),  # no longer required
         (obj({"n": {"type": "integer"}}), obj({"n": {"type": "number"}})),
         (obj({"a": {**STR, "description": "x"}}), obj({"a": {**STR, "description": "y", "title": "A"}})),
+        (  # a map's value type widened
+            obj({"m": {"type": "object", "additionalProperties": KIND}}),
+            obj({"m": {"type": "object", "additionalProperties": STR}}),
+        ),
+        (obj({"m": {"type": "object", "additionalProperties": STR}}), obj({"m": {"type": "object"}})),
+        (obj({}, additionalProperties=False), obj({}, additionalProperties=STR)),
     ],
 )
 def test_additive_changes_pass(old: dict, new: dict) -> None:
@@ -252,6 +292,26 @@ def test_a_break_needs_a_major_release_and_a_wire_major() -> None:
     unversioned = {"$defs": {"M": obj({"x": STR})}}
     assert verdict(unversioned, {"$defs": {"M": obj({})}}, "v0.8.0", "1.0.0") == []
     assert verdict(unversioned, {"$defs": {"M": obj({})}}, "v0.8.0", None)
+
+
+def test_a_version_on_the_root_model_is_a_wire_major() -> None:
+    """pydantic puts the root model's own fields at the top, not in ``$defs``."""
+    v = {"type": "string", "default": "1.0"}
+    old = obj({"schema_version": v, "x": STR})
+    assert wire_majors(old) == {"1"}
+    broken = obj({"schema_version": v})
+    assert verdict(old, broken, "v0.8.0", "1.0.0") == ["$.x: removed — the wire major is still ['1']"]
+    assert verdict(old, obj({"schema_version": {**v, "default": "2.0"}}), "v0.8.0", "1.0.0") == []
+
+
+def test_a_removed_or_renamed_schema_file_breaks_outside_a_major() -> None:
+    at_tag = {"a-schema.json", "b-schema.json"}
+    renamed = {"a-schema.json", "c-schema.json"}
+    assert removed(at_tag, renamed, "v0.8.0", "0.9.0") == [
+        "b-schema.json: removed since v0.8.0 — the release after v0.8.0 is not a major one (CHANGELOG: 0.9.0)"
+    ]
+    assert removed(at_tag, renamed, "v0.8.0", "1.0.0") == []
+    assert removed(at_tag, at_tag | {"c-schema.json"}, "v0.8.0", None) == []  # a new file is additive
 
 
 def test_release_version_is_the_newest_dated_heading() -> None:
