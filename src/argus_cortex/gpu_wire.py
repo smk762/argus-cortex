@@ -24,6 +24,7 @@ import json
 import re
 from pathlib import Path
 from typing import Annotated, Any, Literal, get_args
+from urllib.parse import urlsplit
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -259,7 +260,12 @@ class TenantResident(BaseModel):
     vram_mb: Megabytes | None = None
     pinned: bool = Field(False, description="Hint: never evict (e.g. SingGuard's model, a2f during a broadcast).")
     idle_kill_s: float | None = Field(None, ge=0, description="Hint: evict after this long without a lease.")
-    base_url: str | None = Field(None, description="Where the adapter reaches the service, if not the tenant's own.")
+    base_url: str | None = Field(
+        None,
+        description="Where the adapter reaches the service, if not the tenant's own: an http(s) URL with a host and "
+        "no credentials, query or fragment. A broker sends its admin token only to hosts its operator configured, never "
+        "on the strength of this field alone.",
+    )
     container: str | None = Field(
         None,
         max_length=200,
@@ -280,6 +286,29 @@ class TenantResident(BaseModel):
         description="Restart the container when it is idle and its cgroup anonymous memory exceeds this "
         "(ComfyUI keeps offloaded weights in host RAM; voluptas#16).",
     )
+
+    @field_validator("base_url")
+    @classmethod
+    def _http_base_url(cls, url: str | None) -> str | None:
+        """An http(s) URL to a host, nothing more: the adapter joins ``*_path`` to it and may send the admin token.
+
+        Whether that host may receive the token is the broker's call (an operator allow-list); this only rules out
+        what is never a service URL (``file:``, a bare ``host:port``) and what would carry or mangle a credential.
+        """
+        if url is None:
+            return None
+        try:
+            parts = urlsplit(url)
+            parts.port  # noqa: B018 - raises ValueError on a malformed port
+        except ValueError as exc:
+            raise ValueError(f"base_url is not a URL: {exc}") from None
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            raise ValueError("base_url must be an http:// or https:// URL with a host")
+        if parts.username is not None or parts.password is not None:
+            raise ValueError("base_url must not carry credentials; the broker holds the admin token")
+        if parts.query or parts.fragment or "?" in url or "#" in url:
+            raise ValueError("base_url must not have a query or fragment: route paths are joined to it")
+        return url
 
 
 class TenantManifest(TenantVersioned):
