@@ -30,7 +30,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validato
 
 from argus_cortex.wire import make_versioned_base, render_schema
 
-LEASE_VERSION = "1.0"
+LEASE_VERSION = "1.1"
 LEASE_MAJORS = ("1",)
 TENANT_VERSION = "1.0"
 TENANT_MAJORS = ("1",)
@@ -177,6 +177,13 @@ class Heartbeat(LeaseVersioned):
     """``POST /leases/{id}/heartbeat``: keep a granted lease alive."""
 
     peak_vram_mb: Megabytes | None = Field(None, description="Peak VRAM the caller saw since the last heartbeat.")
+    progress: float | None = Field(
+        None,
+        ge=0,
+        le=1,
+        description="How much of the work is done, 0 to 1, if the caller can tell. Shown, not acted on.",
+    )
+    stage: str | None = Field(None, max_length=200, description="What the work is doing now, e.g. 'checkpoint 3/5'.")
 
 
 class HeartbeatReply(LeaseVersioned):

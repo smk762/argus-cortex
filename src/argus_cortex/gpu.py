@@ -99,6 +99,8 @@ class GpuLease:
       safe point (between tiles, seeds, batches). Nothing is killed if you don't.
     * :meth:`report_peak_vram`: tell the broker the peak you saw, so it learns the
       real footprint.
+    * :meth:`report_progress`: how far the work has got, for the broker's dashboard.
+      Sent with the next heartbeat; the broker shows it and decides nothing on it.
     """
 
     via: Literal["local", "broker", "fallback"] = "local"
@@ -107,6 +109,8 @@ class GpuLease:
     device: int | None = None
     base_url: str | None = None
     peak_vram_mb: int | None = None
+    progress: float | None = None
+    stage: str | None = None
     _yield: threading.Event = field(default_factory=threading.Event, repr=False, compare=False)
 
     def should_yield(self) -> bool:
@@ -115,6 +119,17 @@ class GpuLease:
     def report_peak_vram(self, mb: int) -> None:
         if mb >= 0:
             self.peak_vram_mb = max(self.peak_vram_mb or 0, int(mb))
+
+    def report_progress(self, done: float, total: float | None = None, *, stage: str | None = None) -> None:
+        """Record how far the work has got: *done* of *total* steps, or *done* as a fraction (0-1) without *total*.
+
+        *stage* says what it is doing now (``"checkpoint 3/5"``), up to 200 characters. The broker sees the latest
+        values at the next heartbeat, so report as often as is convenient.
+        """
+        fraction = done / total if total else done
+        self.progress = min(1.0, max(0.0, float(fraction)))
+        if stage is not None:
+            self.stage = stage[:200]
 
 
 @runtime_checkable

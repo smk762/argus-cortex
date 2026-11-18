@@ -54,7 +54,7 @@
       "description": "``POST /leases/{id}/heartbeat``: keep a granted lease alive.",
       "properties": {
         "lease_version": {
-          "default": "1.0",
+          "default": "1.1",
           "title": "Lease Version",
           "type": "string"
         },
@@ -71,6 +71,35 @@
           "default": null,
           "description": "Peak VRAM the caller saw since the last heartbeat.",
           "title": "Peak Vram Mb"
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How much of the work is done, 0 to 1, if the caller can tell. Shown, not acted on.",
+          "title": "Progress"
+        },
+        "stage": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the work is doing now, e.g. 'checkpoint 3/5'.",
+          "title": "Stage"
         }
       },
       "title": "Heartbeat",
@@ -80,7 +109,7 @@
       "description": "The broker's answer to a heartbeat. ``yield_requested``: release at the next safe point.",
       "properties": {
         "lease_version": {
-          "default": "1.0",
+          "default": "1.1",
           "title": "Lease Version",
           "type": "string"
         },
@@ -142,7 +171,7 @@
           "title": "Detail"
         },
         "lease_version": {
-          "default": "1.0",
+          "default": "1.1",
           "title": "Lease Version",
           "type": "string"
         },
@@ -214,7 +243,7 @@
           "type": "string"
         },
         "lease_version": {
-          "default": "1.0",
+          "default": "1.1",
           "title": "Lease Version",
           "type": "string"
         },
@@ -395,7 +424,7 @@
           "type": "string"
         },
         "lease_version": {
-          "default": "1.0",
+          "default": "1.1",
           "title": "Lease Version",
           "type": "string"
         },

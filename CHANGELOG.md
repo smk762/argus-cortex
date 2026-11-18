@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Lease progress.** `GpuLease.report_progress(done, total=None, *, stage=None)` records how far the work has got
+  (*done* of *total*, or a 0-1 fraction) and what it is doing now; `BrokerCoordinator` sends both with the next
+  heartbeat as `Heartbeat.progress` (0-1) and `Heartbeat.stage` (up to 200 characters), so argus-iris's dashboard can
+  show a bar per lease. The broker displays them and decides nothing on them. `lease_version` 1.1, additive: a 1.0
+  broker ignores the new fields. Regenerated `gpu-lease-schema.json`.
+
 ### Changed
 - `limits.open_image`: `formats=None` (or empty) now means `DEFAULT_FORMATS` (JPEG, PNG, WEBP) instead of
   every Pillow plugin; pass `formats=` to opt in to more. EPS is refused even when asked for (Pillow runs

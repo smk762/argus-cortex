@@ -377,7 +377,9 @@ class BrokerCoordinator:
         return self._granted_or_raise(status)
 
     def _beat(self, client: Any, req: LeaseRequest, handle: GpuLease) -> HeartbeatReply | None:
-        body = Heartbeat(peak_vram_mb=handle.peak_vram_mb).model_dump(mode="json")
+        body = Heartbeat(peak_vram_mb=handle.peak_vram_mb, progress=handle.progress, stage=handle.stage).model_dump(
+            mode="json"
+        )
         reply = self._parse(self._send(client.post, f"/leases/{handle.lease_id}/heartbeat", json=body), HeartbeatReply)
         if reply is None:  # the broker forgot the lease (restart): re-attach, the work is already running
             status = self._post_lease(client, req.model_copy(update={"resume": handle.lease_id, "wait_s": 0.0}))
@@ -539,7 +541,9 @@ class BrokerCoordinator:
         return self._granted_or_raise(status)
 
     async def _abeat(self, client: Any, req: LeaseRequest, handle: GpuLease) -> HeartbeatReply | None:
-        body = Heartbeat(peak_vram_mb=handle.peak_vram_mb).model_dump(mode="json")
+        body = Heartbeat(peak_vram_mb=handle.peak_vram_mb, progress=handle.progress, stage=handle.stage).model_dump(
+            mode="json"
+        )
         response = await self._asend(
             client.post, f"/leases/{handle.lease_id}/heartbeat", json=body, timeout=self.request_timeout_s
         )
