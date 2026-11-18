@@ -130,7 +130,7 @@ def test_granted_lease_reports_placement_and_releases_ok() -> None:
     assert request["tenant"] == "argus-darkroom" and request["target"] == "ollama:qwen3:8b"
     assert request["vram_mb"] == 6000 and request["kind"] == "expand" and request["priority"] is None
     assert broker.releases[handle.lease_id] == {
-        "lease_version": "1.0",
+        "lease_version": "1.1",
         "outcome": "ok",
         "peak_vram_mb": 5400,
         "detail": None,
@@ -367,6 +367,23 @@ def test_heartbeat_carries_peak_and_sets_should_yield() -> None:
         handle.report_peak_vram(700)
         assert _wait_for(handle.should_yield)
     assert broker.beats[0]["peak_vram_mb"] == 700
+
+
+def test_heartbeat_carries_progress_and_stage() -> None:
+    broker = FakeBroker(ttl_s=0.06)
+    with _coordinator(broker, ttl_s=0.06).lease(caller="proof", min_vram_mb=1) as handle:
+        handle.report_progress(3, 5, stage="checkpoint 3/5")
+        assert _wait_for(lambda: any(b.get("progress") for b in broker.beats))
+    beat = next(b for b in broker.beats if b.get("progress"))
+    assert beat["progress"] == pytest.approx(0.6) and beat["stage"] == "checkpoint 3/5"
+
+
+def test_report_progress_takes_a_fraction_and_clamps() -> None:
+    handle = gpu.GpuLease()
+    handle.report_progress(0.25)
+    assert handle.progress == 0.25 and handle.stage is None
+    handle.report_progress(7, 5, stage="x" * 300)
+    assert handle.progress == 1.0 and handle.stage == "x" * 200
 
 
 def test_heartbeat_reattaches_a_forgotten_lease() -> None:

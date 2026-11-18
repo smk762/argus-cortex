@@ -75,7 +75,7 @@ def test_target_halves() -> None:
 
 def test_lease_request_defaults_leave_priority_to_the_manifest() -> None:
     req = LeaseRequest(tenant="argus-lens")
-    assert req.lease_version == "1.0"
+    assert req.lease_version == "1.1"
     assert req.priority is None and req.preemptible is None
     assert req.target == "in-process" and req.kind == "default"
 
