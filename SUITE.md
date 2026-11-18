@@ -37,7 +37,7 @@ GitHub: `smk762/<repo>`. Ports are each service's default.
 | **argus-assay** | UI | 3108 | Review UI for mint. The moderator (token) approves or rejects every card; the owner signs for theirs (EIP-4361 via the wallet) and can change its text and style with a live preview, which both then review again. Templates, frames and bio templates are approved in its catalogue, with sample runs. New drafts render through darkroom on a reviewed checkpoint and LoRAs, or come from mint's pre-rendered portrait library with no GPU, shown as a checkpoint comparison grid. The catalogue shows mint's darkroom check for a template, and sampling per checkpoint. Each draft shows the mint version that made it (`made_with`). `/docs` renders mint's topic docs at the pinned commit, with help links from the review controls. A mock serves the recorded demo fixture (`make mock`), and a static build of it is the hosted demo (no mint, wallet or GPU). Pins mint's `dev` commit (`web/schema/pins.json`, now `aba0d2f`, v0.2.2): wire types, imported docs and the recorded fixture move together; `make check` fails if they disagree, and a daily job flags mint `dev` drift. Built from source by its compose, no image. |
 | **argus-handbook** | docs (static) | n/a | The suite's public docs at docs.dragonhound.dev: setup of the external services (ComfyUI, Ollama, NudeNet, SingGuard, models, GPU host), the moderation stack across packages, a what-to-run matrix per UI, and each package's README and `docs/` imported at its `dev` HEAD behind an opsec gate. Static export, deployed from CI. The private `argus-docs` repo is ai-code-auditor's DeepWiki export bundle, which the handbook will build in under `/wiki/`. |
 | **argus-halo** | infra | n/a | Terraform for the public demo (`argus.dragonhound.dev`): read-only replay services plus a private data host. |
-| **argus-ci** | infra | n/a | Reusable GitHub Actions workflows, pinned `@v1`: `python-ci.yml` (uv, ruff, pytest matrix, build), `suite-check.yml` (CLAUDE.md suite block + SUITE.md row), `docs-check.yml` (generated Typer `docs/cli.md` must match the CLI; published docs scanned for private IPs, home/server paths, emails and a private denylist). Not release: PyPI trusted publishing can't run in a reusable workflow, so `release.yml` comes from argus-pkg-template. |
+| **argus-ci** | infra | n/a | Reusable GitHub Actions workflows, pinned `@v1`: `python-ci.yml` (uv, ruff, pytest matrix, build), `suite-check.yml` (CLAUDE.md suite block + SUITE.md row), `docs-check.yml` (generated Typer `docs/cli.md` must match the CLI; published docs scanned for private IPs, home/server paths, emails and a private denylist), `suite-rules.yml` (the suite lint catalogue with a shrinking per-repo baseline, and an opt-in allowlist of the prompts tests send). Not release: PyPI trusted publishing can't run in a reusable workflow, so `release.yml` comes from argus-pkg-template. |
 | **argus-pkg-template** | infra | n/a | Copier template for new Argus Python packages; `copier update` pulls tooling changes. |
 
 **How they fit.** The LoRA pipeline is `quarry → curator → lens → forge → (trainer) → proof → atlas`; curator, lens,
@@ -92,16 +92,17 @@ Studio has a page for lens, curator, quarry, forge, proof, atlas and darkroom, a
 
 ## Shared rules
 
-An **UNENFORCED** rule has no suite-level check yet (argus-ci#19).
+Suite-level checks are argus-ci's `suite-rules.yml` rules (`@v1`, in every repo that runs the job). A rule that can't be a
+lint rule says which tests hold it instead (argus-ci#19).
 
 | Rule | Enforced by |
 |---|---|
-| Shared code lives in cortex: import it, don't copy it. A cortex change ripples into every stage on its next bump. | **UNENFORCED** |
-| Provenance first. Anything the suite serves or trains on carries its source and licence; unlicensed input is refused. | Per repo (quarry, curator, mask); no suite check |
-| Optional heavy dependencies are lazy imports behind extras. | In cortex only (`test_rules::test_top_level_import_loads_no_optional_extra`); **UNENFORCED** suite-wide |
-| A missing service config fails open to a no-op, never a crash. | In cortex only (the `open_*_store` tests); **UNENFORCED** suite-wide |
-| Talk across repos over HTTP or a versioned wire schema, never by reading another repo's files. | **UNENFORCED** |
-| Never import NudeNet (AGPL-3.0); call a server over HTTP. | In cortex only (ruff `TID251`); **UNENFORCED** suite-wide |
+| Shared code lives in cortex: import it, don't copy it. A cortex change ripples into every stage on its next bump. | argus-ci suite rule `cortex-copy` (convention): no local `safe_join`, `safe_name`, `env_flag`, `WriteGuard` or `DEFAULT_EXPOSED_LABELS` |
+| Provenance first. Anything the suite serves or trains on carries its source and licence; unlicensed input is refused. | Per repo (quarry, curator, mask). Not a lint rule: what counts as provenance is per repo (argus-ci#19) |
+| Optional heavy dependencies are lazy imports behind extras. | In cortex only (`test_rules::test_top_level_import_loads_no_optional_extra`); **UNENFORCED** suite-wide. Not a lint rule (it needs the repo's extras); the check is a per-repo base-deps import test (argus-ci#19) |
+| A missing service config fails open to a no-op, never a crash. | In cortex only (the `open_*_store` tests); **UNENFORCED** suite-wide. Not a lint rule: the same early return is right for a cache and wrong for a gate, so it's per-repo tests (argus-ci#19) |
+| Talk across repos over HTTP or a versioned wire schema, never by reading another repo's files. | argus-ci suite rule `sibling-checkout-read` (convention): no path into a sibling checkout (`../argus-x`, `/home/<user>/argus-x`, `.parent / "argus-x"`) |
+| Never import NudeNet (AGPL-3.0); call a server over HTTP. | argus-ci suite rule `agpl-import` (nudenet and ultralytics, `importlib` included); cortex also bans it with ruff `TID251` |
 
 ## Local checkouts
 
