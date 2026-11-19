@@ -130,7 +130,7 @@ def test_dtd_is_refused_in_any_encoding(encoding: str) -> None:
     else:
         evil = ("\ufeff" + evil).encode(encoding)  # a BOM and no declaration: expat reads the byte order
     assert b"<!DOCTYPE" not in evil
-    with pytest.raises(XmpError, match="DTD"):
+    with pytest.raises(XmpError, match="^XMP sidecar contains a DTD"):  # not reworded as an encoding error
         parse_xmp(evil)
     with pytest.raises(XmpError, match="DTD"):
         merge_xmp(evil, XmpData(keywords=["cat"]))

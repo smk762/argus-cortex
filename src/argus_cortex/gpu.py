@@ -124,9 +124,10 @@ class GpuLease:
         """Record how far the work has got: *done* of *total* steps, or *done* as a fraction (0-1) without *total*.
 
         *stage* says what it is doing now (``"checkpoint 3/5"``), up to 200 characters. The broker sees the latest
-        values at the next heartbeat, so report as often as is convenient.
+        values at the next heartbeat, so report as often as is convenient. A *total* of zero or less (nothing counted
+        yet) reports 0, not *done* read as a fraction.
         """
-        fraction = done / total if total else done
+        fraction = done if total is None else (done / total if total > 0 else 0.0)
         self.progress = min(1.0, max(0.0, float(fraction)))
         if stage is not None:
             self.stage = stage[:200]

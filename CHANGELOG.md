@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `store`: `ensure_schema()` runs its DDL in one transaction behind `pg_advisory_xact_lock`. Inside
   `transaction()` the lock is no longer released before the DDL commits, and a failed statement no longer
   hides its error behind "current transaction is aborted" or leaves the lock on a pooled connection.
+- `limits.open_image`: a format name Pillow has no reader for (`"JPG"`) raises `ValueError` up front instead of a
+  `KeyError` from inside Pillow.
 - `xmp`: a DTD or entity declaration is refused in any encoding (a UTF-16 sidecar slipped past the byte scan),
   and a non-finite `stDim` width or height drops the regions instead of raising `OverflowError`.
 - `test_schema_compat` also flags a committed schema file removed or renamed since the tag, a `*_version`

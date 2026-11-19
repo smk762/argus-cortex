@@ -152,6 +152,9 @@ def open_image(
     allowed = [f.upper() for f in (formats or DEFAULT_FORMATS)]
     if refused := _REFUSED_FORMATS.intersection(allowed):
         raise ValueError(f"open_image never opens {', '.join(sorted(refused))} (untrusted bytes reach Ghostscript)")
+    Image.init()
+    if unknown := [f for f in allowed if f not in Image.OPEN]:  # Pillow raises KeyError on these, mid-open
+        raise ValueError(f"open_image: Pillow has no reader for {', '.join(unknown)}")
     if max_bytes is not None and len(data) > max_bytes:
         raise TooLarge("image", max_bytes)
     try:

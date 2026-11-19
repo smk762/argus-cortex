@@ -186,6 +186,12 @@ def test_eps_is_never_opened(monkeypatch) -> None:
             open_image(eps, formats=formats)
 
 
+def test_an_unknown_format_name_is_a_caller_error() -> None:
+    """Pillow raises KeyError mid-open on a name it has no reader for; that is the caller's mistake, said up front."""
+    with pytest.raises(ValueError, match="no reader for JPG"):
+        open_image(png(4, 4), formats=("JPG", "PNG"))
+
+
 def test_formats_bytes_and_garbage() -> None:
     with pytest.raises(BadInput, match="JPEG"):
         open_image(png(4, 4), formats=("JPEG",))

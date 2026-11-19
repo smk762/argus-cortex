@@ -216,6 +216,8 @@ def _refuse_dtd(raw: bytes) -> None:
         parser.Parse(raw, True)
     except expat.ExpatError:
         pass  # malformed: ET.fromstring reports it in _parse
+    except XmpError:  # refuse() above: an XmpError is a ValueError, so it must not reach the encoding branch
+        raise
     except ValueError as exc:  # a declared encoding expat can't read ("multi-byte encodings are not supported")
         raise XmpError(f"unreadable XMP sidecar encoding: {exc}") from exc
 

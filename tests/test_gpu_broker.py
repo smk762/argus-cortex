@@ -386,6 +386,22 @@ def test_report_progress_takes_a_fraction_and_clamps() -> None:
     assert handle.progress == 1.0 and handle.stage == "x" * 200
 
 
+def test_report_progress_with_no_total_yet_is_zero() -> None:
+    handle = gpu.GpuLease()
+    handle.report_progress(3, 0)
+    assert handle.progress == 0.0
+
+
+def test_progress_the_wire_refuses_does_not_stop_the_heartbeat() -> None:
+    """``handle.progress = 50`` (a percentage) fails validation: the beat still goes, without it."""
+    broker = FakeBroker(ttl_s=0.06)
+    with _coordinator(broker, ttl_s=0.06).lease(caller="x", min_vram_mb=1) as handle:
+        handle.progress = 50.0
+        handle.report_peak_vram(700)
+        assert _wait_for(lambda: len(broker.beats) >= 1)
+    assert broker.beats[0]["peak_vram_mb"] == 700 and broker.beats[0]["progress"] is None
+
+
 def test_heartbeat_reattaches_a_forgotten_lease() -> None:
     broker = FakeBroker(ttl_s=0.06, forget_on_beat=True)
     with _coordinator(broker, ttl_s=0.06).lease(caller="x", min_vram_mb=1) as handle:
