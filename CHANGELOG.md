@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-19
+
 ### Added
 - **Lease progress.** `GpuLease.report_progress(done, total=None, *, stage=None)` records how far the work has got
   (*done* of *total*, or a 0-1 fraction) and what it is doing now; `BrokerCoordinator` sends both with the next
@@ -420,7 +422,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/smk762/argus-cortex/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/smk762/argus-cortex/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/smk762/argus-cortex/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/smk762/argus-cortex/compare/v0.6.0...v0.7.0
