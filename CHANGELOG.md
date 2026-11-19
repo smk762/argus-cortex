@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `SUITE.md`: argus-retina 0.1.1's row says an image over `ARGUS_RETINA_MAX_PIXELS` (default 2**27) or one that
+  won't decode is a `422`.
+
 ## [0.10.0] - 2026-11-19
 
 ### Added
