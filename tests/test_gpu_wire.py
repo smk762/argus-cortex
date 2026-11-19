@@ -75,7 +75,7 @@ def test_target_halves() -> None:
 
 def test_lease_request_defaults_leave_priority_to_the_manifest() -> None:
     req = LeaseRequest(tenant="argus-lens")
-    assert req.lease_version == "1.0"
+    assert req.lease_version == "1.1"
     assert req.priority is None and req.preemptible is None
     assert req.target == "in-process" and req.kind == "default"
 
@@ -195,6 +195,32 @@ def test_resident_routes_are_absolute_paths(field: str, path: str) -> None:
     resident = {"name": "svc", "adapter": "argus-http", field: path}
     with pytest.raises(ValidationError):
         TenantManifest.model_validate({"tenant": "t", "residents": [resident]})
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "file:///etc/passwd",
+        "ftp://morpheus/",
+        "morpheus:8188",  # no scheme: urlsplit reads "morpheus" as one
+        "//morpheus:8188",
+        "http://",
+        "http://admin:pw@morpheus:8011",
+        "http://morpheus:8011/?next=http://evil",
+        "http://morpheus:8011#frag",
+        "http://morpheus:99999",
+    ],
+)
+def test_resident_base_url_is_an_http_url_to_a_host(url: str) -> None:
+    resident = {"name": "svc", "adapter": "argus-http", "base_url": url, "admin_auth": True}
+    with pytest.raises(ValidationError, match="base_url"):
+        TenantManifest.model_validate({"tenant": "t", "residents": [resident]})
+
+
+@pytest.mark.parametrize("url", ["http://morpheus:8188", "https://gpu.lan/comfy", "http://10.0.0.5:8011/"])
+def test_resident_base_url_accepts_service_urls(url: str) -> None:
+    resident = {"name": "svc", "adapter": "argus-http", "base_url": url}
+    assert TenantManifest.model_validate({"tenant": "t", "residents": [resident]}).residents[0].base_url == url
 
 
 def test_resident_refuses_informational_fields() -> None:

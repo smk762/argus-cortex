@@ -101,6 +101,22 @@ def _gave_up(exc: BaseException) -> str:
     return f"gave up while queued: {type(exc).__name__}: {exc}"[:2000]
 
 
+def _heartbeat_body(handle: GpuLease) -> dict[str, Any]:
+    """The heartbeat for *handle*. Progress is display only: a value the wire refuses (``handle.progress = 50``)
+    is dropped rather than failing the beat, which would let the broker expire a lease whose work is running."""
+    try:
+        beat = Heartbeat(peak_vram_mb=handle.peak_vram_mb, progress=handle.progress, stage=handle.stage)
+    except ValueError:  # pydantic's ValidationError
+        _log.debug(
+            "GPU lease %s: progress %r / stage %r not sendable; beating without them",
+            handle.lease_id,
+            handle.progress,
+            handle.stage,
+        )
+        beat = Heartbeat(peak_vram_mb=handle.peak_vram_mb)
+    return beat.model_dump(mode="json")
+
+
 class BrokerCoordinator:
     """Leases from the GPU broker at *url*, falling back to *fallback* when it cannot be reached.
 
@@ -377,7 +393,7 @@ class BrokerCoordinator:
         return self._granted_or_raise(status)
 
     def _beat(self, client: Any, req: LeaseRequest, handle: GpuLease) -> HeartbeatReply | None:
-        body = Heartbeat(peak_vram_mb=handle.peak_vram_mb).model_dump(mode="json")
+        body = _heartbeat_body(handle)
         reply = self._parse(self._send(client.post, f"/leases/{handle.lease_id}/heartbeat", json=body), HeartbeatReply)
         if reply is None:  # the broker forgot the lease (restart): re-attach, the work is already running
             status = self._post_lease(client, req.model_copy(update={"resume": handle.lease_id, "wait_s": 0.0}))
@@ -397,6 +413,8 @@ class BrokerCoordinator:
                     interval = self._after_beat(self._beat(client, req, handle), handle, lost)
                 except (_Unreachable, BrokerError) as exc:
                     _log.debug("GPU broker heartbeat for %s failed: %s", handle.lease_id, exc)
+                except Exception:  # noqa: BLE001 - one odd reply must not end the heartbeat for the rest of the lease
+                    _log.warning("GPU broker heartbeat for %s failed", handle.lease_id, exc_info=True)
 
     def _release(
         self, client: Any, lease_id: str | None, outcome: ReleaseOutcome, peak_vram_mb: int | None, detail: str | None
@@ -467,9 +485,13 @@ class BrokerCoordinator:
                 raise
             finally:
                 beat.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await beat
-                await self._arelease(client, handle.lease_id, outcome, handle.peak_vram_mb, detail)
+                try:
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await beat
+                except Exception:  # noqa: BLE001 - a dead heartbeat must not skip the release or replace the result
+                    _log.warning("GPU broker heartbeat for %s ended with an error", handle.lease_id, exc_info=True)
+                finally:
+                    await self._arelease(client, handle.lease_id, outcome, handle.peak_vram_mb, detail)
 
     async def _asend(self, call: Any, *args: Any, **kwargs: Any) -> Any:
         try:
@@ -533,7 +555,7 @@ class BrokerCoordinator:
         return self._granted_or_raise(status)
 
     async def _abeat(self, client: Any, req: LeaseRequest, handle: GpuLease) -> HeartbeatReply | None:
-        body = Heartbeat(peak_vram_mb=handle.peak_vram_mb).model_dump(mode="json")
+        body = _heartbeat_body(handle)
         response = await self._asend(
             client.post, f"/leases/{handle.lease_id}/heartbeat", json=body, timeout=self.request_timeout_s
         )
@@ -555,6 +577,8 @@ class BrokerCoordinator:
                 interval = self._after_beat(await self._abeat(client, req, handle), handle, lost)
             except (_Unreachable, BrokerError) as exc:
                 _log.debug("GPU broker heartbeat for %s failed: %s", handle.lease_id, exc)
+            except Exception:  # noqa: BLE001 - one odd reply must not end the heartbeat for the rest of the lease
+                _log.warning("GPU broker heartbeat for %s failed", handle.lease_id, exc_info=True)
 
     async def _arelease(
         self, client: Any, lease_id: str | None, outcome: ReleaseOutcome, peak_vram_mb: int | None, detail: str | None

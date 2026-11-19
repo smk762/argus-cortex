@@ -10,8 +10,10 @@ Read request bodies, uploads, base64 payloads and images through these instead o
   reads everything).
 * :func:`decode_base64`: checks the *encoded* length before decoding, then the decoded size.
   A ``data:...;base64,`` prefix is accepted.
-* :func:`open_image`: checks the pixel count from the header before anything is decoded, and can
-  restrict formats. Pillow's own ``MAX_IMAGE_PIXELS`` is a warning threshold, not a limit.
+* :func:`open_image`: checks the pixel count from the header before anything is decoded, and only
+  tries the formats it is given (:data:`DEFAULT_FORMATS`, JPEG/PNG/WEBP, unless the caller opts in to
+  more), never EPS, which Pillow hands to Ghostscript. Pillow's own ``MAX_IMAGE_PIXELS`` is a warning
+  threshold, not a limit.
 
 Over a cap raises :class:`TooLarge` (``413`` at a server's edge); malformed input raises
 :class:`BadInput` (``400``). Both are ``ValueError``. Design: ``docs/paved-roads.md``.
@@ -29,9 +31,21 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:  # pragma: no cover
     from PIL import Image
 
-__all__ = ["CHUNK", "BadInput", "TooLarge", "decode_base64", "open_image", "read_body", "read_upload"]
+__all__ = [
+    "CHUNK",
+    "DEFAULT_FORMATS",
+    "BadInput",
+    "TooLarge",
+    "decode_base64",
+    "open_image",
+    "read_body",
+    "read_upload",
+]
 
 CHUNK = 1024 * 1024
+DEFAULT_FORMATS: tuple[str, ...] = ("JPEG", "PNG", "WEBP")
+"""The Pillow formats :func:`open_image` tries when the caller names none."""
+_REFUSED_FORMATS = frozenset({"EPS"})  # Pillow decodes EPS/PS by running Ghostscript on the bytes
 
 
 class TooLarge(ValueError):
@@ -123,7 +137,11 @@ def open_image(
     data: bytes, *, max_pixels: int = 40_000_000, max_bytes: int | None = None, formats: tuple[str, ...] | None = None
 ) -> Image.Image:
     """Open *data* as an image without decoding it, after checking its pixel count (from the
-    header) and, if given, its byte size and format (``("JPEG", "PNG", "WEBP")``).
+    header) and, if given, its byte size.
+
+    Only the Pillow plugins in *formats* see the bytes: :data:`DEFAULT_FORMATS` (JPEG, PNG, WEBP)
+    when it is ``None`` or empty. Pass more (``("JPEG", "PNG", "WEBP", "GIF")``) to opt in to them. EPS is
+    refused even when asked for, since Pillow decodes it with Ghostscript.
 
     Returns the lazily-opened image; decoding happens on ``.load()`` / use, after the checks."""
     try:
@@ -131,14 +149,20 @@ def open_image(
     except ImportError as exc:  # pragma: no cover
         raise ImportError("open_image requires Pillow: pip install argus-cortex[images]") from exc
 
+    allowed = [f.upper() for f in (formats or DEFAULT_FORMATS)]
+    if refused := _REFUSED_FORMATS.intersection(allowed):
+        raise ValueError(f"open_image never opens {', '.join(sorted(refused))} (untrusted bytes reach Ghostscript)")
+    Image.init()
+    if unknown := [f for f in allowed if f not in Image.OPEN]:  # Pillow raises KeyError on these, mid-open
+        raise ValueError(f"open_image: Pillow has no reader for {', '.join(unknown)}")
     if max_bytes is not None and len(data) > max_bytes:
         raise TooLarge("image", max_bytes)
     try:
-        img = Image.open(io.BytesIO(data), formats=list(formats) if formats else None)
+        img = Image.open(io.BytesIO(data), formats=allowed)
     except Image.DecompressionBombError as exc:  # over 2x Pillow's MAX_IMAGE_PIXELS: too large, not malformed
         raise TooLarge("image", max_pixels, "pixels") from exc
     except (UnidentifiedImageError, OSError, ValueError, SyntaxError) as exc:
-        raise BadInput("not an image" + (f" in {', '.join(formats)}" if formats else "")) from exc
+        raise BadInput(f"not an image in {', '.join(allowed)}") from exc
     w, h = img.size
     if w <= 0 or h <= 0:
         raise BadInput("image has no pixels")

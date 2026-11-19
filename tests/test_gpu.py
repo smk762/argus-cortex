@@ -256,3 +256,49 @@ def test_coordinator_from_env(monkeypatch: pytest.MonkeyPatch, caplog: pytest.Lo
     with caplog.at_level("WARNING"):
         assert gpu.coordinator_from_env().timeout_s == gpu.DEFAULT_TIMEOUT_S
     assert "ARGUS_GPU_LEASE_TIMEOUT_S" in caplog.text
+
+
+def _lock_is_free(path: str) -> bool:
+    import fcntl
+
+    fd = os.open(path, os.O_RDWR)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return False
+    else:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return True
+    finally:
+        os.close(fd)
+
+
+def test_a_lease_won_after_its_loop_closed_is_given_back(tmp_path: Path) -> None:
+    """A waiter whose event loop is gone when its thread finally gets the lock must release it, not strand it.
+
+    ``asyncio.run(asyncio.wait_for(...))`` from sync code: the wait times out, the loop closes, and the
+    lease thread wins the lock afterwards with no loop to hand it to.
+    """
+    import asyncio
+    import gc
+    import time
+
+    lock = str(tmp_path / "locks" / "gpu.lock")
+    holder = _lease(tmp_path).lease(caller="holder", min_vram_mb=0)
+    holder.__enter__()
+
+    async def wait() -> None:
+        async with _lease(tmp_path).alease(caller="waiter", min_vram_mb=0):
+            pytest.fail("the holder still has the lock")
+
+    gc.disable()  # the leak must not depend on a garbage collection happening to close the generator
+    try:
+        with pytest.raises(TimeoutError):
+            asyncio.run(asyncio.wait_for(wait(), 0.1))
+        holder.__exit__(None, None, None)
+        deadline = time.monotonic() + 3
+        while not _lock_is_free(lock) and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert _lock_is_free(lock)
+    finally:
+        gc.enable()

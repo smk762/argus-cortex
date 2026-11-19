@@ -26,6 +26,7 @@ import threading
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Literal
+from xml.parsers import expat
 
 from pydantic import BaseModel, Field
 
@@ -196,11 +197,35 @@ def _properties(data: XmpData) -> list[tuple[str, ET.Element | None]]:
     return out
 
 
+def _refuse_dtd(raw: bytes) -> None:
+    """Raise :class:`XmpError` if *raw* declares a DTD or an entity, in whatever encoding it is in.
+
+    A byte scan for ``<!DOCTYPE`` misses a UTF-16 document, whose ASCII is interleaved with NULs, so
+    expat itself reports the declarations here, after decoding, before ElementTree ever builds a tree.
+    """
+
+    def refuse(*_: object) -> None:
+        raise XmpError("XMP sidecar contains a DTD/entity declaration; refusing to parse it")
+
+    if b"<!DOCTYPE" in raw or b"<!ENTITY" in raw:  # the common case, without a second parse
+        refuse()
+    parser = expat.ParserCreate()
+    parser.StartDoctypeDeclHandler = refuse
+    parser.EntityDeclHandler = refuse
+    try:
+        parser.Parse(raw, True)
+    except expat.ExpatError:
+        pass  # malformed: ET.fromstring reports it in _parse
+    except XmpError:  # refuse() above: an XmpError is a ValueError, so it must not reach the encoding branch
+        raise
+    except ValueError as exc:  # a declared encoding expat can't read ("multi-byte encodings are not supported")
+        raise XmpError(f"unreadable XMP sidecar encoding: {exc}") from exc
+
+
 def _parse(raw: bytes) -> ET.Element:
     """Parse a sidecar into its ``x:xmpmeta`` root (wrapping a bare ``rdf:RDF``)."""
     # XMP never carries a DTD; refusing one outright rules out entity-expansion tricks.
-    if b"<!DOCTYPE" in raw or b"<!ENTITY" in raw:
-        raise XmpError("XMP sidecar contains a DTD/entity declaration; refusing to parse it")
+    _refuse_dtd(raw)
     try:
         root = ET.fromstring(raw)
     except ET.ParseError as exc:
@@ -363,7 +388,7 @@ def _read_regions(desc: ET.Element) -> XmpRegions | None:
             height=int(float(field(dims, "stDim:h") or 0)),
             regions=regions,
         )
-    except ValueError:
+    except (ValueError, OverflowError):  # int() of "inf" / "1e400" overflows rather than failing validation
         return None
 
 

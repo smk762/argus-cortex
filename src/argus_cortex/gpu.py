@@ -99,6 +99,8 @@ class GpuLease:
       safe point (between tiles, seeds, batches). Nothing is killed if you don't.
     * :meth:`report_peak_vram`: tell the broker the peak you saw, so it learns the
       real footprint.
+    * :meth:`report_progress`: how far the work has got, for the broker's dashboard.
+      Sent with the next heartbeat; the broker shows it and decides nothing on it.
     """
 
     via: Literal["local", "broker", "fallback"] = "local"
@@ -107,6 +109,8 @@ class GpuLease:
     device: int | None = None
     base_url: str | None = None
     peak_vram_mb: int | None = None
+    progress: float | None = None
+    stage: str | None = None
     _yield: threading.Event = field(default_factory=threading.Event, repr=False, compare=False)
 
     def should_yield(self) -> bool:
@@ -115,6 +119,18 @@ class GpuLease:
     def report_peak_vram(self, mb: int) -> None:
         if mb >= 0:
             self.peak_vram_mb = max(self.peak_vram_mb or 0, int(mb))
+
+    def report_progress(self, done: float, total: float | None = None, *, stage: str | None = None) -> None:
+        """Record how far the work has got: *done* of *total* steps, or *done* as a fraction (0-1) without *total*.
+
+        *stage* says what it is doing now (``"checkpoint 3/5"``), up to 200 characters. The broker sees the latest
+        values at the next heartbeat, so report as often as is convenient. A *total* of zero or less (nothing counted
+        yet) reports 0, not *done* read as a fraction.
+        """
+        fraction = done if total is None else (done / total if total > 0 else 0.0)
+        self.progress = min(1.0, max(0.0, float(fraction)))
+        if stage is not None:
+            self.stage = stage[:200]
 
 
 @runtime_checkable
@@ -154,19 +170,35 @@ class GpuCoordinator(Protocol):
         ...
 
 
-def _in_own_thread(fn: Callable[..., object], *args: object) -> asyncio.Future:
+def _in_own_thread(
+    fn: Callable[..., object], *args: object, on_orphan: Callable[[object], object] | None = None
+) -> asyncio.Future:
     """Run blocking *fn* on a dedicated daemon thread and await it from the loop.
 
     Not ``asyncio.to_thread``: a lease can block for its whole timeout, and
     waiters parked on the loop's shared default executor would starve the very
     ``__exit__`` call the holder needs to release the lock (and every other
     ``to_thread`` user in the process).
+
+    *on_orphan* gets a successful result nobody can receive (the future was
+    cancelled, or the loop closed while *fn* ran), so a lease won too late is
+    given back rather than left to garbage collection. It runs off the loop.
     """
     loop = asyncio.get_running_loop()
     fut: asyncio.Future = loop.create_future()
 
+    def _orphan(result: object) -> None:
+        if on_orphan is None:
+            return
+        try:
+            on_orphan(result)
+        except Exception:  # noqa: BLE001 - nobody is left to raise to
+            _log.warning("releasing an orphaned GPU lease failed", exc_info=True)
+
     def _settle(result: object, exc: BaseException | None) -> None:
         if fut.cancelled():
+            if exc is None and on_orphan is not None:
+                threading.Thread(target=_orphan, args=(result,), daemon=True, name="gpu-lease-orphan").start()
             return
         if exc is not None:
             fut.set_exception(exc)
@@ -178,8 +210,11 @@ def _in_own_thread(fn: Callable[..., object], *args: object) -> asyncio.Future:
             result, exc = fn(*args), None
         except BaseException as caught:  # noqa: BLE001 - handed to the awaiting task
             result, exc = None, caught
-        with contextlib.suppress(RuntimeError):  # the loop closed while we waited
+        try:
             loop.call_soon_threadsafe(_settle, result, exc)
+        except RuntimeError:  # the loop closed while we waited: nobody will take the result
+            if exc is None:
+                _orphan(result)
 
     threading.Thread(target=_target, daemon=True, name="gpu-lease").start()
     return fut
@@ -191,9 +226,11 @@ async def _sync_lease_in_thread(cm: contextlib.AbstractContextManager[GpuLease])
 
     If the task is cancelled while the thread is still waiting for the lease, the
     thread is left to finish and the lease it gets is released at once, so a
-    cancelled caller never strands the lock.
+    cancelled caller never strands the lock. That holds when the loop itself has
+    closed by then too (``asyncio.run`` around a timed-out wait): the thread
+    releases it.
     """
-    entering = _in_own_thread(cm.__enter__)
+    entering = _in_own_thread(cm.__enter__, on_orphan=lambda _handle: cm.__exit__(None, None, None))
     try:
         handle = await asyncio.shield(entering)
     except asyncio.CancelledError:

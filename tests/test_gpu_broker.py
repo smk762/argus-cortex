@@ -130,7 +130,7 @@ def test_granted_lease_reports_placement_and_releases_ok() -> None:
     assert request["tenant"] == "argus-darkroom" and request["target"] == "ollama:qwen3:8b"
     assert request["vram_mb"] == 6000 and request["kind"] == "expand" and request["priority"] is None
     assert broker.releases[handle.lease_id] == {
-        "lease_version": "1.0",
+        "lease_version": "1.1",
         "outcome": "ok",
         "peak_vram_mb": 5400,
         "detail": None,
@@ -369,6 +369,39 @@ def test_heartbeat_carries_peak_and_sets_should_yield() -> None:
     assert broker.beats[0]["peak_vram_mb"] == 700
 
 
+def test_heartbeat_carries_progress_and_stage() -> None:
+    broker = FakeBroker(ttl_s=0.06)
+    with _coordinator(broker, ttl_s=0.06).lease(caller="proof", min_vram_mb=1) as handle:
+        handle.report_progress(3, 5, stage="checkpoint 3/5")
+        assert _wait_for(lambda: any(b.get("progress") for b in broker.beats))
+    beat = next(b for b in broker.beats if b.get("progress"))
+    assert beat["progress"] == pytest.approx(0.6) and beat["stage"] == "checkpoint 3/5"
+
+
+def test_report_progress_takes_a_fraction_and_clamps() -> None:
+    handle = gpu.GpuLease()
+    handle.report_progress(0.25)
+    assert handle.progress == 0.25 and handle.stage is None
+    handle.report_progress(7, 5, stage="x" * 300)
+    assert handle.progress == 1.0 and handle.stage == "x" * 200
+
+
+def test_report_progress_with_no_total_yet_is_zero() -> None:
+    handle = gpu.GpuLease()
+    handle.report_progress(3, 0)
+    assert handle.progress == 0.0
+
+
+def test_progress_the_wire_refuses_does_not_stop_the_heartbeat() -> None:
+    """``handle.progress = 50`` (a percentage) fails validation: the beat still goes, without it."""
+    broker = FakeBroker(ttl_s=0.06)
+    with _coordinator(broker, ttl_s=0.06).lease(caller="x", min_vram_mb=1) as handle:
+        handle.progress = 50.0
+        handle.report_peak_vram(700)
+        assert _wait_for(lambda: len(broker.beats) >= 1)
+    assert broker.beats[0]["peak_vram_mb"] == 700 and broker.beats[0]["progress"] is None
+
+
 def test_heartbeat_reattaches_a_forgotten_lease() -> None:
     broker = FakeBroker(ttl_s=0.06, forget_on_beat=True)
     with _coordinator(broker, ttl_s=0.06).lease(caller="x", min_vram_mb=1) as handle:
@@ -427,6 +460,41 @@ async def test_async_heartbeat_sets_should_yield() -> None:
                 break
             await asyncio.sleep(0.005)
         assert handle.should_yield()
+
+
+async def test_async_heartbeat_error_neither_skips_the_release_nor_replaces_the_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An error the heartbeat doesn't expect (not a transport error) is logged; beats go on and the lease is released."""
+    broker = FakeBroker(ttl_s=0.03)
+    coordinator = _coordinator(broker, ttl_s=0.03)
+    beats: list[int] = []
+
+    async def garbled(*_: Any) -> None:
+        beats.append(1)
+        raise httpx.DecodingError("garbled heartbeat reply")
+
+    monkeypatch.setattr(coordinator, "_abeat", garbled)
+    async with coordinator.alease(caller="x", min_vram_mb=1) as handle:
+        await asyncio.sleep(0.1)
+    assert len(beats) >= 2  # the first error did not end the heartbeat
+    assert broker.releases[handle.lease_id]["outcome"] == "ok"
+
+
+def test_sync_heartbeat_error_does_not_end_the_heartbeat(monkeypatch: pytest.MonkeyPatch) -> None:
+    broker = FakeBroker(ttl_s=0.03)
+    coordinator = _coordinator(broker, ttl_s=0.03)
+    beats: list[int] = []
+
+    def garbled(*_: Any) -> None:
+        beats.append(1)
+        raise httpx.DecodingError("garbled heartbeat reply")
+
+    monkeypatch.setattr(coordinator, "_beat", garbled)
+    with coordinator.lease(caller="x", min_vram_mb=1) as handle:
+        time.sleep(0.1)
+    assert len(beats) >= 2
+    assert broker.releases[handle.lease_id]["outcome"] == "ok"
 
 
 async def test_async_oom_outcome() -> None:
