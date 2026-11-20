@@ -29,15 +29,19 @@ the letterbox padding on non-square images (scores are unaffected). It has no
 
 from __future__ import annotations
 
-import math
-import re
-import uuid
 from typing import Literal
-from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, Field
 
-from argus_cortex.moderation._http import CheckFailed, get_json, post_json, service_url
+from argus_cortex.moderation._http import (
+    CheckFailed,
+    get_json,
+    is_number,
+    multipart_image,
+    post_json,
+    service_url,
+    sibling_url,
+)
 
 # NudeNet's 18 detector classes, verbatim (they are its API vocabulary).
 NudeNetLabel = Literal[
@@ -117,12 +121,6 @@ def exposed_score(labels: dict[str, float], exposed: tuple[str, ...] | list[str]
     return max((labels[c] for c in exposed if c in labels), default=0.0)
 
 
-def _is_number(value: object) -> bool:
-    # json.loads accepts bare NaN/Infinity; a NaN score would compare False
-    # against every threshold and pass the image as safe.
-    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
-
-
 def to_result(raw: list) -> NsfwResult:
     """One image's detections as recorded, plus the per-class maxima and exposed score."""
     known = set(NUDENET_LABELS)
@@ -134,11 +132,11 @@ def to_result(raw: list) -> NsfwResult:
         if (
             not isinstance(label, str)
             or label not in known
-            or not _is_number(score)
+            or not is_number(score)
             or score < MIN_REPORTED_SCORE
             or not isinstance(box, list)
             or len(box) != 4
-            or not all(_is_number(v) for v in box)
+            or not all(is_number(v) for v in box)
         ):
             continue  # an unknown class or malformed entry is not evidence either way
         dets.append(NsfwDetection(label=label, score=round(float(score), 4), bbox=[round(float(v), 1) for v in box]))
@@ -149,18 +147,6 @@ def to_result(raw: list) -> NsfwResult:
     return NsfwResult(detections=dets, labels=labels, exposed_score=exposed_score(labels))
 
 
-def _multipart(data: bytes, filename: str) -> tuple[bytes, str]:
-    # The name lands in a header: keep it to characters that cannot break it.
-    filename = re.sub(r"[^A-Za-z0-9._-]", "_", filename)[-100:] or "image"
-    boundary = uuid.uuid4().hex
-    head = (
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="f1"; filename="{filename}"\r\n'
-        "Content-Type: application/octet-stream\r\n\r\n"
-    ).encode()
-    return head + data + f"\r\n--{boundary}--\r\n".encode(), f"multipart/form-data; boundary={boundary}"
-
-
 class NudeNetClient:
     """A NudeNet server at *base_url* (its origin, e.g. ``http://nudenet:8080``).
 
@@ -169,8 +155,7 @@ class NudeNetClient:
 
     def __init__(self, base_url: str, timeout: float = 30.0) -> None:
         self.url = service_url(base_url, "/infer", "NudeNet")
-        parts = urlsplit(self.url)
-        self.health_url = urlunsplit(parts._replace(path=parts.path.removesuffix("/infer") + "/health"))
+        self.health_url = sibling_url(self.url, "/infer", "/health")
         self.timeout = timeout
 
     def info(self) -> NudeNetInfo:
@@ -190,7 +175,7 @@ class NudeNetClient:
 
     def check(self, data: bytes, filename: str = "image") -> NsfwResult:
         """Post one image and parse the answer; raises :class:`NudeNetCheckFailed`."""
-        body, content_type = _multipart(data, filename)
+        body, content_type = multipart_image(data, filename)
         payload = post_json(self.url, body, content_type, self.timeout, "NudeNet", NudeNetCheckFailed)
         prediction = payload.get("prediction") if isinstance(payload, dict) else None
         if not (isinstance(payload, dict) and payload.get("success") is True and isinstance(prediction, list)):

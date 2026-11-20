@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`OcrClient` (argus-retina#5).** `argus_cortex.moderation.OcrClient` reads the text in an image through
+  argus-retina's OCR server (`ghcr.io/smk762/argus-retina-ocr`, PP-OCRv6 small). `read()` gives an `OcrResult`: the
+  lines in reading order, each an `OcrLine` with its `text`, `score` and `bbox`. `transcript()` joins them and
+  `contains(phrase, min_score=0.0)` checks a claimed name or quote across lines. Both sides go through
+  `normalize_text`: NFKC, case-folded, letters and digits only, because OCR runs words together ("afProfessor").
+  Accents are kept. `info()` gives `OcrInfo`, the server's models and score floor from `/health`. A failed read
+  raises `OcrCheckFailed` and never returns an empty result, so a caller can't drop a claim because the server was
+  down. For argus-lens reconcile's text check.
+
 ### Changed
+- The moderation clients share the multipart body, the finite-number check and the `/health` URL through
+  `moderation._http`. Nothing public changes.
+- `SUITE.md`: the read-the-text row points to `OcrClient`.
 - `SUITE.md`: argus-retina 0.1.1's row says an image over `ARGUS_RETINA_MAX_PIXELS` (default 2**27) or one that
   won't decode is a `422`.
 

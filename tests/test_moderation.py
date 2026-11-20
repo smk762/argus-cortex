@@ -1,4 +1,4 @@
-"""Moderation clients against fake NudeNet and SingGuard servers.
+"""Moderation clients against fake NudeNet, SingGuard and OCR servers.
 
 The fakes speak each server's API (shapes taken from live servers), so the
 real urllib path, multipart/JSON encoding and response parsing all run.
@@ -28,9 +28,15 @@ from argus_cortex.moderation import (
     NsfwResult,
     NudeNetCheckFailed,
     NudeNetClient,
+    OcrCheckFailed,
+    OcrClient,
+    OcrInfo,
+    OcrResult,
     SingGuardClient,
     exposed_score,
+    normalize_text,
     nudenet,
+    ocr,
     policy_name,
     rule_letter,
     rule_matches,
@@ -470,3 +476,175 @@ def test_nudenet_info_server_error_is_a_failed_check(nudenet_server, monkeypatch
     monkeypatch.setattr(handler, "do_GET", lambda self: self._send(500))
     with pytest.raises(NudeNetCheckFailed, match="HTTP 500"):
         NudeNetClient(url).info()
+
+
+# ---------------------------------------------------------------------------
+# OCR (argus-retina#5)
+# ---------------------------------------------------------------------------
+
+# Lines as argus-retina's OCR image answers them for the Curie Nobel diploma: words run together.
+_OCR_LINES = {
+    10: [],
+    40: [
+        {"class": "text", "score": 0.98, "box": [211, 285, 286, 32], "text": "KONGLIGA SVENSKA"},
+        {"class": "text", "score": 0.93, "box": [180, 340, 330, 28], "text": "afProfessor"},
+        {"class": "text", "score": 0.91, "box": [190, 380, 300, 30], "text": "enriBequerel"},
+        {"class": "text", "score": 0.55, "box": [200, 420, 120, 20], "text": "N.Y.Public"},
+        {"class": "text", "score": 0.52, "box": [330, 420, 90, 20], "text": "Library"},
+    ],
+}
+
+
+class _Ocr(_Fake):
+    health: dict | None = {
+        "model_state": "cpu",
+        "model": "PP-OCRv6 small (RapidOCR)",
+        "det": "PP-OCRv6_det_small.onnx",
+        "rec": "PP-OCRv6_rec_small.onnx",
+        "min_score": 0.5,
+    }
+
+    def do_GET(self) -> None:
+        type(self).seen.append({"path": self.path, "auth": self.headers["Authorization"]})
+        if self.path.split("?")[0] != "/health" or self.health is None:
+            self._send(404)
+        else:
+            self._send(200, self.health)
+
+    def do_POST(self) -> None:
+        body = self.rfile.read(int(self.headers["Content-Length"]))
+        msg = BytesParser(policy=HTTP).parsebytes(
+            f"Content-Type: {self.headers['Content-Type']}\r\n\r\n".encode() + body
+        )
+        part = next(msg.iter_parts())
+        red = _red(part.get_content())
+        type(self).seen.append({"path": self.path, "field": part.get_param("name", header="content-disposition")})
+        if red == _FAIL:
+            self._send(500)
+        else:
+            self._send(200, {"prediction": [_OCR_LINES.get(red, [])], "success": True})
+
+
+@pytest.fixture
+def ocr_server() -> Iterator[tuple[type[_Fake], str]]:
+    yield from _serve(_Ocr)
+
+
+def test_ocr_read(ocr_server) -> None:
+    fake, url = ocr_server
+    client = OcrClient(url, timeout=5)
+    assert client.url == f"{url}/infer" and client.health_url == f"{url}/health"
+    assert client.read(_png(10)) == OcrResult()
+    diploma = client.read(_png(40), "diploma.jpg")
+    assert [line.text for line in diploma.lines][:3] == ["KONGLIGA SVENSKA", "afProfessor", "enriBequerel"]
+    assert diploma.lines[0].score == 0.98 and diploma.lines[0].bbox == [211, 285, 286, 32]
+    with pytest.raises(OcrCheckFailed, match="HTTP 500"):
+        client.read(_png(_FAIL))
+    assert {s["path"] for s in fake.seen} == {"/infer"} and {s["field"] for s in fake.seen} == {"f1"}
+
+
+def test_ocr_transcript_keeps_reading_order_and_filters_by_score(ocr_server) -> None:
+    _fake, url = ocr_server
+    diploma = OcrClient(url, timeout=5).read(_png(40))
+    assert diploma.transcript().splitlines() == [
+        "KONGLIGA SVENSKA", "afProfessor", "enriBequerel", "N.Y.Public", "Library"
+    ]  # fmt: skip
+    assert diploma.transcript(min_score=0.9) == "KONGLIGA SVENSKA\nafProfessor\nenriBequerel"
+
+
+def test_ocr_contains_compares_without_spaces_case_or_punctuation(ocr_server) -> None:
+    _fake, url = ocr_server
+    diploma = OcrClient(url, timeout=5).read(_png(40))
+    assert diploma.contains("Professor")
+    assert diploma.contains("af professor")  # run together on the page
+    assert diploma.contains("Kongliga Svenska")
+    assert diploma.contains("N.Y. Public Library")  # across two lines, punctuation and spaces aside
+    assert not diploma.contains("Henrik Bohr")  # what a VLM wrote: not on the page
+    assert not diploma.contains("Becquerel")  # the diploma spells it Bequerel; a check reads what is printed
+    assert not diploma.contains("N.Y. Public Library", min_score=0.9)  # those lines were barely read
+    assert not diploma.contains("") and not diploma.contains(" .,")  # nothing to have read
+    assert not OcrResult().contains("anything")
+
+
+def test_normalize_text() -> None:
+    assert normalize_text("  N.Y. Public\tLibrary ") == "nypubliclibrary"
+    assert normalize_text("STRASSE") == normalize_text("Straße")  # casefold, not lower
+    assert normalize_text("ﬁle") == "file"  # NFKC: ligatures and full-width forms
+    assert normalize_text("Espinàs") != normalize_text("Espinas")  # accents are the caller's policy
+
+
+def test_ocr_parsing_ignores_malformed_entries() -> None:
+    good = {"class": "text", "score": 0.8, "box": [1, 2, 3, 4], "text": "Norwegen."}
+    r = ocr.to_result(
+        [
+            good,
+            "not a dict",
+            {**good, "class": "FACE_FEMALE"},  # not a text line
+            {**good, "text": None},
+            {**good, "text": "   "},
+            {**good, "score": float("nan")},
+            {**good, "score": True},
+            {**good, "score": 1.5},
+            {**good, "box": [1, 2, 3]},
+            {**good, "box": [1, 2, 3, float("inf")]},
+            {**good, "text": "Second", "score": 0.61234567},
+        ]
+    )
+    assert [(line.text, line.score) for line in r.lines] == [("Norwegen.", 0.8), ("Second", 0.6123)]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"prediction": [[]], "success": False},
+        {"prediction": [], "success": True},
+        {"prediction": [[], []], "success": True},
+        {"prediction": ["x"], "success": True},
+        {"success": True},
+        [],
+    ],
+)
+def test_ocr_bad_responses_are_failures(monkeypatch: pytest.MonkeyPatch, payload) -> None:
+    monkeypatch.setattr(ocr, "post_json", lambda *a, **k: payload)
+    with pytest.raises(OcrCheckFailed):
+        OcrClient("http://ocr:8133").read(b"x")
+
+
+def test_ocr_unreachable_server_is_a_failed_check() -> None:
+    """A server that is down raises: a caller must never drop a claim because nothing was read."""
+    with pytest.raises(OcrCheckFailed, match="request failed"):
+        OcrClient("http://127.0.0.1:9", timeout=2).read(_png(10))
+    with pytest.raises(OcrCheckFailed, match="request failed"):
+        OcrClient("http://127.0.0.1:9", timeout=2).info()
+
+
+@pytest.mark.parametrize(
+    ("health", "expected"),
+    [
+        (
+            _Ocr.health,
+            OcrInfo(
+                model="PP-OCRv6 small (RapidOCR)",
+                det="PP-OCRv6_det_small.onnx",
+                rec="PP-OCRv6_rec_small.onnx",
+                min_score=0.5,
+            ),
+        ),
+        ({"model": "", "det": 3, "min_score": "0.5"}, OcrInfo()),
+        ({"min_score": True}, OcrInfo()),
+        ([1], OcrInfo()),
+        (None, OcrInfo()),  # no /health route
+    ],
+)
+def test_ocr_info(ocr_server, monkeypatch: pytest.MonkeyPatch, health, expected) -> None:
+    handler, url = ocr_server
+    monkeypatch.setattr(handler, "health", health)
+    assert OcrClient(url.replace("http://", "http://u:p@")).info() == expected
+    assert handler.seen[-1] == {"path": "/health", "auth": "Basic dTpw"}
+
+
+def test_ocr_url() -> None:
+    assert OcrClient("http://ocr:8133/").url == "http://ocr:8133/infer"
+    with pytest.raises(ModerationConfigError) as exc:
+        OcrClient("ftp://user:secret@ocr")
+    assert "secret" not in str(exc.value)
