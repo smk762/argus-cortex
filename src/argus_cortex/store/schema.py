@@ -94,17 +94,44 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     END
     $$
     """,
-    # Not DROP + CREATE: connections are autocommit and several stages run
-    # ensure_schema() against one database at startup, so a separate DROP and
-    # CREATE race ("trigger already exists"). One DO block is one statement, and
-    # a concurrent creator's duplicate_object is the outcome we wanted anyway.
-    # The logic lives in the function above, which CREATE OR REPLACE updates.
+    # Not DROP + CREATE: a DROP + CREATE pair is not idempotent across the stages
+    # that run ensure_schema() at startup. ensure_schema() serialises them behind an
+    # advisory lock; tolerating duplicate_object keeps each statement safe on its
+    # own too. The logic lives in the function above, which CREATE OR REPLACE updates.
     """
     DO $$
     BEGIN
         CREATE TRIGGER dataset_membership_edit_matches_caption
             BEFORE INSERT OR UPDATE OF edit_id, caption_id ON dataset_membership
             FOR EACH ROW EXECUTE FUNCTION dataset_membership_edit_matches_caption();
+    EXCEPTION WHEN duplicate_object THEN
+        NULL;
+    END
+    $$
+    """,
+    # The same rule from the other side: moving an edit to another caption would
+    # leave a membership that names it exporting another image's text.
+    """
+    CREATE OR REPLACE FUNCTION human_edit_caption_kept_by_memberships() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        IF NEW.caption_id IS DISTINCT FROM OLD.caption_id AND EXISTS (
+            SELECT 1 FROM dataset_membership WHERE edit_id = NEW.id AND caption_id <> NEW.caption_id
+        ) THEN
+            RAISE EXCEPTION 'human_edit % is used by a dataset membership of caption %, so its caption cannot change',
+                NEW.id, OLD.caption_id
+                USING ERRCODE = 'foreign_key_violation';
+        END IF;
+        RETURN NEW;
+    END
+    $$
+    """,
+    """
+    DO $$
+    BEGIN
+        CREATE TRIGGER human_edit_caption_kept_by_memberships
+            BEFORE UPDATE OF caption_id ON human_edit
+            FOR EACH ROW EXECUTE FUNCTION human_edit_caption_kept_by_memberships();
     EXCEPTION WHEN duplicate_object THEN
         NULL;
     END

@@ -69,6 +69,23 @@ def test_membership_refuses_an_edit_of_another_caption(store: PostgresLineageSto
     assert store.caption_edit_pairs(dataset=dataset) == [("mine", "my fix")]
 
 
+def test_an_edit_in_a_dataset_cannot_move_to_another_caption(store: PostgresLineageStore) -> None:
+    dataset = _dataset()
+    aid = store.record_asset(SourceAsset(uri=f"it://{dataset}", sha256=uuid.uuid4().hex))
+    mine = store.record_caption(aid, Caption(final_caption="mine"))
+    other = store.record_caption(aid, Caption(final_caption="other"))
+    used = store.record_edit(mine, HumanEdit(edited_caption="my fix"))
+    unused = store.record_edit(mine, HumanEdit(edited_caption="spare"))
+    store.add_to_dataset(dataset, mine, edit_id=used)
+    with store._acquire() as conn:
+        with pytest.raises(Exception, match="its caption cannot change"):
+            conn.execute("UPDATE human_edit SET caption_id = %s WHERE id = %s", (other, used))
+        conn.rollback()
+        conn.execute("UPDATE human_edit SET caption_id = %s WHERE id = %s", (other, unused))  # no membership: fine
+        conn.commit()
+    assert store.caption_edit_pairs(dataset=dataset) == [("mine", "my fix")]
+
+
 def test_transaction_commits_together(store: PostgresLineageStore) -> None:
     dataset = _dataset()
     with store.transaction():
