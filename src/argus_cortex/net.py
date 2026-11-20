@@ -251,6 +251,7 @@ class _Body:
         else:
             raise UrlRefused(f"the response has an unsupported content encoding ({enc})")
         self.data = bytearray()
+        self._fed = False  # any encoded bytes at all (a HEAD or 304 says gzip and sends none)
         self._max, self._end, self._deadline = max_bytes, end, deadline
 
     def _add(self, chunk: bytes) -> None:
@@ -259,6 +260,7 @@ class _Body:
             raise UrlRefused(f"the response is larger than {self._max} bytes")
 
     def feed(self, chunk: bytes) -> None:
+        self._fed = self._fed or bool(chunk)
         if self._z is None:
             self._add(chunk)
         else:
@@ -277,6 +279,8 @@ class _Body:
                 self._add(self._z.flush())
             except zlib.error as exc:
                 raise UrlRefused("the response body could not be decoded") from exc
+            if self._fed and not self._z.eof:  # flush() doesn't raise on a stream cut short: no trailer, no CRC check
+                raise UrlRefused("the response body could not be decoded (truncated)")
         return bytes(self.data)
 
 
@@ -346,8 +350,11 @@ def fetch(
                 if preread:
                     body.feed(resp.content)
                 else:
-                    for chunk in resp.iter_raw():
-                        body.feed(chunk)
+                    try:
+                        for chunk in resp.iter_raw():
+                            body.feed(chunk)
+                    except httpx.TransportError as exc:  # stalled or dropped mid-body
+                        raise UrlRefused(f"could not fetch from {checked.host}") from exc
                 return Reply(resp.status_code, dict(resp.headers), body.done(), current, hops)
             finally:
                 resp.close()
@@ -421,8 +428,11 @@ async def afetch(
                 if preread:
                     body.feed(resp.content)
                 else:
-                    async for chunk in resp.aiter_raw():
-                        body.feed(chunk)
+                    try:
+                        async for chunk in resp.aiter_raw():
+                            body.feed(chunk)
+                    except httpx.TransportError as exc:  # stalled or dropped mid-body
+                        raise UrlRefused(f"could not fetch from {checked.host}") from exc
                 return Reply(resp.status_code, dict(resp.headers), body.done(), current, hops)
             finally:
                 await resp.aclose()

@@ -15,6 +15,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from argus_cortex import net as net_mod
 from argus_cortex.net import FetchFailed, UrlRefused, afetch, check_url, fetch, is_public_ip
 
 PUBLIC = "93.184.216.34"
@@ -280,10 +281,57 @@ def test_falls_back_to_the_next_checked_address() -> None:
     assert r.body == b"v4"
 
 
-def test_deadline_covers_every_hop() -> None:
-    net = Net({PUBLIC: httpx.Response(302, headers={"location": "/x"})})
-    with pytest.raises(UrlRefused, match="longer than"):
-        fetch("https://example.com/", resolve=dns({"example.com": [PUBLIC]}), deadline=-1, transport=net.transport)
+def test_deadline_covers_every_hop(monkeypatch) -> None:
+    clock = [1000.0]
+    monkeypatch.setattr(net_mod.time, "monotonic", lambda: clock[0])
+
+    def first_hop_takes_a_while(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        clock[0] += 6  # the first hop alone is within the 5s deadline; the redirect is not
+        return httpx.Response(302, headers={"location": "/x"}) if request.url.path == "/" else httpx.Response(200)
+
+    seen: list[str] = []
+    with pytest.raises(UrlRefused, match="longer than 5s"):
+        fetch(
+            "https://example.com/",
+            resolve=dns({"example.com": [PUBLIC]}),
+            deadline=5,
+            transport=httpx.MockTransport(first_hop_takes_a_while),
+        )
+    assert seen == ["/"]  # the first hop was fetched, the redirect to /x was refused before it was sent
+
+
+def test_a_truncated_compressed_body_is_refused() -> None:
+    raw = gzip.compress(b"hello " * 100)[:-12]  # the gzip trailer (CRC, length) and some data are gone
+    net = Net({PUBLIC: httpx.Response(200, headers={"content-encoding": "gzip"}, content=iter([raw]))})
+    with pytest.raises(UrlRefused, match="could not be decoded"):
+        fetch("https://example.com/", resolve=dns({"example.com": [PUBLIC]}), transport=net.transport)
+
+
+def test_a_compressed_response_with_no_body_is_fine() -> None:
+    net = Net({PUBLIC: httpx.Response(200, headers={"content-encoding": "gzip"}, content=iter([]))})
+    r = fetch("https://example.com/", method="HEAD", resolve=dns({"example.com": [PUBLIC]}), transport=net.transport)
+    assert r.status == 200 and r.body == b""
+
+
+def _dropped_mid_body():
+    yield b"partial"
+    raise httpx.ReadError("connection reset")
+
+
+def test_a_connection_dropped_mid_body_is_a_refusal_not_a_raw_httpx_error() -> None:
+    table = dns({"example.com": [PUBLIC]})
+    net = Net({PUBLIC: httpx.Response(200, content=_dropped_mid_body())})
+    with pytest.raises(UrlRefused, match="could not fetch from example.com"):
+        fetch("https://example.com/", resolve=table, transport=net.transport)
+
+    async def body():
+        yield b"partial"
+        raise httpx.ReadTimeout("stalled")
+
+    anet = Net({PUBLIC: httpx.Response(200, content=body())})
+    with pytest.raises(UrlRefused, match="could not fetch from example.com"):
+        asyncio.run(afetch("https://example.com/", resolve=table, transport=anet.transport))
 
 
 def test_async_fetch_has_the_same_policy() -> None:
