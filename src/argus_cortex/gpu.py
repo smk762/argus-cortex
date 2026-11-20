@@ -65,6 +65,7 @@ _log = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_S = 300.0
 DEFAULT_POLL_S = 0.5
+_MIN_POLL_S = 0.01
 COORDINATORS = ("none", "lease", "broker")
 
 _nvml_lock = threading.Lock()
@@ -319,9 +320,11 @@ class LeaseCoordinator:
     ) -> None:
         if not math.isfinite(timeout_s):
             raise ValueError("timeout_s must be a finite number")
+        if not math.isfinite(poll_s):
+            raise ValueError("poll_s must be a finite number")
         self.lock_path = lock_path or default_lock_path()
         self.timeout_s = max(0.0, timeout_s)
-        self.poll_s = poll_s
+        self.poll_s = max(_MIN_POLL_S, poll_s)  # 0 would busy-spin flock and the VRAM probe; < 0 makes sleep() raise
         self.device = device
         self.probe = probe
 
@@ -368,7 +371,7 @@ class LeaseCoordinator:
                         raise GpuLeaseTimeout(
                             f"GPU lease not acquired within {self.timeout_s:g}s ({self.lock_path})"
                         ) from None
-                    time.sleep(self.poll_s)
+                    self._nap(deadline)
             try:
                 self._wait_for_room(caller, min_vram_mb, deadline)
                 _log.debug("gpu lease acquired by %s (min %d MB, %s)", caller, min_vram_mb, self.lock_path)
@@ -390,7 +393,11 @@ class LeaseCoordinator:
                 raise GpuLeaseTimeout(
                     f"GPU {self.device} had {free} MB free, {caller} needs {min_vram_mb} MB, after {self.timeout_s:g}s"
                 )
-            time.sleep(self.poll_s)
+            self._nap(deadline)
+
+    def _nap(self, deadline: float) -> None:
+        """One poll interval, cut short at *deadline* so the timeout isn't overshot by a whole poll."""
+        time.sleep(max(0.0, min(self.poll_s, deadline - time.monotonic())))
 
 
 def build_coordinator(
