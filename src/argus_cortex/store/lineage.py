@@ -26,7 +26,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from argus_cortex.store.config import StoreConfig
+from argus_cortex.store.config import StoreConfig, secret_value
 from argus_cortex.store.errors import StoreError, require_extra, resolve_error_types, wrap_errors
 from argus_cortex.store.schema import SCHEMA_STATEMENTS
 
@@ -461,9 +461,9 @@ def open_lineage_store(config: StoreConfig | None = None) -> LineageStore:
     """
     if config is None:
         config = StoreConfig.from_env()
-    if config.pg_url:
+    if pg_url := secret_value(config.pg_url):
         return PostgresLineageStore(
-            config.pg_url,
+            pg_url,
             min_size=config.pg_pool_min_size,
             max_size=config.pg_pool_max_size,
         )

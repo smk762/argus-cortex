@@ -5,8 +5,11 @@ from __future__ import annotations
 import base64
 import http.client
 import json
+import math
+import re
 import urllib.error
 import urllib.request
+import uuid
 from urllib.parse import unquote, urlsplit, urlunsplit
 
 # Ignore HTTP(S)_PROXY: images go straight to the configured server, never
@@ -36,6 +39,33 @@ def service_url(base: str, path: str, service: str) -> str:
     if not base_path.endswith(path):
         base_path += path
     return urlunsplit((parts.scheme, parts.netloc, base_path, parts.query, ""))
+
+
+def sibling_url(url: str, path: str, sibling: str) -> str:
+    """*url* (from :func:`service_url`) with its trailing *path* swapped for *sibling*: ``/infer`` -> ``/health``."""
+    parts = urlsplit(url)
+    return urlunsplit(parts._replace(path=parts.path.removesuffix(path) + sibling))
+
+
+def is_number(value: object) -> bool:
+    """A finite int or float, not a bool.
+
+    json.loads accepts bare NaN/Infinity; a NaN score would compare False against every threshold.
+    """
+    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def multipart_image(data: bytes, filename: str, field: str = "f1") -> tuple[bytes, str]:
+    """One image as a ``multipart/form-data`` body in *field*, and its content type."""
+    # The name lands in a header: keep it to characters that cannot break it.
+    filename = re.sub(r"[^A-Za-z0-9._-]", "_", filename)[-100:] or "image"
+    boundary = uuid.uuid4().hex
+    head = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="{field}"; filename="{filename}"\r\n'
+        "Content-Type: application/octet-stream\r\n\r\n"
+    ).encode()
+    return head + data + f"\r\n--{boundary}--\r\n".encode(), f"multipart/form-data; boundary={boundary}"
 
 
 def _split_credentials(url: str) -> tuple[str, dict[str, str]]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 
 import pytest
 
@@ -120,6 +121,18 @@ def test_remote_backend_from_host() -> None:
     assert b.base_url == "http://192.168.1.20:8188"
 
 
+@pytest.mark.parametrize(
+    ("host", "url"),
+    [("::1", "http://[::1]:8080"), ("fd00::5", "http://[fd00::5]:8080"), ("[fd00::5]", "http://[fd00::5]:8080")],
+)
+def test_remote_backend_from_host_brackets_an_ipv6_literal(host: str, url: str) -> None:
+    from urllib.parse import urlsplit
+
+    b = RemoteBackend.from_host(host, 8080)
+    assert b.base_url == url
+    assert urlsplit(b.base_url).port == 8080
+
+
 def test_remote_backend_from_provider_uses_default_url() -> None:
     b = RemoteBackend.from_provider(RemoteProvider.NVIDIA_NIM, api_key="k")
     assert b.base_url == "https://integrate.api.nvidia.com/v1"
@@ -197,10 +210,12 @@ def test_remote_unload_closes_client() -> None:
     assert b._http is None
 
 
-@pytest.mark.skipif(_HAS_HTTPX, reason="httpx installed; the missing-extra path can't be exercised")
-def test_client_without_httpx_raises_helpful_error() -> None:
+def test_client_without_httpx_raises_helpful_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "httpx", None)  # `import httpx` raises ImportError, installed or not
+    b = RemoteBackend("http://host:1")
     with pytest.raises(BackendError, match=r"argus-cortex\[remote\]"):
-        RemoteBackend("http://host:1")._client()
+        b._client()
+    assert b._http is None
 
 
 @pytest.mark.skipif(not _HAS_HTTPX, reason="needs httpx for its transport error types")

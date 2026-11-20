@@ -16,10 +16,15 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+
+def secret_value(value: SecretStr | None) -> str | None:
+    """The plain string inside a :class:`~pydantic.SecretStr` field, or ``None``."""
+    return None if value is None else value.get_secret_value()
 
 
 class StoreConfig(BaseModel):
@@ -28,15 +33,20 @@ class StoreConfig(BaseModel):
     Build from the environment with :meth:`from_env`. A ``None`` field means the
     corresponding feature is disabled and the caller should no-op rather than
     fail — the whole point of the layer being optional.
+
+    ``pg_url`` (which usually carries a password) and the S3 keys are
+    :class:`~pydantic.SecretStr`, so the model's repr, a log line or a
+    ``model_dump()`` shows ``**********``; :func:`secret_value` unwraps one where
+    a client is built.
     """
 
-    pg_url: str | None = None
+    pg_url: SecretStr | None = None
     pg_pool_min_size: int = 0
     pg_pool_max_size: int = 8
     qdrant_url: str | None = None
     s3_endpoint: str | None = None
-    s3_access_key: str | None = None
-    s3_secret_key: str | None = None
+    s3_access_key: SecretStr | None = None
+    s3_secret_key: SecretStr | None = None
     s3_bucket: str | None = None
     s3_region: str | None = None
 

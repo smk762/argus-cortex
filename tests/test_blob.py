@@ -120,6 +120,13 @@ def test_parse_endpoint_rejects_embedded_credentials() -> None:
         _parse_endpoint("http://key:secret@minio:9000")
 
 
+@pytest.mark.parametrize("endpoint", ["AKIAEXAMPLE:secret@minio:9000", "key@minio", "key:secret@minio:9000/bucket"])
+def test_parse_endpoint_rejects_embedded_credentials_without_a_scheme(endpoint: str) -> None:
+    with pytest.raises(StoreError, match="must not embed credentials") as exc_info:
+        _parse_endpoint(endpoint)
+    assert "secret" not in str(exc_info.value)
+
+
 # --------------------------------------------------------------------------
 # factory + config
 # --------------------------------------------------------------------------

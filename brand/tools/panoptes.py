@@ -438,6 +438,9 @@ def lockups():
             write(dst, f"0 0 {32 + total:.1f} 26", svg)
 
 
+TILE_MARK_RATIO = 0.72  # the mark's share of the tile's side in apple-icon / icon-192 / icon-512
+
+
 def favicons():
     """Next.js App Router icon set per UI: drop the folder's files into <app>/ (src/app/ in our Next apps).
 
@@ -469,8 +472,8 @@ def favicons():
             light.write_text(
                 f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{vb}">{paint(body, ink_l, accent(stage, "light"))}</svg>'
             )
-            # tile: mark at 72 % on a dark square
-            pad = 24 * 0.14
+            # tile: mark at TILE_MARK_RATIO of a dark square (24 / (24 + 2 * pad) == the ratio)
+            pad = 24 * (1 / TILE_MARK_RATIO - 1) / 2
             tile = t / "tile.svg"
             tile.write_text(
                 f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{-pad:.2f} {-pad:.2f} {24 + 2 * pad:.2f} {24 + 2 * pad:.2f}">'

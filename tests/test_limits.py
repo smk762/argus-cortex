@@ -48,7 +48,7 @@ def test_declared_length_over_the_cap_is_refused_before_reading() -> None:
     assert req.pulled == 0
 
 
-@pytest.mark.parametrize("bad", ["-1", "1e3", "ten", "", "0x10", "1, 2"])
+@pytest.mark.parametrize("bad", ["-1", "1e3", "ten", "", "0x10", "1, 2", "9" * 20, "9" * 5000])
 def test_malformed_length_is_refused(bad: str) -> None:
     with pytest.raises(BadInput):
         run(read_body(FakeRequest([b"x"], content_length=bad), 100))
@@ -114,6 +114,7 @@ def test_base64_round_trip_iff_within_the_cap(data: bytes, cap: int, as_data_uri
     except TooLarge:
         assert len(data) > cap
         return
+    assert len(data) <= cap, "a payload over the cap was decoded instead of refused"
     assert got == data
 
 

@@ -276,3 +276,46 @@ def test_regions_nested_in_rdf_description_are_read() -> None:
     assert parse_xmp(doc).regions == XmpRegions(
         width=4000, height=3000, regions=[XmpRegion(x=0.5, y=0.4, w=0.1, h=0.2, name="Ada")]
     )
+
+
+def _doc(body: str) -> str:
+    return (
+        '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+        '<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" '
+        f'xmlns:xmp="http://ns.adobe.com/xap/1.0/">{body}</rdf:Description></rdf:RDF></x:xmpmeta>'
+    )
+
+
+@pytest.mark.parametrize("kind", ["Bag", "Seq", "Alt"])
+def test_an_empty_container_is_an_empty_list(kind: str) -> None:
+    assert parse_xmp(_doc(f"<dc:subject>\n    <rdf:{kind}/>\n   </dc:subject>")).keywords == []
+
+
+@pytest.mark.parametrize("bad", ["--5", "- 3", "\u00b2", "\u2460", "3.5"])
+def test_an_unparseable_rating_is_skipped_not_raised(bad: str) -> None:
+    data = parse_xmp(
+        _doc(f"<xmp:Rating>{bad}</xmp:Rating><dc:subject><rdf:Bag><rdf:li>cat</rdf:li></rdf:Bag></dc:subject>")
+    )
+    assert data.rating is None
+    assert data.keywords == ["cat"]
+
+
+@pytest.mark.parametrize("good", ["-1", " 4 ", "0"])
+def test_a_plain_integer_rating_is_read(good: str) -> None:
+    assert parse_xmp(_doc(f"<xmp:Rating>{good}</xmp:Rating>")).rating == int(good)
+
+
+def test_the_sidecar_is_fsynced_before_it_replaces_the_old_one(tmp_path, monkeypatch) -> None:
+    import os
+
+    import argus_cortex.xmp as xmp_mod
+
+    image = tmp_path / "a.jpg"
+    events: list[str] = []
+    real_fsync, real_replace = os.fsync, os.replace
+    monkeypatch.setattr(xmp_mod.os, "fsync", lambda fd: (events.append("fsync"), real_fsync(fd))[1])
+    monkeypatch.setattr(xmp_mod.os, "replace", lambda a, b: (events.append("replace"), real_replace(a, b))[1])
+    write_xmp(image, XmpData(keywords=["cat"]))
+    assert events[:2] == ["fsync", "replace"]  # file data durable before the rename
+    assert events[-1] == "fsync"  # then the directory, so the rename is too
+    assert read_xmp(image).keywords == ["cat"]

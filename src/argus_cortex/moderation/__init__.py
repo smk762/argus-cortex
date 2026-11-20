@@ -1,7 +1,8 @@
-"""Content-moderation clients the stages share: NudeNet and SingGuard over HTTP.
+"""Content-moderation clients the stages share: NudeNet, SingGuard and OCR over HTTP.
 
 Each client talks to a server the deployer runs; nothing here imports a
-detector. Stdlib + pydantic only (Pillow, for SingGuard's downscaling, is
+detector. OCR (argus-retina's text reader) is a sensor rather than a moderator,
+but it shares NudeNet's wire shape and this package's HTTP path. Stdlib + pydantic only (Pillow, for SingGuard's downscaling, is
 behind the ``[images]`` extra and imported only when used). Configuration is
 the caller's: each stage reads its own environment and passes a URL in.
 """
@@ -19,6 +20,14 @@ from argus_cortex.moderation.nudenet import (
     NudeNetInfo,
     NudeNetLabel,
     exposed_score,
+)
+from argus_cortex.moderation.ocr import (
+    OcrCheckFailed,
+    OcrClient,
+    OcrInfo,
+    OcrLine,
+    OcrResult,
+    normalize_text,
 )
 from argus_cortex.moderation.singguard import (
     INPUT_ROLES,
@@ -46,8 +55,14 @@ __all__ = [
     "NudeNetClient",
     "NudeNetInfo",
     "NudeNetLabel",
+    "OcrCheckFailed",
+    "OcrClient",
+    "OcrInfo",
+    "OcrLine",
+    "OcrResult",
     "SingGuardClient",
     "exposed_score",
+    "normalize_text",
     "policy_name",
     "rule_letter",
     "rule_matches",
