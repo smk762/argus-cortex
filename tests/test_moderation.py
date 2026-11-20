@@ -403,8 +403,10 @@ def test_rule_letter() -> None:
 
 def test_proxies_in_the_environment_are_ignored(nudenet_server, monkeypatch: pytest.MonkeyPatch) -> None:
     _fake, url = nudenet_server
-    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9")  # nothing listens there
-    monkeypatch.setenv("http_proxy", "http://127.0.0.1:9")
+    for name in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"):
+        monkeypatch.setenv(name, "http://127.0.0.1:9")  # nothing listens there
+    for name in ("NO_PROXY", "no_proxy"):  # a CI shell's no_proxy=localhost would bypass the dead proxy anyway
+        monkeypatch.delenv(name, raising=False)
     assert NudeNetClient(url, timeout=5).check(_png(10)) == NsfwResult()
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import pytest
@@ -115,6 +116,43 @@ def test_guard_leaves_streaming_responses_intact() -> None:
     resp = client.get("/stream")
     assert resp.status_code == 200
     assert resp.text == "chunk-0\nchunk-1\nchunk-2\n"
+    # TestClient reads the whole body, so the text alone can't tell streaming from
+    # buffering: drive the guard as ASGI and check each chunk reaches the server's
+    # send as its own message, before the generator has finished.
+    inner = Starlette(routes=[Route("/stream", _stream, methods=["GET"])])
+    guard = WriteGuard(inner, refuse=constant_refuse("read-only"))
+    bodies: list[tuple[bytes, bool]] = []
+    requested = False
+
+    async def receive() -> dict:
+        nonlocal requested
+        if requested:  # the client stays connected: block until the response ends and cancels this
+            await asyncio.Event().wait()
+        requested = True
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: dict) -> None:
+        if message["type"] == "http.response.body":
+            bodies.append((message.get("body", b""), message.get("more_body", False)))
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/stream",
+        "raw_path": b"/stream",
+        "root_path": "",
+        "query_string": b"",
+        "headers": [(b"host", b"testserver")],
+        "client": ("testclient", 50000),
+        "server": ("testserver", 80),
+    }
+    asyncio.run(guard(scope, receive, send))
+    chunks = [(body, more) for body, more in bodies if body]
+    assert chunks == [(b"chunk-0\n", True), (b"chunk-1\n", True), (b"chunk-2\n", True)]
+    assert bodies[-1] == (b"", False)
 
 
 # ----- WriteGuard + cross_site_refuse (cross-site protection) ---------------
