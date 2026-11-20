@@ -56,13 +56,25 @@ def normalise_point_id(point_id: str | int) -> str | int:
     :meth:`QdrantVectorStore.upsert` keeps the original key in the payload under
     :data:`POINT_ID_FIELD`, and :meth:`QdrantVectorStore.search` returns it as
     ``VectorHit.id``.
+
+    Only an int Qdrant takes as is (``0 <= id < 2**64``) and a UUID already in canonical
+    form (lowercase, dashed) pass through. Any other int (negative, too large) and any
+    other spelling of a UUID (no dashes, braces, ``urn:uuid:``, uppercase) is hashed
+    like any other key, so two distinct keys never land on one point. A ``bool`` is
+    refused rather than read as 0/1.
     """
+    if isinstance(point_id, bool):
+        raise ValueError(f"a point id must be a str or int, not bool ({point_id!r})")
     if isinstance(point_id, int):
-        return point_id
+        if 0 <= point_id < 2**64:
+            return point_id
+        return str(uuid.uuid5(_POINT_ID_NAMESPACE, str(point_id)))
     try:
-        return str(uuid.UUID(point_id))  # already a UUID -> pass through, normalised
+        if str(uuid.UUID(point_id)) == point_id:
+            return point_id
     except (ValueError, AttributeError, TypeError):
-        return str(uuid.uuid5(_POINT_ID_NAMESPACE, point_id))
+        pass
+    return str(uuid.uuid5(_POINT_ID_NAMESPACE, point_id))
 
 
 @functools.lru_cache(maxsize=1)
@@ -79,6 +91,7 @@ def _qdrant_error_types() -> tuple[type[BaseException], ...]:
         (
             ("qdrant_client.http.exceptions", ("UnexpectedResponse", "ResponseHandlingException", "ApiException")),
             ("httpx", "HTTPError"),
+            ("grpc", ("RpcError",)),  # prefer_grpc=True: the gRPC transport raises these instead
         )
     )
 

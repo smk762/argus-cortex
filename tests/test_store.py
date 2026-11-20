@@ -38,7 +38,7 @@ def test_store_config_from_env_reads_cortex_vars() -> None:
             "CORTEX_S3_REGION": "eu-west-1",
         }
     )
-    assert cfg.pg_url == "postgresql://localhost/argus"
+    assert cfg.pg_url.get_secret_value() == "postgresql://localhost/argus"
     assert cfg.qdrant_url == "http://localhost:6333"
     assert cfg.s3_bucket == "argus"
     assert cfg.s3_region == "eu-west-1"
@@ -46,6 +46,19 @@ def test_store_config_from_env_reads_cortex_vars() -> None:
     # pool sizes default when unset
     assert cfg.pg_pool_min_size == 0
     assert cfg.pg_pool_max_size == 8
+
+
+def test_store_config_never_shows_credentials() -> None:
+    cfg = StoreConfig.from_env(
+        {
+            "CORTEX_PG_URL": "postgresql://argus:pg-hunter2@db/argus",
+            "CORTEX_S3_ACCESS_KEY": "AKIA-access-hunter2",
+            "CORTEX_S3_SECRET_KEY": "s3-secret-hunter2",
+        }
+    )
+    for shown in (repr(cfg), str(cfg), str(cfg.model_dump()), cfg.model_dump_json()):
+        assert "hunter2" not in shown
+    assert cfg.s3_secret_key.get_secret_value() == "s3-secret-hunter2"
 
 
 def test_store_config_reads_pool_sizes() -> None:
@@ -315,6 +328,9 @@ def test_schema_ties_a_membership_edit_to_its_caption() -> None:
     sql = "\n".join(SCHEMA_STATEMENTS)
     assert "WHERE id = NEW.edit_id AND caption_id = NEW.caption_id" in sql
     assert "BEFORE INSERT OR UPDATE OF edit_id, caption_id ON dataset_membership" in sql
+    # and from the edit's side: an edit a membership uses can't be moved to another caption
+    assert "BEFORE UPDATE OF caption_id ON human_edit" in sql
+    assert "WHERE edit_id = NEW.id AND caption_id <> NEW.caption_id" in sql
 
 
 def test_close_closes_pool() -> None:

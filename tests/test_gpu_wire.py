@@ -104,12 +104,18 @@ def test_manifest_round_trip_and_kind_lookup() -> None:
 
 
 def test_manifest_refuses_typos_duplicates_and_incomplete_residents() -> None:
-    with pytest.raises(ValidationError, match="vram"):
-        TenantManifest.model_validate({**DARKROOM, "kinds": [{"kind": "g", "target": "comfyui", "vram": 1}]})
-    with pytest.raises(ValidationError, match="duplicate"):
+    # Assert on the structured errors: str(ValidationError) echoes the input, so a
+    # match= on a word from the input passes whatever the error was.
+    typo = {**DARKROOM["kinds"][0], "vram": 1}  # complete, plus a typo'd key: only the typo can fail
+    with pytest.raises(ValidationError) as exc_info:
+        TenantManifest.model_validate({**DARKROOM, "kinds": [typo]})
+    assert [(e["type"], e["loc"]) for e in exc_info.value.errors()] == [("extra_forbidden", ("kinds", 0, "vram"))]
+    with pytest.raises(ValidationError) as exc_info:
         TenantManifest.model_validate({**DARKROOM, "kinds": [DARKROOM["kinds"][0], DARKROOM["kinds"][0]]})
-    with pytest.raises(ValidationError, match="container"):
+    assert "duplicate" in exc_info.value.errors()[0]["msg"]
+    with pytest.raises(ValidationError) as exc_info:
         TenantManifest.model_validate({**DARKROOM, "residents": [{"name": "comfy", "adapter": "container"}]})
+    assert "the container adapter needs 'container'" in exc_info.value.errors()[0]["msg"]
     with pytest.raises(VersionError):
         TenantManifest.model_validate({**DARKROOM, "tenant_version": "2.0"})
 

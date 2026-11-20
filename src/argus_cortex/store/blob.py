@@ -28,7 +28,7 @@ from datetime import timedelta
 from typing import Any, Protocol, runtime_checkable
 from urllib.parse import urlparse
 
-from argus_cortex.store.config import StoreConfig
+from argus_cortex.store.config import StoreConfig, secret_value
 from argus_cortex.store.errors import StoreError, require_extra, resolve_error_types, wrap_errors
 
 # S3 error codes that mean "the OBJECT isn't there" — a normal absence (get -> None,
@@ -60,6 +60,10 @@ def _parse_endpoint(endpoint: str) -> tuple[str, bool]:
     than read as plaintext. Credentials embedded in the URL are rejected (use ``CORTEX_S3_ACCESS_KEY`` / ``CORTEX_S3_SECRET_KEY``).
     """
     if "://" not in endpoint:
+        if "@" in endpoint.split("/", 1)[0]:  # ``key:secret@host:9000`` without a scheme
+            raise StoreError(
+                "CORTEX_S3_ENDPOINT must not embed credentials — set CORTEX_S3_ACCESS_KEY / CORTEX_S3_SECRET_KEY instead"
+            )
         return endpoint, True
     parsed = urlparse(endpoint)
     scheme = parsed.scheme.lower()
@@ -307,8 +311,8 @@ def open_blob_store(config: StoreConfig | None = None) -> BlobStore:
         return S3BlobStore(
             config.s3_endpoint,
             config.s3_bucket,
-            access_key=config.s3_access_key,
-            secret_key=config.s3_secret_key,
+            access_key=secret_value(config.s3_access_key),
+            secret_key=secret_value(config.s3_secret_key),
             region=config.s3_region,
         )
     return NullBlobStore()

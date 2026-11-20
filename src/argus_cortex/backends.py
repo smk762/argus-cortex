@@ -185,7 +185,12 @@ class RemoteBackend(Backend):
 
     @classmethod
     def from_host(cls, host: str, port: int, *, scheme: str = "http", **kwargs: object) -> RemoteBackend:
-        """Address a service by host + port, e.g. a self-hosted model server."""
+        """Address a service by host + port, e.g. a self-hosted model server.
+
+        An IPv6 literal (``::1``, ``fd00::5``) is bracketed, as a URL needs it to be.
+        """
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
         return cls(f"{scheme}://{host}:{port}", **kwargs)  # type: ignore[arg-type]
 
     @classmethod
@@ -214,7 +219,7 @@ class RemoteBackend(Backend):
         if self._http is None:
             try:
                 import httpx
-            except ImportError as exc:  # pragma: no cover - exercised only without the extra
+            except ImportError as exc:
                 raise BackendError("remote backends need: pip install argus-cortex[remote]") from exc
             if not self.base_url:
                 raise BackendError("remote backend has no base_url")

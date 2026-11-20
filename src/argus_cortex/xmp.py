@@ -114,6 +114,10 @@ def _q(qname: str) -> str:
     return f"{{{NS[prefix]}}}{local}"
 
 
+_CONTAINERS = frozenset(_q(f"rdf:{kind}") for kind in ("Bag", "Seq", "Alt"))
+_RATING = re.compile(r"\s*-?[0-9]+\s*")  # what int() takes; isdigit() also passes "²", lstrip("-") "--5"
+
+
 def _text(value: str) -> str:
     return _ILLEGAL_XML_CHARS.sub("", value)
 
@@ -331,9 +335,9 @@ def _prop_values(desc: ET.Element, qname: str) -> list[str] | None:
     prop = desc.find(tag)
     if prop is None:
         return None
-    items = prop.findall(f"./*/{_q('rdf:li')}")
-    if items:
-        return [li.text or "" for li in items]
+    containers = [child for child in prop if child.tag in _CONTAINERS]
+    if containers:  # an empty rdf:Bag/Seq/Alt is an empty list, not the whitespace around it
+        return [li.text or "" for li in containers[0].findall(_q("rdf:li"))]
     return [prop.text or ""]
 
 
@@ -424,7 +428,7 @@ def parse_xmp(raw: bytes | str) -> XmpData:
     ):
         if (values := first(qname)) is not None:
             found[field_name] = values[0] if values else ""
-    if (values := first("xmp:Rating")) and values[0].strip().lstrip("-").isdigit():
+    if (values := first("xmp:Rating")) and _RATING.fullmatch(values[0]):
         found["rating"] = int(values[0])
     for desc in descs:
         if (regions := _read_regions(desc)) is not None:
@@ -471,6 +475,20 @@ def write_xmp(image_path: str | os.PathLike[str], data: XmpData, *, replace: boo
         return _write_locked(sidecar, data, replace=replace)
 
 
+def _fsync_dir(directory: Path) -> None:
+    """Make a rename in *directory* durable (POSIX; a no-op where a directory can't be opened)."""
+    try:
+        fd = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    except OSError:  # pragma: no cover - Windows
+        return
+    try:
+        os.fsync(fd)
+    except OSError:  # pragma: no cover - filesystems that refuse fsync on a directory
+        pass
+    finally:
+        os.close(fd)
+
+
 @contextlib.contextmanager
 def _dir_lock(directory: Path):
     """Exclusive advisory lock on *directory* itself, so no lock file is left
@@ -500,8 +518,11 @@ def _write_locked(sidecar: Path, data: XmpData, *, replace: bool) -> Path:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(doc)
+            fh.flush()
+            os.fsync(fh.fileno())  # else a crash after the rename can leave an empty sidecar
         os.chmod(tmp, mode)
         os.replace(tmp, sidecar)
+        _fsync_dir(sidecar.parent)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise

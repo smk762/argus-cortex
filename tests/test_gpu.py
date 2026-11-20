@@ -228,6 +228,17 @@ def test_build_coordinator() -> None:
         gpu.LeaseCoordinator(timeout_s=float("inf"))
     with pytest.raises(ValueError, match="finite"):
         gpu.LeaseCoordinator(timeout_s=float("nan"))
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="poll_s must be a finite"):
+            gpu.LeaseCoordinator(poll_s=bad)
+    assert gpu.LeaseCoordinator(poll_s=0).poll_s > 0  # never a busy-spin
+    assert gpu.LeaseCoordinator(poll_s=-1).poll_s > 0  # never a sleep() that raises
+
+
+def test_a_short_poll_is_waited_out_not_crashed_on(tmp_path) -> None:
+    lease = gpu.LeaseCoordinator(lock_path=str(tmp_path / "gpu.lock"), timeout_s=0.05, poll_s=-1, probe=lambda d: 0)
+    with pytest.raises(gpu.GpuLeaseTimeout), lease.lease(caller="t", min_vram_mb=10):  # not sleep(-1)'s ValueError
+        pass
 
 
 def test_coordinator_from_env(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:

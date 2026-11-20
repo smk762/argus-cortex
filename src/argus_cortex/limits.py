@@ -67,6 +67,8 @@ def _declared(headers: Any) -> int | None:
     raw = raw.strip()
     if not (raw.isascii() and raw.isdigit()):  # "²" is isdigit() but int() refuses it
         raise BadInput("Content-Length is not a number")
+    if len(raw) > 19:  # past any real body size, and int() refuses > 4300 digits (ValueError, not BadInput)
+        raise BadInput("Content-Length is too long")
     return int(raw)
 
 

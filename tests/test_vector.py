@@ -124,7 +124,7 @@ def test_open_vector_store_no_url_returns_null() -> None:
 
 
 def test_open_vector_store_with_url_returns_qdrant() -> None:
-    store = open_vector_store(StoreConfig(qdrant_url="http://localhost:6333"))
+    store = open_vector_store(StoreConfig(qdrant_url="http://localhost:6333/"))
     assert isinstance(store, QdrantVectorStore)
     assert store.is_enabled is True
     # trailing slash normalised
@@ -211,6 +211,40 @@ def test_normalise_point_id_forms() -> None:
     assert normalise_point_id(uid) == uid  # already valid -> pass through
     assert normalise_point_id("cap-1") == normalise_point_id("cap-1")  # stable
     assert normalise_point_id("cap-1") != normalise_point_id("cap-2")
+    assert normalise_point_id(0) == 0
+    assert normalise_point_id(2**64 - 1) == 2**64 - 1
+
+
+def test_ints_qdrant_refuses_are_hashed_and_bools_refused() -> None:
+    for bad in (-1, 2**64):
+        mapped = normalise_point_id(bad)
+        assert isinstance(mapped, str) and uuid.UUID(mapped)  # a valid id, not one Qdrant rejects
+    assert normalise_point_id(-1) != normalise_point_id(1)
+    for flag in (True, False):
+        with pytest.raises(ValueError, match="bool"):
+            normalise_point_id(flag)
+
+
+def test_other_spellings_of_a_uuid_do_not_alias_the_canonical_key() -> None:
+    uid = "eb49211d-ac1c-49e9-aae3-e40ecc0a00dd"
+    spellings = [uid.replace("-", ""), "{" + uid + "}", "urn:uuid:" + uid, uid.upper()]
+    ids = {normalise_point_id(s) for s in spellings} | {normalise_point_id(uid)}
+    assert len(ids) == len(spellings) + 1  # each key its own point
+    assert normalise_point_id(uid) == uid
+
+
+def test_a_grpc_failure_is_a_store_error() -> None:
+    grpc = pytest.importorskip("grpc")
+
+    class _GrpcDown(_FakeQdrant):
+        def upsert(self, collection_name: str, points: list) -> None:
+            raise grpc.RpcError("unavailable")
+
+    from argus_cortex.store.vector import _qdrant_error_types
+
+    _qdrant_error_types.cache_clear()
+    with pytest.raises(StoreError, match="upsert failed"):
+        _store_with(_GrpcDown()).upsert(IMAGE_COLLECTION, point_id=1, vector=[0.0])
 
 
 def test_search_returns_hits_and_passes_filter() -> None:
