@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-20
+
 ### Added
 - **`OcrClient` (argus-retina#5).** `argus_cortex.moderation.OcrClient` reads the text in an image through
   argus-retina's OCR server (`ghcr.io/smk762/argus-retina-ocr`, PP-OCRv6 small). `read()` gives an `OcrResult`: the
@@ -23,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SUITE.md`: the read-the-text row points to `OcrClient`.
 - `SUITE.md`: argus-retina 0.1.1's row says an image over `ARGUS_RETINA_MAX_PIXELS` (default 2**27) or one that
   won't decode is a `422`.
+- `SUITE.md`: argus-proof 0.5's row (likeness, `POST /score`, the `-score` image). It had been merged into `main`
+  only (#136), so a release from `dev` would have reverted it.
 
 ## [0.10.0] - 2026-11-19
 
@@ -441,7 +445,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/smk762/argus-cortex/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/smk762/argus-cortex/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/smk762/argus-cortex/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/smk762/argus-cortex/compare/v0.7.0...v0.8.0
