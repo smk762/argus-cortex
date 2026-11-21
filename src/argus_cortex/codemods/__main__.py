@@ -38,23 +38,24 @@ def main(argv: list[str] | None = None) -> int:
 
     changed = 0
     for path in _files(args.paths):
-        source = path.read_text(encoding="utf-8")
         try:
+            # Bytes, not read_text/write_text: those translate newlines, and a CRLF file must stay CRLF.
+            source = path.read_bytes().decode("utf-8")
             new, report = mod.transform(source)
-        except Exception as exc:  # a file libcst can't parse is reported, not fatal
+        except Exception as exc:  # a file that can't be read, decoded or parsed is reported, not fatal
             print(f"{path}: skipped ({type(exc).__name__}: {exc})", file=sys.stderr)
             continue
+        for line in mod.summary(report):
+            print(f"{path}: {line}", file=sys.stderr)
         if new == source:
             continue
         changed += 1
-        for line in mod.summary(report):
-            print(f"{path}: {line}", file=sys.stderr)
         if args.check:
             sys.stdout.writelines(
                 difflib.unified_diff(source.splitlines(True), new.splitlines(True), f"a/{path}", f"b/{path}")
             )
         else:
-            path.write_text(new, encoding="utf-8")
+            path.write_bytes(new.encode("utf-8"))
     if changed and getattr(mod, "LEGEND", None):
         print(mod.LEGEND, file=sys.stderr)
     print(f"{args.codemod}: {changed} file(s) {'would change' if args.check else 'changed'}", file=sys.stderr)

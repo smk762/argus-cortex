@@ -326,7 +326,8 @@ def test_ensure_schema_runs_every_statement() -> None:
 
 def test_schema_ties_a_membership_edit_to_its_caption() -> None:
     sql = "\n".join(SCHEMA_STATEMENTS)
-    assert "WHERE id = NEW.edit_id AND caption_id = NEW.caption_id" in sql
+    # FOR SHARE: the check locks the edit row, so a concurrent move of the edit can't slip past it
+    assert "WHERE id = NEW.edit_id AND caption_id = NEW.caption_id FOR SHARE" in sql
     assert "BEFORE INSERT OR UPDATE OF edit_id, caption_id ON dataset_membership" in sql
     # and from the edit's side: an edit a membership uses can't be moved to another caption
     assert "BEFORE UPDATE OF caption_id ON human_edit" in sql
@@ -410,6 +411,43 @@ def test_invalid_pool_sizes_raise_store_error() -> None:
         PostgresLineageStore("postgresql://localhost/argus", min_size=5, max_size=2)
     with pytest.raises(StoreError, match="invalid pool sizes"):
         PostgresLineageStore("postgresql://localhost/argus", max_size=0)
+
+
+def test_close_waits_for_a_pool_being_opened_and_closes_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    """close() racing the lazy first open: the pool must not be assigned, open, after close() returned."""
+    import threading
+    import types
+
+    from argus_cortex.store import lineage
+
+    opening, finish = threading.Event(), threading.Event()
+    pools: list[object] = []
+
+    class SlowPool:
+        def __init__(self, *_: object, **__: object) -> None:
+            self.closed = False
+            pools.append(self)
+            opening.set()
+            finish.wait(5)  # still opening while close() runs
+
+        def close(self) -> None:
+            self.closed = True
+
+    monkeypatch.setattr(lineage, "require_extra", lambda *_, **__: types.SimpleNamespace(ConnectionPool=SlowPool))
+    store = PostgresLineageStore("postgresql://localhost/argus")
+    opener = threading.Thread(target=store._get_pool)
+    opener.start()
+    assert opening.wait(5)
+    closer = threading.Thread(target=store.close)
+    closer.start()
+    closer.join(0.2)  # either done (it saw no pool) or waiting for the open, which is the fix
+    finish.set()
+    opener.join(5)
+    closer.join(5)
+    assert len(pools) == 1 and pools[0].closed  # type: ignore[attr-defined]
+    assert store._pool is None
+    with pytest.raises(StoreError, match="closed"):
+        store._get_pool()
 
 
 def test_use_after_close_raises() -> None:

@@ -285,10 +285,13 @@ def test_deadline_covers_every_hop(monkeypatch) -> None:
     clock = [1000.0]
     monkeypatch.setattr(net_mod.time, "monotonic", lambda: clock[0])
 
-    def first_hop_takes_a_while(request: httpx.Request) -> httpx.Response:
+    chain = {"/": "/x", "/x": "/y"}
+
+    def every_hop_takes_3s(request: httpx.Request) -> httpx.Response:
         seen.append(request.url.path)
-        clock[0] += 6  # the first hop alone is within the 5s deadline; the redirect is not
-        return httpx.Response(302, headers={"location": "/x"}) if request.url.path == "/" else httpx.Response(200)
+        clock[0] += 3  # each hop alone is within the 5s deadline; two together are not
+        nxt = chain.get(request.url.path)
+        return httpx.Response(302, headers={"location": nxt}) if nxt else httpx.Response(200)
 
     seen: list[str] = []
     with pytest.raises(UrlRefused, match="longer than 5s"):
@@ -296,9 +299,11 @@ def test_deadline_covers_every_hop(monkeypatch) -> None:
             "https://example.com/",
             resolve=dns({"example.com": [PUBLIC]}),
             deadline=5,
-            transport=httpx.MockTransport(first_hop_takes_a_while),
+            transport=httpx.MockTransport(every_hop_takes_3s),
         )
-    assert seen == ["/"]  # the first hop was fetched, the redirect to /x was refused before it was sent
+    # Two hops were fetched (3s, then 6s in all) and the third was refused before it was sent. A deadline that
+    # started again at each redirect would have fetched /y too.
+    assert seen == ["/", "/x"]
 
 
 def test_a_truncated_compressed_body_is_refused() -> None:

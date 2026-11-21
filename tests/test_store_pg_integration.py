@@ -86,6 +86,36 @@ def test_an_edit_in_a_dataset_cannot_move_to_another_caption(store: PostgresLine
     assert store.caption_edit_pairs(dataset=dataset) == [("mine", "my fix")]
 
 
+def test_an_edit_moved_while_a_membership_is_being_added_cannot_both_commit(store: PostgresLineageStore) -> None:
+    """The two triggers check each other's table; without a row lock both could pass and both commit."""
+    import threading
+
+    dataset = _dataset()
+    aid = store.record_asset(SourceAsset(uri=f"it://{dataset}", sha256=uuid.uuid4().hex))
+    mine = store.record_caption(aid, Caption(final_caption="mine"))
+    other = store.record_caption(aid, Caption(final_caption="other"))
+    edit = store.record_edit(mine, HumanEdit(edited_caption="my fix"))
+    added: list[BaseException | None] = []
+
+    def add() -> None:
+        try:
+            store.add_to_dataset(dataset, mine, edit_id=edit)
+            added.append(None)
+        except StoreError as exc:
+            added.append(exc)
+
+    with store._get_pool().connection() as mover, mover.transaction():
+        # the move is not committed yet, and saw no membership
+        mover.execute("UPDATE human_edit SET caption_id = %s WHERE id = %s", (other, edit))
+        adder = threading.Thread(target=add)
+        adder.start()
+        adder.join(0.5)
+        assert adder.is_alive()  # the insert waits on the edit row instead of reading its old caption
+    adder.join(10)
+    assert len(added) == 1 and isinstance(added[0], StoreError) and "not an edit of caption" in str(added[0])
+    assert store.caption_edit_pairs(dataset=dataset) == []
+
+
 def test_transaction_commits_together(store: PostgresLineageStore) -> None:
     dataset = _dataset()
     with store.transaction():

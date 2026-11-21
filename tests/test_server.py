@@ -117,9 +117,21 @@ def test_guard_leaves_streaming_responses_intact() -> None:
     assert resp.status_code == 200
     assert resp.text == "chunk-0\nchunk-1\nchunk-2\n"
     # TestClient reads the whole body, so the text alone can't tell streaming from
-    # buffering: drive the guard as ASGI and check each chunk reaches the server's
-    # send as its own message, before the generator has finished.
-    inner = Starlette(routes=[Route("/stream", _stream, methods=["GET"])])
+    # buffering: drive the guard as ASGI and record, in one list, when the generator
+    # produces each chunk and when it reaches the server's send. A guard that collected
+    # the messages and replayed them at the end would log every "made" before any "sent".
+    events: list[str] = []
+
+    async def stream(request):  # noqa: ANN001,ANN202
+        async def gen():  # noqa: ANN202
+            for i in range(3):
+                events.append(f"made {i}")
+                yield f"chunk-{i}\n"
+            events.append("finished")
+
+        return StreamingResponse(gen(), media_type="text/plain")
+
+    inner = Starlette(routes=[Route("/stream", stream, methods=["GET"])])
     guard = WriteGuard(inner, refuse=constant_refuse("read-only"))
     bodies: list[tuple[bytes, bool]] = []
     requested = False
@@ -134,6 +146,8 @@ def test_guard_leaves_streaming_responses_intact() -> None:
     async def send(message: dict) -> None:
         if message["type"] == "http.response.body":
             bodies.append((message.get("body", b""), message.get("more_body", False)))
+            if message.get("body"):
+                events.append(f"sent {message['body'].decode().strip()}")
 
     scope = {
         "type": "http",
@@ -153,6 +167,8 @@ def test_guard_leaves_streaming_responses_intact() -> None:
     chunks = [(body, more) for body, more in bodies if body]
     assert chunks == [(b"chunk-0\n", True), (b"chunk-1\n", True), (b"chunk-2\n", True)]
     assert bodies[-1] == (b"", False)
+    # each chunk reached send before the generator made the next one, and the last before it finished
+    assert events == ["made 0", "sent chunk-0", "made 1", "sent chunk-1", "made 2", "sent chunk-2", "finished"]
 
 
 # ----- WriteGuard + cross_site_refuse (cross-site protection) ---------------

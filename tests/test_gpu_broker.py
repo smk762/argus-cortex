@@ -529,6 +529,63 @@ def test_heartbeat_reattaches_a_forgotten_lease() -> None:
     assert handle.lease_id == "L1" and "L1" in broker.releases
 
 
+@dataclass
+class SlowReattach(FakeBroker):
+    """Forgets the lease on the first heartbeat, then answers the re-attach with a *new* id, late."""
+
+    forget_on_beat: bool = True
+    ttl_s: float = 0.06
+    reattaching: threading.Event = field(default_factory=threading.Event)
+    answer: threading.Event = field(default_factory=threading.Event)
+
+    def is_reattach(self, request: httpx.Request) -> bool:
+        return request.url.path == "/leases" and bool(json.loads(request.content).get("resume"))
+
+    def reattached(self, request: httpx.Request) -> httpx.Response:
+        with self._lock:
+            self.requests.append(json.loads(request.content))
+            return httpx.Response(200, json=self._status("L2", "granted"))
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        if self.is_reattach(request):
+            self.reattaching.set()
+            self.answer.wait(5)
+            return self.reattached(request)
+        return super().__call__(request)
+
+
+def test_a_reattach_that_lands_after_the_release_is_released_too() -> None:
+    broker = SlowReattach()
+    coordinator = _coordinator(broker, ttl_s=0.06, request_timeout_s=0.05)
+    with coordinator.lease(caller="x", min_vram_mb=1):
+        assert broker.reattaching.wait(5)
+    # The body is over and the release did not wait for the re-attach: it released the id it knew.
+    assert set(broker.releases) == {"L1"}
+    broker.answer.set()  # now the broker grants the re-attached lease, to a job that has finished
+    assert _wait_for(lambda: "L2" in broker.releases)  # the heartbeat releases it, not the TTL
+    assert broker.releases["L2"]["outcome"] == "ok"
+
+
+async def test_async_reattach_cut_short_by_the_end_of_the_lease_is_released() -> None:
+    broker = SlowReattach()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if broker.is_reattach(request):
+            broker.reattaching.set()
+            await asyncio.sleep(0.05)  # the lease ends, and the heartbeat is cancelled, in here
+            return broker.reattached(request)
+        return FakeBroker.__call__(broker, request)
+
+    coordinator = BrokerCoordinator(
+        "http://iris:8120/", tenant="argus-darkroom", ttl_s=0.06, async_transport=httpx.MockTransport(handler)
+    )
+    async with coordinator.alease(caller="x", min_vram_mb=1) as handle:
+        while not broker.reattaching.is_set():
+            await asyncio.sleep(0.005)
+    assert handle.lease_id == "L2"  # the broker made it, so the client learned it
+    assert "L2" in broker.releases and broker.releases["L2"]["outcome"] == "ok"
+
+
 def test_heartbeat_failure_does_not_stop_the_body() -> None:
     broker = FakeBroker(ttl_s=0.06)
     with _coordinator(broker, ttl_s=0.06).lease(caller="x", min_vram_mb=1) as handle:

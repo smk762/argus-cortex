@@ -44,6 +44,8 @@ _POINT_ID_NAMESPACE = uuid.UUID("a5c0ffee-0000-4000-8000-000000000001")
 # Reserved payload field carrying a caller's key that normalise_point_id rewrote,
 # so a search hit's ``id`` is the key the caller upserted, not its UUID5.
 POINT_ID_FIELD = "_point_id"
+# Ints Qdrant refuses are hashed in their own namespace, so -1 and the string "-1" are two points.
+_INT_POINT_ID_NAMESPACE = uuid.uuid5(_POINT_ID_NAMESPACE, "int")
 
 
 def normalise_point_id(point_id: str | int) -> str | int:
@@ -60,15 +62,16 @@ def normalise_point_id(point_id: str | int) -> str | int:
     Only an int Qdrant takes as is (``0 <= id < 2**64``) and a UUID already in canonical
     form (lowercase, dashed) pass through. Any other int (negative, too large) and any
     other spelling of a UUID (no dashes, braces, ``urn:uuid:``, uppercase) is hashed
-    like any other key, so two distinct keys never land on one point. A ``bool`` is
-    refused rather than read as 0/1.
+    like any other key, so two distinct keys never land on one point. A hashed int has
+    its own namespace, so it is not the point of the string that spells it (``-1`` and
+    ``"-1"``). A ``bool`` is refused rather than read as 0/1.
     """
     if isinstance(point_id, bool):
         raise ValueError(f"a point id must be a str or int, not bool ({point_id!r})")
     if isinstance(point_id, int):
         if 0 <= point_id < 2**64:
             return point_id
-        return str(uuid.uuid5(_POINT_ID_NAMESPACE, str(point_id)))
+        return str(uuid.uuid5(_INT_POINT_ID_NAMESPACE, str(point_id)))
     try:
         if str(uuid.UUID(point_id)) == point_id:
             return point_id

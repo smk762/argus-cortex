@@ -28,10 +28,14 @@ from __future__ import annotations
 
 import base64
 import binascii
+import contextlib
 import io
+import threading
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:  # pragma: no cover
+    from collections.abc import Iterator
+
     import numpy as np
     from PIL import Image
 
@@ -143,6 +147,31 @@ def decode_base64(data: str | bytes, max_bytes: int, *, what: str = "base64 payl
     return out
 
 
+_PILLOW_LIMIT_LOCK = threading.Lock()
+
+
+@contextlib.contextmanager
+def _pillow_limit_at_least(image_module: Any, max_pixels: int) -> Iterator[None]:
+    """Keep Pillow's process-wide bomb check from refusing an image the caller's *max_pixels* allows.
+
+    ``Image.open`` raises past 2 x ``Image.MAX_IMAGE_PIXELS`` (about 179M by default) whatever the caller
+    asked for. Only when *max_pixels* is above that is the global raised, to *max_pixels*, for this one
+    header read, under a lock; ``open_image`` then applies *max_pixels* itself. The usual caps never get here.
+    """
+    current = image_module.MAX_IMAGE_PIXELS
+    if current is None or max_pixels <= 2 * current:
+        yield
+        return
+    with _PILLOW_LIMIT_LOCK:
+        current = image_module.MAX_IMAGE_PIXELS
+        if current is not None and max_pixels > 2 * current:
+            image_module.MAX_IMAGE_PIXELS = max_pixels
+        try:
+            yield
+        finally:
+            image_module.MAX_IMAGE_PIXELS = current
+
+
 def open_image(
     data: bytes, *, max_pixels: int = 40_000_000, max_bytes: int | None = None, formats: tuple[str, ...] | None = None
 ) -> Image.Image:
@@ -168,8 +197,9 @@ def open_image(
     if max_bytes is not None and len(data) > max_bytes:
         raise TooLarge("image", max_bytes)
     try:
-        img = Image.open(io.BytesIO(data), formats=allowed)
-    except Image.DecompressionBombError as exc:  # over 2x Pillow's MAX_IMAGE_PIXELS: too large, not malformed
+        with _pillow_limit_at_least(Image, max_pixels):
+            img = Image.open(io.BytesIO(data), formats=allowed)
+    except Image.DecompressionBombError as exc:  # over Pillow's own limit, so over max_pixels: not malformed
         raise TooLarge("image", max_pixels, "pixels") from exc
     except (UnidentifiedImageError, OSError, ValueError, SyntaxError) as exc:
         raise BadInput(f"not an image in {', '.join(allowed)}") from exc
