@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 import pytest
 
-from argus_cortex import gpu
+from argus_cortex import gpu, gpu_broker
 from argus_cortex.gpu import GpuLease, GpuLeaseRefused, GpuLeaseTimeout, LeaseCoordinator, NullCoordinator
 from argus_cortex.gpu_broker import BrokerCoordinator, BrokerError
 from argus_cortex.gpu_wire import TenantManifest
@@ -216,6 +216,124 @@ def test_manifest_registered_once() -> None:
         with coordinator.lease(caller="x", min_vram_mb=0):
             pass
     assert [t["tenant"] for t in broker.tenants] == ["argus-darkroom"]
+
+
+def test_manifest_not_registered_on_every_lease_within_the_interval() -> None:
+    broker = FakeBroker()
+    coordinator = _coordinator(broker, manifest=MANIFEST)
+    for _ in range(20):  # a caller taking a lease per request
+        with coordinator.lease(caller="x", min_vram_mb=0):
+            pass
+    assert len(broker.tenants) == 1
+
+
+def _age_registration(coordinator: BrokerCoordinator) -> None:
+    assert coordinator._registered_at is not None
+    coordinator._registered_at -= gpu_broker.REREGISTER_S + 1
+
+
+def test_manifest_registered_again_after_the_interval() -> None:
+    broker = FakeBroker()
+    coordinator = _coordinator(broker, manifest=MANIFEST)
+    with coordinator.lease(caller="x", min_vram_mb=0):
+        pass
+    _age_registration(coordinator)
+    for _ in range(2):
+        with coordinator.lease(caller="x", min_vram_mb=0):
+            pass
+    assert len(broker.tenants) == 2
+
+
+async def test_async_manifest_registered_again_after_the_interval() -> None:
+    broker = FakeBroker()
+    coordinator = _coordinator(broker, manifest=MANIFEST)
+    async with coordinator.alease(caller="x", min_vram_mb=0):
+        pass
+    async with coordinator.alease(caller="x", min_vram_mb=0):
+        pass
+    assert len(broker.tenants) == 1
+    _age_registration(coordinator)
+    async with coordinator.alease(caller="x", min_vram_mb=0):
+        pass
+    assert len(broker.tenants) == 2
+
+
+def test_manifest_registered_again_after_the_broker_was_unreachable() -> None:
+    broker = FakeBroker()
+    coordinator = _coordinator(broker, manifest=MANIFEST)
+    with coordinator.lease(caller="x", min_vram_mb=0):
+        pass
+    broker.down = True  # the broker restarts...
+    with coordinator.lease(caller="x", min_vram_mb=0) as handle:
+        assert handle.via == "fallback"
+    broker.down = False  # ...and comes back with no tenants
+    for _ in range(2):
+        with coordinator.lease(caller="x", min_vram_mb=0) as handle:
+            assert handle.via == "broker"
+    assert len(broker.tenants) == 2
+
+
+async def test_async_manifest_registered_again_after_the_broker_was_unreachable() -> None:
+    broker = FakeBroker()
+    coordinator = _coordinator(broker, manifest=MANIFEST)
+    async with coordinator.alease(caller="x", min_vram_mb=0):
+        pass
+    broker.status_code = 503
+    async with coordinator.alease(caller="x", min_vram_mb=0) as handle:
+        assert handle.via == "fallback"
+    broker.status_code = None
+    async with coordinator.alease(caller="x", min_vram_mb=0) as handle:
+        assert handle.via == "broker"
+    assert len(broker.tenants) == 2
+
+
+def test_manifest_registered_again_when_a_heartbeat_finds_the_lease_forgotten() -> None:
+    broker = FakeBroker(ttl_s=0.06)
+    coordinator = _coordinator(broker, manifest=MANIFEST, ttl_s=0.06)
+    with coordinator.lease(caller="x", min_vram_mb=1):
+        assert _wait_for(lambda: len(broker.beats) >= 1)
+        broker.forget_on_beat = True  # the broker restarted while the lease was held
+        assert _wait_for(lambda: len(broker.requests) == 2)
+    assert len(broker.tenants) == 2
+    assert broker.requests[1]["resume"] == "L1"
+    with coordinator.lease(caller="x", min_vram_mb=1):
+        pass
+    assert len(broker.tenants) == 2  # the beat re-registered; the next lease within the interval doesn't
+
+
+async def test_async_manifest_registered_again_when_a_heartbeat_finds_the_lease_forgotten() -> None:
+    broker = FakeBroker(ttl_s=0.06, forget_on_beat=True)
+    coordinator = _coordinator(broker, manifest=MANIFEST, ttl_s=0.06)
+    async with coordinator.alease(caller="x", min_vram_mb=1):
+        for _ in range(200):
+            if len(broker.requests) == 2:
+                break
+            await asyncio.sleep(0.01)
+    assert broker.requests[1]["resume"] == "L1"
+    assert len(broker.tenants) == 2
+
+
+def test_refused_manifest_is_retried_after_the_interval_not_on_every_lease(caplog: pytest.LogCaptureFixture) -> None:
+    broker = FakeBroker()
+    original = broker._handle
+
+    def refuse_tenants(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/tenants":
+            broker.tenants.append({})
+            return httpx.Response(422, text="bad manifest")
+        return original(request)
+
+    broker._handle = refuse_tenants  # type: ignore[method-assign]
+    coordinator = _coordinator(broker, manifest=MANIFEST)
+    with caplog.at_level(logging.WARNING):
+        for _ in range(3):
+            with coordinator.lease(caller="x", min_vram_mb=0) as handle:
+                assert handle.via == "broker"
+    assert len(broker.tenants) == 1 and "refused tenant manifest" in caplog.text
+    _age_registration(coordinator)
+    with coordinator.lease(caller="x", min_vram_mb=0):
+        pass
+    assert len(broker.tenants) == 2
 
 
 def test_queued_lease_is_polled_until_granted() -> None:
