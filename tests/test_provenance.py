@@ -6,7 +6,14 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from argus_cortex.provenance import CLEARED_KINDS, PROVENANCE_KINDS, Provenance, provenance_schema
+from argus_cortex.provenance import (
+    CLEARED_KINDS,
+    PROVENANCE_KINDS,
+    Provenance,
+    provenance_schema,
+    pseudonymise,
+    subject_ref_of,
+)
 
 SHA = "a" * 64
 
@@ -35,6 +42,24 @@ def test_consented_needs_subject_and_release_hash() -> None:
         Provenance(kind="consented", source="x", license="release", release_sha256=SHA)
     with pytest.raises(ValidationError, match="subject"):
         Provenance(kind="consented", source="x", license="release", subject="Jo")
+
+
+def test_a_subject_ref_must_be_its_own_releases() -> None:
+    p = Provenance(kind="consented", source="x", license="release", subject=f"consent:{SHA}", release_sha256=SHA)
+    assert p.subject == subject_ref_of(SHA)
+    for bad in (f"consent:{'b' * 64}", "consent:", "consent:jo"):
+        with pytest.raises(ValidationError, match="subject ref"):
+            Provenance(kind="consented", source="x", license="release", subject=bad, release_sha256=SHA)
+    with pytest.raises(ValidationError, match="subject ref"):
+        Provenance(kind="stock", source="x", license="CC0-1.0", subject=f"consent:{SHA}")
+
+
+def test_pseudonymise_takes_only_a_consented_source() -> None:
+    p = Provenance(kind="consented", source="session", license="release", subject="Jo", release_sha256=SHA)
+    assert pseudonymise(p).subject == f"consent:{SHA}"
+    assert pseudonymise(p).cleared is True
+    with pytest.raises(ValueError, match="only a consented"):
+        pseudonymise(Provenance(kind="stock", source="x", license="CC0-1.0", subject="Jo"))
 
 
 def test_release_hash_is_a_lowercase_sha256() -> None:

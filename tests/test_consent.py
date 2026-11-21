@@ -16,8 +16,9 @@ from argus_cortex.consent import (
     consent_matches,
     consent_schema,
     consent_valid,
+    subject_ref,
 )
-from argus_cortex.provenance import Provenance
+from argus_cortex.provenance import Provenance, pseudonymise
 
 RELEASE = "a" * 64
 IMG = "b" * 64
@@ -230,6 +231,32 @@ def test_consent_matches_the_release_and_subject_it_names() -> None:
     assert not consent_matches(rec, consented(subject="Someone Else"))
     assert not consent_matches(rec, consented(release_sha256="d" * 64))
     assert not consent_matches(rec, Provenance(kind="synthetic", source="x", license="CC0-1.0"))
+
+
+def test_subject_ref_is_the_release_key_and_names_no_one() -> None:
+    rec = record()
+    assert subject_ref(rec) == "consent:" + RELEASE
+    assert rec.subject not in subject_ref(rec)
+
+
+def test_consent_matches_a_subject_ref_as_well_as_the_name() -> None:
+    rec = record()
+    assert consent_matches(rec, consented(subject=subject_ref(rec)))
+    # The name still matches: the ref is additive.
+    assert consent_matches(rec, consented())
+    # Another release's ref never matches this record.
+    other = "d" * 64
+    assert not consent_matches(rec, consented(subject="consent:" + other, release_sha256=other))
+
+
+def test_a_pseudonymised_provenance_still_matches_its_record() -> None:
+    rec = record()
+    named = consented()
+    anon = pseudonymise(named)
+    assert anon.subject == subject_ref(rec) and rec.subject not in anon.model_dump_json()
+    assert consent_matches(rec, anon)
+    assert anon.model_dump(exclude={"subject"}) == named.model_dump(exclude={"subject"})
+    assert pseudonymise(anon) == anon
 
 
 # --- schema ---------------------------------------------------------------------------------------

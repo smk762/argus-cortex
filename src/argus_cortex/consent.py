@@ -11,6 +11,10 @@ here so every package refuses for the same reasons, in the same words.
   :class:`ConsentVerdict` whose ``reason`` is a closed :data:`ConsentRefusal` code.
 - :func:`consent_matches`: whether a record is the one a ``Provenance`` names (same release, same
   subject). Separate, because curator checks a record with no ``Provenance`` to compare against.
+  The subject matches as the record's name or as its :func:`subject_ref`.
+- :func:`subject_ref`: the opaque id (``consent:<release_sha256>``) that stands for the record's
+  subject wherever the name must not go (manifests, exports, logs).
+  :func:`argus_cortex.provenance.pseudonymise` writes it into a provenance.
 
 A record names a person, so a service never serves one: endpoints return only a verdict. The record
 holds hashes of the signed release and the reference captures, never the documents or any copy of
@@ -26,7 +30,7 @@ from typing import Annotated, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
-from argus_cortex.provenance import SHA256_PATTERN, Provenance
+from argus_cortex.provenance import SHA256_PATTERN, Provenance, subject_ref_of
 from argus_cortex.wire import render_schema
 
 Sha256 = Annotated[str, Field(pattern=SHA256_PATTERN)]
@@ -219,12 +223,21 @@ def consent_valid(
     return ConsentVerdict(ok=True, detail=f"the release covers {use} of the subject's {likeness}")
 
 
+def subject_ref(record: ConsentRecord) -> str:
+    """The opaque id for *record*'s subject: ``consent:<release_sha256>``. It names the release, not the person."""
+    return subject_ref_of(record.release_sha256)
+
+
 def consent_matches(record: ConsentRecord, provenance: Provenance) -> bool:
-    """Whether *record* is the release *provenance* names: a ``consented`` source, same release, same subject."""
+    """Whether *record* is the release *provenance* names: a ``consented`` source, same release, same subject.
+
+    The subject matches as the record's name or as its :func:`subject_ref`; the release must match either way.
+    """
+    subject = provenance.subject.strip()
     return (
         provenance.kind == "consented"
         and provenance.release_sha256 == record.release_sha256
-        and provenance.subject.strip() == record.subject.strip()
+        and subject in (record.subject.strip(), subject_ref(record))
     )
 
 

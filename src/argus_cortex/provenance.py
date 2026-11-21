@@ -12,6 +12,13 @@ Two tiers:
   demo, a published recording or anything commercial. Each states its licence. ``consented`` also
   names its subject and binds the signed release by its sha256, never the document itself.
 
+A ``consented`` subject is either the name as the release gives it, or the opaque **subject ref**
+``consent:<release_sha256>`` (argus-cortex#163). The ref names no one: it is the release's own key,
+which the provenance carries anyway, and unlike a hash of a name it cannot be reversed by guessing
+names. Use the ref for anything that leaves the record holder (manifests, exports, logs):
+:func:`pseudonymise` turns a named provenance into one, :func:`argus_cortex.consent.subject_ref`
+gives a record's, and ``consent_matches`` accepts either form.
+
 ``curated`` is reserved: argus-mask refuses it until it defines what a curated face must prove, so
 it is in the literal but not cleared.
 
@@ -38,6 +45,13 @@ PROVENANCE_KINDS: tuple[ProvenanceKind, ...] = get_args(ProvenanceKind)
 CLEARED_KINDS: frozenset[ProvenanceKind] = frozenset({"stock", "synthetic", "consented"})
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
 GENERATOR_KINDS: frozenset[ProvenanceKind] = frozenset({"synthetic", "personal"})
+# A subject written as ``SUBJECT_REF_PREFIX + release_sha256`` names the release, not the person.
+SUBJECT_REF_PREFIX = "consent:"
+
+
+def subject_ref_of(release_sha256: str) -> str:
+    """The opaque subject ref for the release *release_sha256*: ``consent:<release_sha256>``."""
+    return SUBJECT_REF_PREFIX + release_sha256
 
 
 class Generator(BaseModel):
@@ -64,7 +78,8 @@ class Provenance(BaseModel):
     - ``stock``: a published asset under its licence. ``synthetic``: generated, with no real person
       or owned character going in.
     - ``consented``: a real person's likeness (or an owned character) under a signed release, bound
-      by the release's sha256 (never the document) and the subject as the release names them.
+      by the release's sha256 (never the document) and its subject: the name as the release gives
+      it, or the opaque ref ``consent:<release_sha256>``, which names no one.
     - ``curated``: reserved; not cleared.
 
     Unknown fields are refused, so a misspelt field cannot be dropped in silence (argus-mask#64).
@@ -105,6 +120,11 @@ class Provenance(BaseModel):
             raise ValueError(f"a {self.kind} source states its licence")
         if self.kind == "consented" and not (self.release_sha256 and self.subject.strip()):
             raise ValueError("a consented source names its subject and the sha256 of the signed release")
+        subject = self.subject.strip()
+        if subject.startswith(SUBJECT_REF_PREFIX) and (
+            self.release_sha256 is None or subject != subject_ref_of(self.release_sha256)
+        ):
+            raise ValueError("a subject ref is consent:<release_sha256> of the source's own release")
         if self.generator is not None and self.kind not in GENERATOR_KINDS:
             raise ValueError(f"a {self.kind} source has no generator; only synthetic and personal sources do")
         return self
@@ -114,6 +134,21 @@ class Provenance(BaseModel):
     def cleared(self) -> bool:
         """Whether the source may be shown beyond the user's own screens: a demo, a release, anything public."""
         return self.kind in CLEARED_KINDS
+
+
+def pseudonymise(provenance: Provenance) -> Provenance:
+    """A copy of the ``consented`` *provenance* whose ``subject`` is its release's subject ref, not a name.
+
+    Only ``subject`` changes, and ``consent_matches`` still matches the copy to its record. ``source``,
+    ``license`` and ``notes`` are free text and are kept as written, so a writer that puts a name there
+    must leave it out itself. Raises ``ValueError`` for any other kind: only a ``consented`` source is
+    bound to a person.
+    """
+    if provenance.kind != "consented" or provenance.release_sha256 is None:
+        raise ValueError(f"only a consented source has a subject to pseudonymise, not a {provenance.kind} one")
+    data = provenance.model_dump(exclude={"cleared"})
+    data["subject"] = subject_ref_of(provenance.release_sha256)
+    return Provenance.model_validate(data)
 
 
 PROVENANCE_SCHEMA_TITLE = "argus-cortex provenance"
