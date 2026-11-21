@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`BrokerCoordinator` registers its tenant manifest again after a broker restart.** It posted `POST /tenants` once
+  per process, but argus-iris keeps tenants in memory, so after the broker restarted a long-lived client kept leasing
+  while the broker had lost its manifest (the kinds' target and node defaults, and its row in `/tenants`). The manifest
+  is now posted again every `REREGISTER_S` (300 s), and at once after the broker was unreachable or answered 404 for a
+  lease (a heartbeat or a queued poll: the broker forgot it). A lease per request within the interval still costs no
+  extra call. A 4xx on register is still only logged, and is retried after the interval rather than on every lease.
+
 ## [0.11.0] - 2026-11-20
 
 ### Added

@@ -3,7 +3,8 @@
 A :class:`~argus_cortex.gpu.GpuCoordinator` like the others, so a stage switches to the broker by environment alone
 (``ARGUS_GPU_COORDINATOR=broker``, see :func:`~argus_cortex.gpu.coordinator_from_env`). A lease:
 
-1. registers the tenant manifest once (``POST /tenants``), if one was given;
+1. registers the tenant manifest (``POST /tenants``), if one was given: before the first lease, then again every
+   ``REREGISTER_S`` and after the broker was unreachable or forgot a lease, since the broker keeps tenants in memory;
 2. asks for the lease (``POST /leases``, with a fresh ``request_id`` so the one retry after a lost response is
    idempotent) and, while it is queued, long-polls ``GET /leases/{id}?wait_s=`` until it is
    granted, refused, or the coordinator's ``timeout_s`` runs out (then it cancels the queued request and raises
@@ -64,6 +65,9 @@ DEFAULT_POLL_WAIT_S = 20.0
 DEFAULT_MIN_POLL_S = 0.5
 DEFAULT_REQUEST_TIMEOUT_S = 10.0
 DEFAULT_TTL_S = 60.0
+# The broker keeps tenants in memory, so the manifest is posted again this often (and at once after the broker was
+# unreachable or forgot a lease): a restarted broker would otherwise never learn it from a long-lived client.
+REREGISTER_S = 300.0
 
 
 class BrokerError(RuntimeError):
@@ -121,7 +125,8 @@ class BrokerCoordinator:
     """Leases from the GPU broker at *url*, falling back to *fallback* when it cannot be reached.
 
     *tenant* names the calling service (a slug, e.g. ``argus-darkroom``); *manifest*, if given, is registered with
-    the broker before the first lease. *timeout_s* bounds the whole wait for a grant. *transport* and
+    the broker before the first lease, again every :data:`REREGISTER_S`, and again after the broker was unreachable
+    or forgot a lease (a restart). *timeout_s* bounds the whole wait for a grant. *transport* and
     *async_transport* inject httpx transports (tests).
     """
 
@@ -156,7 +161,7 @@ class BrokerCoordinator:
         self._headers = {"Authorization": f"Bearer {token}"} if token else {}
         self._transport = transport
         self._async_transport = async_transport
-        self._registered = False
+        self._registered_at: float | None = None  # time.monotonic() of the last POST /tenants; None: post it next
         self._register_lock = threading.Lock()
         self._unreachable_warned = False
 
@@ -243,7 +248,26 @@ class BrokerCoordinator:
             via="broker", lease_id=status.lease_id, node=status.node, device=status.device, base_url=status.base_url
         )
 
+    def _needs_register(self) -> bool:
+        if self.manifest is None:
+            return False
+        at = self._registered_at
+        return at is None or time.monotonic() - at >= REREGISTER_S
+
+    def _forget_registration(self) -> None:
+        """Post the manifest again before the next lease: the broker may have restarted and lost it."""
+        self._registered_at = None
+
+    def _note_registered(self, status_code: int) -> None:
+        """Record a POST /tenants answer. A 5xx is unreachable; a 4xx is logged and retried only after the interval."""
+        if status_code >= 500:
+            raise _Unreachable(f"broker answered {status_code} registering the tenant")
+        if status_code >= 400 and self.manifest is not None:
+            _log.warning("GPU broker refused tenant manifest %s (%d)", self.manifest.tenant, status_code)
+        self._registered_at = time.monotonic()
+
     def _note_unreachable(self, exc: BaseException) -> None:
+        self._forget_registration()
         if not self._unreachable_warned:
             _log.warning("GPU broker %s unreachable (%s); using the %r coordinator", self.url, exc, self.fallback.name)
             self._unreachable_warned = True
@@ -335,17 +359,13 @@ class BrokerCoordinator:
             raise _Unreachable(str(exc) or type(exc).__name__) from exc
 
     def _register(self, client: Any) -> None:
-        if self.manifest is None or self._registered:
+        if not self._needs_register():
             return
         with self._register_lock:
-            if self._registered:
+            if not self._needs_register() or self.manifest is None:
                 return
             response = self._send(client.post, "/tenants", json=self.manifest.model_dump(mode="json"))
-            if response.status_code >= 500:
-                raise _Unreachable(f"broker answered {response.status_code} registering the tenant")
-            if response.status_code >= 400:
-                _log.warning("GPU broker refused tenant manifest %s (%d)", self.manifest.tenant, response.status_code)
-            self._registered = True
+            self._note_registered(response.status_code)
 
     def _post_lease(self, client: Any, req: LeaseRequest) -> LeaseStatus:
         response = self._send(
@@ -381,7 +401,9 @@ class BrokerCoordinator:
                 polled = self._parse(response, LeaseStatus)
                 if polled is not None and polled.state == "queued":
                     time.sleep(self._pause_after(started, deadline))
-                if polled is None:  # the broker restarted and lost the queued request: ask again
+                if polled is None:  # the broker restarted and lost the queued request: register and ask again
+                    self._forget_registration()
+                    self._register(client)
                     polled = self._post_lease(client, req.model_copy(update={"wait_s": self._poll_wait(deadline)}))
                 status = polled
         except BaseException as exc:
@@ -395,7 +417,9 @@ class BrokerCoordinator:
     def _beat(self, client: Any, req: LeaseRequest, handle: GpuLease) -> HeartbeatReply | None:
         body = _heartbeat_body(handle)
         reply = self._parse(self._send(client.post, f"/leases/{handle.lease_id}/heartbeat", json=body), HeartbeatReply)
-        if reply is None:  # the broker forgot the lease (restart): re-attach, the work is already running
+        if reply is None:  # the broker forgot the lease (restart): register and re-attach, the work is already running
+            self._forget_registration()
+            self._register(client)
             status = self._post_lease(client, req.model_copy(update={"resume": handle.lease_id, "wait_s": 0.0}))
             _log.info(
                 "GPU broker forgot lease %s; re-attached as %s (%s)", handle.lease_id, status.lease_id, status.state
@@ -500,14 +524,10 @@ class BrokerCoordinator:
             raise _Unreachable(str(exc) or type(exc).__name__) from exc
 
     async def _aregister(self, client: Any) -> None:
-        if self.manifest is None or self._registered:
+        if not self._needs_register() or self.manifest is None:
             return
         response = await self._asend(client.post, "/tenants", json=self.manifest.model_dump(mode="json"))
-        if response.status_code >= 500:
-            raise _Unreachable(f"broker answered {response.status_code} registering the tenant")
-        if response.status_code >= 400:
-            _log.warning("GPU broker refused tenant manifest %s (%d)", self.manifest.tenant, response.status_code)
-        self._registered = True
+        self._note_registered(response.status_code)
 
     async def _apost_lease(self, client: Any, req: LeaseRequest) -> LeaseStatus:
         response = await self._asend(
@@ -542,7 +562,9 @@ class BrokerCoordinator:
                 polled = self._parse(response, LeaseStatus)
                 if polled is not None and polled.state == "queued":
                     await asyncio.sleep(self._pause_after(started, deadline))
-                if polled is None:
+                if polled is None:  # see _acquire
+                    self._forget_registration()
+                    await self._aregister(client)
                     polled = await self._apost_lease(
                         client, req.model_copy(update={"wait_s": self._poll_wait(deadline)})
                     )
@@ -560,7 +582,9 @@ class BrokerCoordinator:
             client.post, f"/leases/{handle.lease_id}/heartbeat", json=body, timeout=self.request_timeout_s
         )
         reply = self._parse(response, HeartbeatReply)
-        if reply is None:
+        if reply is None:  # see _beat
+            self._forget_registration()
+            await self._aregister(client)
             status = await self._apost_lease(client, req.model_copy(update={"resume": handle.lease_id, "wait_s": 0.0}))
             _log.info(
                 "GPU broker forgot lease %s; re-attached as %s (%s)", handle.lease_id, status.lease_id, status.state
