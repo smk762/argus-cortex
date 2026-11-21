@@ -27,6 +27,8 @@ EXTRAS = (
     "starlette",
     "fastapi",
     "PIL",
+    "soundfile",
+    "numpy",
     "pynvml",
     "yaml",
     "libcst",

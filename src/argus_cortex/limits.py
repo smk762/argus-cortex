@@ -14,11 +14,14 @@ Read request bodies, uploads, base64 payloads and images through these instead o
   tries the formats it is given (:data:`DEFAULT_FORMATS`, JPEG/PNG/WEBP, unless the caller opts in to
   more), never EPS, which Pillow hands to Ghostscript. Pillow's own ``MAX_IMAGE_PIXELS`` is a warning
   threshold, not a limit.
+* :func:`open_audio`: checks the format (from the magic bytes), channels, sample rate and duration from
+  the header before any sample is decoded, then decodes at most the duration cap, whatever the header
+  claimed. WAV and FLAC only.
 
 Over a cap raises :class:`TooLarge` (``413`` at a server's edge); malformed input raises
 :class:`BadInput` (``400``). Both are ``ValueError``. Design: ``docs/paved-roads.md``.
 ``read_body``/``read_upload`` take Starlette objects (``[server]``); ``open_image`` needs Pillow
-(``[images]``); ``decode_base64`` is stdlib.
+(``[images]``); ``open_audio`` needs soundfile and numpy (``[audio]``); ``decode_base64`` is stdlib.
 """
 
 from __future__ import annotations
@@ -26,17 +29,22 @@ from __future__ import annotations
 import base64
 import binascii
 import io
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:  # pragma: no cover
+    import numpy as np
     from PIL import Image
 
 __all__ = [
+    "AUDIO_FORMATS",
     "CHUNK",
     "DEFAULT_FORMATS",
+    "DEFAULT_SAMPLE_RATES",
+    "Audio",
     "BadInput",
     "TooLarge",
     "decode_base64",
+    "open_audio",
     "open_image",
     "read_body",
     "read_upload",
@@ -171,3 +179,94 @@ def open_image(
     if w * h > max_pixels:
         raise TooLarge("image", max_pixels, "pixels")
     return img
+
+
+AUDIO_FORMATS: tuple[str, ...] = ("WAV", "FLAC")
+"""The containers :func:`open_audio` reads. Only their magic bytes reach libsndfile."""
+DEFAULT_SAMPLE_RATES: tuple[int, ...] = (8000, 11025, 16000, 22050, 24000, 32000, 44100, 48000)
+"""The sample rates :func:`open_audio` accepts when the caller names none."""
+
+
+class Audio(NamedTuple):
+    """A decoded clip: float32 *samples* (integer PCM scaled to [-1, 1); a float file keeps its values,
+    so clipping past full scale stays visible), shaped ``(frames, channels)``, or ``(frames,)``
+    when downmixed to mono, and its *sample_rate* in Hz."""
+
+    samples: np.ndarray
+    sample_rate: int
+
+    @property
+    def duration(self) -> float:
+        """The clip's length in seconds."""
+        return len(self.samples) / self.sample_rate
+
+
+def _audio_format(data: bytes) -> str | None:
+    if data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        return "WAV"
+    if data[:4] == b"fLaC":
+        return "FLAC"
+    return None
+
+
+def open_audio(
+    data: bytes,
+    *,
+    max_seconds: float = 60.0,
+    max_channels: int = 2,
+    allowed_rates: tuple[int, ...] | None = None,
+    max_bytes: int | None = None,
+    mono: bool = False,
+) -> Audio:
+    """Decode a WAV or FLAC clip after checking its byte size (if given), then its channel count, sample
+    rate and duration from the header, before any sample is decoded.
+
+    The header is not trusted for the length: decoding stops one frame past *max_seconds*, so a header
+    that claims a short clip over a long stream still costs no more than the cap, and a stream longer
+    than the cap is refused. *allowed_rates* defaults to :data:`DEFAULT_SAMPLE_RATES`, which bounds the
+    frames *max_seconds* allows. *mono* averages the channels.
+
+    :class:`TooLarge` for a clip over a cap, :class:`BadInput` for anything that isn't a readable WAV or
+    FLAC clip or whose rate or channel count isn't allowed (a format question, not a size one)."""
+    try:
+        import numpy as np
+        import soundfile as sf
+    except ImportError as exc:  # pragma: no cover
+        raise ImportError("open_audio requires soundfile and numpy: pip install argus-cortex[audio]") from exc
+
+    rates = allowed_rates or DEFAULT_SAMPLE_RATES
+    if max_seconds <= 0 or max_channels < 1:
+        raise ValueError("open_audio: max_seconds must be positive and max_channels at least 1")
+    if max_bytes is not None and len(data) > max_bytes:
+        raise TooLarge("audio", max_bytes)
+    fmt = _audio_format(data)
+    if fmt is None:  # sniffed here so libsndfile's other parsers (MP3, OGG, MAT...) never see the bytes
+        raise BadInput(f"not audio in {', '.join(AUDIO_FORMATS)}")
+    try:
+        with sf.SoundFile(io.BytesIO(data)) as clip:
+            if clip.format not in (fmt, "WAVEX" if fmt == "WAV" else fmt):
+                raise BadInput(f"not audio in {', '.join(AUDIO_FORMATS)}")
+            if clip.channels < 1 or clip.samplerate < 1:
+                raise BadInput("audio has no channels or no sample rate")
+            if clip.channels > max_channels:
+                raise BadInput(f"audio has {clip.channels} channels; at most {max_channels} are allowed")
+            if clip.samplerate not in rates:
+                raise BadInput(f"audio sample rate {clip.samplerate} Hz is not one of {', '.join(map(str, rates))}")
+            cap = int(max_seconds * clip.samplerate)
+            if clip.frames > cap:
+                raise TooLarge(f"audio at {clip.samplerate} Hz", cap, "frames")
+            samples = clip.read(frames=cap + 1, dtype="float32", always_2d=True)
+            rate = clip.samplerate
+    except (BadInput, TooLarge):  # both are ValueError
+        raise
+    except (sf.LibsndfileError, RuntimeError, OSError, ValueError, TypeError, EOFError) as exc:
+        raise BadInput(f"not readable audio in {', '.join(AUDIO_FORMATS)}") from exc
+    if len(samples) > cap:
+        raise TooLarge(f"audio at {rate} Hz", cap, "frames")
+    if len(samples) == 0:
+        raise BadInput("audio has no samples")
+    if not np.isfinite(samples).all():
+        raise BadInput("audio has non-finite samples")
+    if mono:
+        samples = samples.mean(axis=1, dtype=np.float32)
+    return Audio(samples, rate)
