@@ -9,7 +9,7 @@ Marks, lettering and font for the Argus suite. They live in cortex because corte
 | Data | quarry, curator, lens | `#1d5f74` | `#6fb7cc` |
 | Training | forge, proof | `#b33a2a` | `#e57a64` |
 | Apps | atlas, darkroom, mint, survey, mask | `#8f6210` | `#e8b54e` |
-| Foundation | cortex, studio, herald | `#2a4a7a` | `#8eacdc` |
+| Foundation | cortex, studio, herald, scout | `#2a4a7a` | `#8eacdc` |
 
 The suite mark's eye uses the Training red. Ink is `#1c1f22` on light backgrounds and `#e6e8ea` on dark.
 
