@@ -573,6 +573,25 @@ def test_normalize_text() -> None:
     assert normalize_text("Espinàs") != normalize_text("Espinas")  # accents are the caller's policy
 
 
+def test_normalize_text_keeps_combining_marks() -> None:
+    """A mark with no precomposed letter is not alphanumeric on its own, and is still part of the word."""
+    assert normalize_text("हिन्दी") == "हिन्दी"  # vowel signs and the virama stay
+    assert normalize_text("किताब") != normalize_text("कताब")  # so words that differ only by a vowel sign differ
+    assert normalize_text("ไก่") != normalize_text("ไก้")  # Thai tone marks
+    assert normalize_text("q\u0303a") != normalize_text("qa")  # a Latin letter with no precomposed form
+    assert normalize_text("Espin\u0061\u0300s") == normalize_text("Espinàs")  # NFKC still composes what it can
+    assert normalize_text("हिन्दी, भाषा!") == "हिन्दीभाषा"  # spaces and punctuation still go
+
+
+def test_is_number_refuses_an_int_past_the_float_range() -> None:
+    from argus_cortex.moderation._http import is_number
+
+    huge = json.loads("1" + "0" * 400)  # json.loads returns it exactly; math.isfinite alone raises OverflowError
+    assert not is_number(huge) and not is_number(-huge)
+    assert is_number(0) and is_number(10**300) and is_number(0.5)
+    assert not is_number(True) and not is_number(float("nan")) and not is_number(float("inf")) and not is_number("1")
+
+
 def test_ocr_parsing_ignores_malformed_entries() -> None:
     good = {"class": "text", "score": 0.8, "box": [1, 2, 3, 4], "text": "Norwegen."}
     r = ocr.to_result(

@@ -220,6 +220,10 @@ def test_ints_qdrant_refuses_are_hashed_and_bools_refused() -> None:
         mapped = normalise_point_id(bad)
         assert isinstance(mapped, str) and uuid.UUID(mapped)  # a valid id, not one Qdrant rejects
     assert normalise_point_id(-1) != normalise_point_id(1)
+    # nor is a hashed int the point of the string that spells it
+    for bad in (-1, 2**64, 2**64 + 1):
+        assert normalise_point_id(bad) != normalise_point_id(str(bad))
+        assert normalise_point_id(bad) == normalise_point_id(bad)  # stable
     for flag in (True, False):
         with pytest.raises(ValueError, match="bool"):
             normalise_point_id(flag)

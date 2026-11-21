@@ -14,12 +14,14 @@ Run one over a repo's source, then review the diff::
   non-match is refused, so ``fullmatch`` only refuses more) or **REVIEW** (anything else). Revert a
   REVIEW hit to ``.match`` when it *refuses on a match* (``fullmatch`` would loosen it) or parses
   lines that keep their newline (``fullmatch`` would stop matching them).
-  Not handled: patterns imported from another module, f-string patterns. Run the formatter after.
+  Not handled: patterns imported from another module, f-string patterns, and any pattern name the
+  file binds more than once (it may hold another pattern where it is used). Run the formatter after.
 * ``read-upload``: ``await upload.read()`` on an ``UploadFile`` parameter (or an item of a
-  ``list[UploadFile]``) becomes ``await read_upload(upload, MAX_UPLOAD_BYTES)``
+  ``list[UploadFile]``, in a loop or a comprehension) becomes ``await read_upload(upload, MAX_UPLOAD_BYTES)``
   (:mod:`argus_cortex.limits`), adding the import and a ``MAX_UPLOAD_BYTES`` constant when the module
   has none. Mapping ``TooLarge`` to 413 and ``BadInput`` to 400 is left to the caller, and the summary
-  says so.
+  says so. A read it leaves alone is listed as **REVIEW**: ``await x.read()`` where ``x`` isn't a known
+  upload, and an upload's ``read()`` with no ``await`` of its own (``asyncio.gather(*(f.read() for f in files))``).
 
 ``net`` and ``auth`` have no codemod: their local shapes vary too much to rewrite without changing
 behaviour, and the argus-ci suite rules point at the helper instead.

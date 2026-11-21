@@ -443,12 +443,15 @@ class PostgresLineageStore:
         return [(str(a), str(b)) for a, b in rows]
 
     def close(self) -> None:
-        # Mark closed first so a racing/later op raises instead of silently
-        # rebuilding a fresh pool (which would leak connections past shutdown).
-        self._closed = True
-        if self._pool is not None:
-            self._pool.close()
-            self._pool = None
+        # Mark closed so a racing/later op raises instead of silently rebuilding a
+        # fresh pool (which would leak connections past shutdown). Under the lock
+        # _get_pool() builds in: a pool being opened right now is waited for and
+        # closed, not assigned after this returns. The pool is closed outside it.
+        with self._lock:
+            self._closed = True
+            pool, self._pool = self._pool, None
+        if pool is not None:
+            pool.close()
 
 
 def open_lineage_store(config: StoreConfig | None = None) -> LineageStore:

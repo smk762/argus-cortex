@@ -74,21 +74,48 @@ class Report:
 
 
 class _Patterns(cst.CSTVisitor):
-    """Module-level ``NAME = r"^...$"`` and ``NAME = re.compile(r"^...$", flags)``."""
+    """Module-level ``NAME = r"^...$"`` and ``NAME = re.compile(r"^...$", flags)``.
+
+    Only a name the file binds exactly once is known. One bound again anywhere (reassigned, ``+=``, a branch, a
+    tuple target, a walrus, ``global``, a parameter or local of the same name) may hold another pattern where it
+    is used, so it is dropped and its calls are left alone. Call :meth:`finish` after the visit.
+    """
 
     def __init__(self, re_names: set[str]) -> None:
         self.re_names = re_names
         self.strings: dict[str, str] = {}
         self.compiled: dict[str, str] = {}
         self.depth = 0
+        self._bound: dict[str, int] = {}
+        self._via: dict[str, tuple[str, int]] = {}  # NAME = re.compile(OTHER, flags), resolved in finish()
+
+    def _bind(self, target: cst.CSTNode | None, times: int = 1) -> None:
+        if isinstance(target, cst.Name):
+            self._bound[target.value] = self._bound.get(target.value, 0) + times
+        elif isinstance(target, cst.Tuple | cst.List):
+            for element in target.elements:
+                self._bind(element.value)
+        elif isinstance(target, cst.StarredElement):
+            self._bind(target.value)
+
+    def finish(self) -> None:
+        once = {name for name, n in self._bound.items() if n == 1}
+        self.strings = {k: v for k, v in self.strings.items() if k in once}
+        self.compiled = {k: v for k, v in self.compiled.items() if k in once}
+        for name, (pattern_name, flags) in self._via.items():
+            p = self.strings.get(pattern_name)
+            if name in once and p is not None and anchored(p, flags):
+                self.compiled[name] = p
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
+        self._bind(node.name)
         self.depth += 1
 
     def leave_FunctionDef(self, node: cst.FunctionDef) -> None:
         self.depth -= 1
 
     def visit_ClassDef(self, node: cst.ClassDef) -> None:
+        self._bind(node.name)
         self.depth += 1
 
     def leave_ClassDef(self, node: cst.ClassDef) -> None:
@@ -109,18 +136,55 @@ class _Patterns(cst.CSTVisitor):
         ):
             pattern = _arg(value, 0, "pattern")
             p = _string(pattern) if pattern is not None else None
-            if p is None and isinstance(pattern, cst.Name):
-                p = self.strings.get(pattern.value)
             flags = _flags(_arg(value, 1, "flags"), self.re_names)
-            if p is not None and flags is not None and anchored(p, flags):
+            if flags is None:
+                return
+            if p is None and isinstance(pattern, cst.Name):
+                self._via[name] = (pattern.value, flags)
+            elif p is not None and anchored(p, flags):
                 self.compiled[name] = p
 
     def visit_Assign(self, node: cst.Assign) -> None:
+        for t in node.targets:
+            self._bind(t.target)
         if len(node.targets) == 1:
             self._assign(node.targets[0].target, node.value)
 
     def visit_AnnAssign(self, node: cst.AnnAssign) -> None:
+        self._bind(node.target)
         self._assign(node.target, node.value)
+
+    def visit_AugAssign(self, node: cst.AugAssign) -> None:
+        self._bind(node.target)
+
+    def visit_NamedExpr(self, node: cst.NamedExpr) -> None:
+        self._bind(node.target)
+
+    def visit_For(self, node: cst.For) -> None:
+        self._bind(node.target)
+
+    def visit_CompFor(self, node: cst.CompFor) -> None:
+        self._bind(node.target)
+
+    def visit_AsName(self, node: cst.AsName) -> None:  # with/except/import ... as NAME
+        self._bind(node.name)
+
+    def visit_ImportAlias(self, node: cst.ImportAlias) -> None:
+        if node.asname is None:
+            name: cst.BaseExpression = node.name
+            while isinstance(name, cst.Attribute):  # import a.b binds a
+                name = name.value
+            self._bind(name)
+
+    def visit_Param(self, node: cst.Param) -> None:
+        self._bind(node.name)
+
+    def visit_Global(self, node: cst.Global) -> None:
+        for item in node.names:
+            self._bind(item.name, 2)  # rebound from inside a function: never known
+
+    def visit_Del(self, node: cst.Del) -> None:
+        self._bind(node.target, 2)
 
 
 class _Rewrite(cst.CSTTransformer):
@@ -205,6 +269,7 @@ def transform(source: str) -> tuple[str, Report]:
         return source, report
     patterns = _Patterns(re_names)
     module.visit(patterns)
+    patterns.finish()
     wrapper = cst.metadata.MetadataWrapper(module)
     new = wrapper.visit(_Rewrite(patterns, report))
     return new.code, report

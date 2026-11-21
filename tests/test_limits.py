@@ -228,8 +228,24 @@ def test_oversized_base64_bytes_are_refused_before_decoding() -> None:
 def test_a_decompression_bomb_image_is_too_large_not_bad_input() -> None:
     buf = io.BytesIO()
     Image.new("1", (20_000, 10_000)).save(buf, "PNG")  # 200M pixels: over 2x Pillow's MAX_IMAGE_PIXELS
-    with pytest.raises(TooLarge):
-        open_image(buf.getvalue(), max_pixels=10**12)
+    assert 2 * Image.MAX_IMAGE_PIXELS < 20_000 * 10_000
+    with pytest.raises(TooLarge, match="100000000 pixels"):  # Pillow's own check fires first; still TooLarge
+        open_image(buf.getvalue(), max_pixels=100_000_000)
+
+
+def test_max_pixels_above_pillows_own_limit_is_the_limit() -> None:
+    """Pillow refuses past 2 x ``MAX_IMAGE_PIXELS`` whatever the caller allows; ``max_pixels`` decides instead."""
+    buf = io.BytesIO()
+    Image.new("1", (20_000, 10_000)).save(buf, "PNG")  # 200M pixels
+    before = Image.MAX_IMAGE_PIXELS
+    assert 2 * before < 20_000 * 10_000
+    assert open_image(buf.getvalue(), max_pixels=250_000_000).size == (20_000, 10_000)  # a large map tile
+    assert open_image(buf.getvalue(), max_pixels=200_000_000).size == (20_000, 10_000)  # exactly at the cap
+    with pytest.raises(TooLarge, match="199999999 pixels"):
+        open_image(buf.getvalue(), max_pixels=199_999_999)
+    with pytest.raises(BadInput):  # the limit is put back when the open fails, too
+        open_image(b"not an image", max_pixels=10**12)
+    assert before == Image.MAX_IMAGE_PIXELS
 
 
 # ── open_audio ───────────────────────────────────────────────────────────────

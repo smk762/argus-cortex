@@ -71,13 +71,19 @@ class OcrCheckFailed(CheckFailed):
     """One image could not be read by the OCR server."""
 
 
+_MARKS = frozenset({"Mn", "Mc"})  # combining marks: part of the letter they follow
+
+
 def normalize_text(text: str) -> str:
-    """*text* reduced for comparison: NFKC, case-folded, letters and digits only.
+    """*text* reduced for comparison: NFKC, case-folded, letters and digits with their combining marks.
 
     Spaces and punctuation go, because OCR runs words together and drops or adds full stops ("N.Y.Public").
-    Accents stay: "Espinàs" and "Espinas" differ, and deciding they match is the caller's policy.
+    Accents stay: "Espinàs" and "Espinas" differ, and deciding they match is the caller's policy. That covers
+    marks with no precomposed letter too (Devanagari vowel signs and viramas, Thai and Arabic marks), which are
+    not alphanumeric on their own: without them "हिन्दी" would be its bare consonants.
     """
-    return "".join(c for c in unicodedata.normalize("NFKC", text).casefold() if c.isalnum())
+    folded = unicodedata.normalize("NFKC", text).casefold()
+    return "".join(c for c in folded if c.isalnum() or unicodedata.category(c) in _MARKS)
 
 
 def to_result(raw: list) -> OcrResult:
