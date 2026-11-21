@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-21
+
+### Added
+- **Speech in the shared taxonomy (#145).** `TargetProfile.modality` (`Literal["image", "speech"]`, default `image`):
+  every profile written without it reads exactly as before. A speech profile takes a `SpeechCategory` (`voice`,
+  `accent`, `language`, `speaking_style`), kept apart from `TargetCategory` so image code (forge's
+  `dict[TargetCategory, ...]` tables, curator's face rules) never meets one; `target_category` is typed
+  `TargetCategory | SpeechCategory` and a category of the other modality is refused. A speech profile that omits
+  them gets `target_category="voice"` and `target_backend=None` (a TTS family such as `qwen3-tts` or `xtts-v2`, not
+  `sdxl`); `target_style` keeps its type and default and is ignored for speech, so no client's generated
+  type changes shape. Per-clip language and accent labels belong in the stage's manifest rows. `MODALITIES` and
+  `SPEECH_CATEGORIES` list the literals. `taxonomy-schema.json` is regenerated (additive: a new optional field and
+  new enum values).
+- **`limits.open_audio` (#146)**, the paved road for audio, behind a new `[audio]` extra (`soundfile`, `numpy`),
+  imported lazily. `open_audio(data, *, max_seconds=60.0, max_channels=2, allowed_rates=None, max_bytes=None,
+  mono=False) -> Audio`, a `NamedTuple` of float32 `samples` (`(frames, channels)`, or `(frames,)` with `mono=True`)
+  and `sample_rate`, with a `duration` property. WAV and FLAC only, sniffed from the magic bytes so libsndfile's
+  other parsers never see the bytes. Channels, sample rate (`DEFAULT_SAMPLE_RATES`, 8-48 kHz, unless
+  `allowed_rates` names others) and duration are checked from the header before any sample is decoded, then decoding
+  stops one frame past the cap, so a header that understates the length costs no more than the cap. A FLAC that
+  doesn't state its length is refused. Over a cap is `TooLarge`; an unreadable clip, a disallowed rate or channel
+  count, or non-finite samples are `BadInput`.
+
+### Fixed
+- **`BrokerCoordinator` registers its tenant manifest again after a broker restart.** It posted `POST /tenants` once
+  per process, but argus-iris keeps tenants in memory, so after the broker restarted a long-lived client kept leasing
+  while the broker had lost its manifest (the kinds' target and node defaults, and its row in `/tenants`). The manifest
+  is now posted again every `REREGISTER_S` (300 s), and at once after the broker was unreachable or answered 404 for a
+  lease (a heartbeat or a queued poll: the broker forgot it). A lease per request within the interval still costs no
+  extra call. A 4xx on register is still only logged, and is retried after the interval rather than on every lease.
+
 ## [0.11.0] - 2026-11-20
 
 ### Added
@@ -445,7 +476,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/smk762/argus-cortex/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/smk762/argus-cortex/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/smk762/argus-cortex/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/smk762/argus-cortex/compare/v0.8.0...v0.9.0

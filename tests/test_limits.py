@@ -5,13 +5,25 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
+import wave
 
+import numpy as np
 import pytest
+import soundfile as sf
 from hypothesis import given
 from hypothesis import strategies as st
 from PIL import Image
 
-from argus_cortex.limits import BadInput, TooLarge, decode_base64, open_image, read_body, read_upload
+from argus_cortex.limits import (
+    DEFAULT_SAMPLE_RATES,
+    BadInput,
+    TooLarge,
+    decode_base64,
+    open_audio,
+    open_image,
+    read_body,
+    read_upload,
+)
 
 
 class FakeRequest:
@@ -218,3 +230,159 @@ def test_a_decompression_bomb_image_is_too_large_not_bad_input() -> None:
     Image.new("1", (20_000, 10_000)).save(buf, "PNG")  # 200M pixels: over 2x Pillow's MAX_IMAGE_PIXELS
     with pytest.raises(TooLarge):
         open_image(buf.getvalue(), max_pixels=10**12)
+
+
+# ── open_audio ───────────────────────────────────────────────────────────────
+
+
+def wav(seconds: float, rate: int = 16000, channels: int = 1) -> bytes:
+    """A 16-bit PCM WAV written with the stdlib (no soundfile on the writing side)."""
+    frames = int(seconds * rate)
+    tone = (np.sin(np.arange(frames) / 10) * 16000).astype("<i2")
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(channels)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(np.repeat(tone[:, None], channels, axis=1).tobytes())
+    return buf.getvalue()
+
+
+def flac(seconds: float, rate: int = 16000, channels: int = 1) -> bytes:
+    buf = io.BytesIO()
+    sf.write(buf, np.zeros((int(seconds * rate), channels), dtype=np.float32), rate, format="FLAC")
+    return buf.getvalue()
+
+
+def flac_claiming(data: bytes, total_samples: int) -> bytes:
+    """*data* with STREAMINFO's 36-bit total-samples field rewritten (bytes 18..26 hold it, low bits)."""
+    out = bytearray(data)
+    packed = int.from_bytes(out[18:26], "big")
+    out[18:26] = (((packed >> 36) << 36) | total_samples).to_bytes(8, "big")
+    return bytes(out)
+
+
+def test_a_wav_decodes_to_float32_frames_by_channels() -> None:
+    clip = open_audio(wav(1.5, rate=22050, channels=2))
+    assert clip.sample_rate == 22050
+    assert clip.samples.dtype == np.float32
+    assert clip.samples.shape == (33075, 2)
+    assert clip.duration == pytest.approx(1.5)
+    assert np.abs(clip.samples).max() <= 1.0
+    samples, rate = clip  # a NamedTuple: unpacks like soundfile.read
+    assert rate == 22050 and samples is clip.samples
+
+
+def test_a_flac_decodes() -> None:
+    clip = open_audio(flac(2.0, rate=48000))
+    assert (clip.samples.shape, clip.sample_rate) == ((96000, 1), 48000)
+
+
+def test_mono_is_opt_in() -> None:
+    clip = open_audio(wav(1.0, channels=2), mono=True)
+    assert clip.samples.shape == (16000,)
+    assert clip.samples.dtype == np.float32
+
+
+def test_too_many_channels_or_a_rate_not_allowed_is_bad_input() -> None:
+    with pytest.raises(BadInput, match="channels"):
+        open_audio(wav(0.1, channels=3))
+    with pytest.raises(BadInput, match="sample rate"):
+        open_audio(wav(0.1, rate=12345))
+    assert open_audio(wav(0.1, rate=12345), allowed_rates=(12345,)).sample_rate == 12345
+    with pytest.raises(BadInput, match="sample rate"):
+        open_audio(wav(0.1, rate=48000), allowed_rates=(16000,))
+
+
+def test_a_clip_over_the_duration_cap_is_refused_before_decoding(monkeypatch) -> None:
+    def no_decode(*_a, **_k):
+        raise AssertionError("decoded a clip the header already put over the cap")
+
+    monkeypatch.setattr(sf.SoundFile, "read", no_decode)
+    with pytest.raises(TooLarge):
+        open_audio(wav(3.0), max_seconds=2)
+    # A FLAC header claiming 1000 s over a 3 s stream: refused on the claim alone.
+    with pytest.raises(TooLarge):
+        open_audio(flac_claiming(flac(3.0), 16000 * 1000), max_seconds=60)
+    # A FLAC that doesn't state its length (0 = unknown) can't be bounded from the header.
+    with pytest.raises(TooLarge):
+        open_audio(flac_claiming(flac(3.0), 0), max_seconds=60)
+
+
+def test_an_oversized_header_claiming_a_short_duration_decodes_only_the_claim() -> None:
+    """A WAV whose data chunk says 0.5 s over 30 s of samples: only the claimed frames are decoded,
+    never the stream, and the cap still holds for what was returned."""
+    data = bytearray(wav(30.0))
+    assert data[36:40] == b"data"
+    data[40:44] = (16000 * 2 // 2).to_bytes(4, "little")  # 0.5 s of 16-bit mono
+    clip = open_audio(bytes(data), max_seconds=1)
+    assert clip.samples.shape == (8000, 1)
+    # The same lie in FLAC's STREAMINFO.
+    clip = open_audio(flac_claiming(flac(30.0), 8000), max_seconds=1)
+    assert len(clip.samples) == 8000
+
+
+def test_decoding_stops_at_the_cap_whatever_the_header_said(monkeypatch) -> None:
+    """If a header understates the frames and the decoder hands back more, the cap still holds."""
+    real = sf.SoundFile.read
+
+    def overlong(self, frames=-1, **kw):
+        out = real(self, frames=frames, **kw)
+        assert frames == 16000 + 1, "read past one frame beyond the cap"
+        return np.concatenate([out, out])
+
+    monkeypatch.setattr(sf.SoundFile, "read", overlong)
+    with pytest.raises(TooLarge):
+        open_audio(wav(0.75), max_seconds=1)
+
+
+def test_byte_cap_format_and_garbage() -> None:
+    with pytest.raises(TooLarge):
+        open_audio(wav(1.0), max_bytes=1000)
+    for bad in (b"", b"not audio", png(4, 4), b"RIFF\x00\x00\x00\x00WAVEgarbage", b"fLaC" + b"\x00" * 64):
+        with pytest.raises(BadInput):
+            open_audio(bad)
+    ogg = io.BytesIO()
+    sf.write(ogg, np.zeros((1600, 1), dtype=np.float32), 16000, format="OGG")
+    with pytest.raises(BadInput, match="WAV, FLAC"):  # sniffed out before libsndfile sees it
+        open_audio(ogg.getvalue())
+
+
+def test_non_finite_samples_are_bad_input() -> None:
+    buf = io.BytesIO()
+    sf.write(buf, np.array([[0.0], [np.nan], [np.inf]], dtype=np.float32), 16000, format="WAV", subtype="FLOAT")
+    with pytest.raises(BadInput, match="non-finite"):
+        open_audio(buf.getvalue())
+
+
+def test_caller_limits_must_make_sense() -> None:
+    with pytest.raises(ValueError, match="max_seconds"):
+        open_audio(wav(0.1), max_seconds=0)
+    with pytest.raises(ValueError, match="max_channels"):
+        open_audio(wav(0.1), max_channels=0)
+
+
+@given(
+    st.sampled_from([b"", b"RIFF\x24\x00\x00\x00WAVE", b"fLaC"]),
+    st.binary(max_size=600),
+    st.floats(0.01, 5),
+)
+def test_hostile_audio_is_only_ever_refused_or_within_the_caps(prefix: bytes, body: bytes, max_seconds: float) -> None:
+    try:
+        clip = open_audio(prefix + body, max_seconds=max_seconds, max_channels=2)
+    except (BadInput, TooLarge):
+        return
+    assert clip.sample_rate in DEFAULT_SAMPLE_RATES
+    assert clip.samples.ndim == 2 and 1 <= clip.samples.shape[1] <= 2
+    assert len(clip.samples) <= int(max_seconds * clip.sample_rate)
+    assert np.isfinite(clip.samples).all()
+
+
+@given(st.binary(max_size=400), st.integers(0, 4000))
+def test_a_real_header_over_hostile_samples_is_refused_or_within_the_caps(tail: bytes, cut: int) -> None:
+    data = wav(0.25)[:44] + tail if cut % 2 else flac(0.25)[: 42 + cut % 200] + tail
+    try:
+        clip = open_audio(data, max_seconds=0.5)
+    except (BadInput, TooLarge):
+        return
+    assert len(clip.samples) <= 8000
