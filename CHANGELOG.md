@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `release.yml` also sends `cortex-released` to argus-puppet, whose image (CPU and `-gpu`) installs cortex from its
+  pyproject range and rebuilds its newest release on it. `SUITE_DISPATCH_TOKEN` needs Contents: read & write on
+  argus-puppet too, or the dispatch job fails.
+
 ## [0.13.0] - 2026-11-21
 
 ### Added
