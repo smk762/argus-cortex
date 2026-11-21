@@ -35,6 +35,9 @@ server = ["starlette>=0.37"]
 # Pillow, for SingGuardClient's downscaling of large images
 # (argus_cortex.moderation.singguard), imported only when it downscales.
 images = ["pillow>=10.0"]
+# soundfile (libsndfile, bundled in its wheels) and numpy, for argus_cortex.limits.open_audio
+# reading WAV/FLAC clips; imported only there.
+audio = ["soundfile>=0.12", "numpy>=1.24"]
 # NVML (nvidia-ml-py, imported as pynvml), for argus_cortex.gpu's free-VRAM probe;
 # imported only when probed. Without it the lease skips the VRAM wait.
 gpu = ["nvidia-ml-py>=12.535"]
@@ -60,6 +63,8 @@ dev = [
     "httpx>=0.27",
     "httpx2>=2.7",
     "pillow>=10.0",
+    "soundfile>=0.12",
+    "numpy>=1.24",
     "nvidia-ml-py>=12.535",
     "pyyaml>=6.0",
     "libcst>=1.4",

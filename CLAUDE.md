@@ -30,7 +30,7 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 | Ship a breaking change to a committed schema in anything but a major release (and, for a `*_version` schema, a new wire major) | `test_schema_compat::test_committed_schemas_break_only_in_a_major_release`: compares each `*-schema.json` with the last `v*` tag; the release is the newest CHANGELOG heading |
 | Import NudeNet (AGPL-3.0): HTTP only | ruff `TID251` banned-api (`pyproject.toml`); `test_rules::test_cortex_never_imports_a_stage_or_nudenet` |
 | Import a stage from cortex | `test_rules::test_cortex_never_imports_a_stage_or_nudenet` |
-| `import argus_cortex` pulling in an optional extra (httpx, starlette, psycopg, qdrant, minio, Pillow, NVML, PyYAML) | `test_rules::test_top_level_import_loads_no_optional_extra` |
+| `import argus_cortex` pulling in an optional extra (httpx, starlette, psycopg, qdrant, minio, Pillow, soundfile, numpy, NVML, PyYAML) | `test_rules::test_top_level_import_loads_no_optional_extra` |
 | Widen `DEFAULT_EXPOSED_LABELS` (every stage's NSFW numbers move with it) | `test_moderation::test_exposed_set_is_the_five_exposed_nudity_classes` |
 | A policy text without its illegal-rule letters, or the reverse | `test_policies::test_every_policy_has_a_text_and_an_illegal_table` |
 | Treat an unchecked moderation result as safe: a failed check raises `CheckFailed`, never returns a result | `test_moderation::test_nudenet_bad_responses_are_failures`, `::test_unreachable_server_is_a_failed_check`, `::test_nudenet_info_unreachable_is_a_failed_check` |
@@ -43,6 +43,8 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 | The broker client failing closed on a transport error, 5xx or missing route | `test_gpu_broker::test_unreachable_broker_falls_back`, `::test_broker_without_url_falls_back_with_a_warning` |
 | `WriteGuard` buffering a stream (it stays pure ASGI, not `BaseHTTPMiddleware`) | `test_server::test_guard_leaves_streaming_responses_intact` |
 | `env_flag` silently disabling a protection on a typo | `test_server::test_env_flag_unrecognised_warns_and_is_off` |
+| A `TargetProfile` pairing a category with the other modality (an image profile carrying `voice`, a speech one `identity`) | `test_taxonomy::test_category_and_modality_must_match` |
+| `open_audio` decoding past its duration cap, whatever the header claims | `test_limits::test_an_oversized_header_claiming_a_short_duration_decodes_only_the_claim`, `::test_decoding_stops_at_the_cap_whatever_the_header_said`, `::test_a_clip_over_the_duration_cap_is_refused_before_decoding` |
 | `safe_join` returning the caller's spelling instead of the resolved path it checked | `test_fs::test_paths_under_the_root_are_returned_resolved` |
 | A "skip pinning" option in `net`: an allow-listed host is still pinned | `test_net::test_an_allow_listed_host_is_still_pinned`, `::test_dns_rebinding_after_the_check_changes_nothing` |
 | `net` forwarding `Authorization` or `Cookie` across a redirect to another origin, or inflating a body past `max_bytes` | `test_net::test_credentials_are_not_forwarded_to_another_origin`, `::test_a_compression_bomb_is_never_inflated_past_the_cap` |

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Speech in the shared taxonomy (#145).** `TargetProfile.modality` (`Literal["image", "speech"]`, default `image`):
+  every profile written without it reads exactly as before. A speech profile takes a `SpeechCategory` (`voice`,
+  `accent`, `language`, `speaking_style`), kept apart from `TargetCategory` so image code (forge's
+  `dict[TargetCategory, ...]` tables, curator's face rules) never meets one; `target_category` is typed
+  `TargetCategory | SpeechCategory` and a category of the other modality is refused. A speech profile that omits
+  them gets `target_category="voice"` and `target_backend=None` (a TTS family such as `qwen3-tts` or `xtts-v2`, not
+  `sdxl`); `target_style` keeps its type and default and is ignored for speech, so no client's generated
+  type changes shape. Per-clip language and accent labels belong in the stage's manifest rows. `MODALITIES` and
+  `SPEECH_CATEGORIES` list the literals. `taxonomy-schema.json` is regenerated (additive: a new optional field and
+  new enum values).
+- **`limits.open_audio` (#146)**, the paved road for audio, behind a new `[audio]` extra (`soundfile`, `numpy`),
+  imported lazily. `open_audio(data, *, max_seconds=60.0, max_channels=2, allowed_rates=None, max_bytes=None,
+  mono=False) -> Audio`, a `NamedTuple` of float32 `samples` (`(frames, channels)`, or `(frames,)` with `mono=True`)
+  and `sample_rate`, with a `duration` property. WAV and FLAC only, sniffed from the magic bytes so libsndfile's
+  other parsers never see the bytes. Channels, sample rate (`DEFAULT_SAMPLE_RATES`, 8-48 kHz, unless
+  `allowed_rates` names others) and duration are checked from the header before any sample is decoded, then decoding
+  stops one frame past the cap, so a header that understates the length costs no more than the cap. A FLAC that
+  doesn't state its length is refused. Over a cap is `TooLarge`; an unreadable clip, a disallowed rate or channel
+  count, or non-finite samples are `BadInput`.
+
 ### Fixed
 - **`BrokerCoordinator` registers its tenant manifest again after a broker restart.** It posted `POST /tenants` once
   per process, but argus-iris keeps tenants in memory, so after the broker restarted a long-lived client kept leasing
