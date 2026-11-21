@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-21
+
+### Added
+- **Opaque subject ref for consented sources (#163).** `consent.subject_ref(record)` returns
+  `consent:<release_sha256>`, an id for the record's subject that names no one: it is the release's own key, and
+  unlike a hash of a name it can't be reversed by guessing names. A `consented` `Provenance.subject` may now be the
+  name as the release gives it or that ref. A subject starting with `consent:` must be the ref of the source's own
+  `release_sha256`, otherwise it is refused. `consent_matches` accepts either form and still requires the release
+  to match. `provenance.pseudonymise(provenance)` returns a consented provenance with its subject swapped for the
+  ref (`ValueError` for any other kind). Use it for anything that leaves the record holder, such as manifests,
+  exports and logs; argus-curator's consented face-set manifests will. `provenance.subject_ref_of(release_sha256)`
+  and `SUBJECT_REF_PREFIX` are the building blocks. This is additive: a name-bearing provenance validates and
+  matches as before, and `provenance-schema.json` changes only in its description.
+
 ## [0.12.0] - 2026-11-21
 
 ### Added
@@ -476,7 +490,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/smk762/argus-cortex/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/smk762/argus-cortex/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/smk762/argus-cortex/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/smk762/argus-cortex/compare/v0.9.0...v0.10.0
