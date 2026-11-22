@@ -12,18 +12,20 @@ A package supplies its own version constant and field name (``proof_version``,
 * :func:`check_version` — the major-compatibility gate;
 * :func:`make_versioned_base` — a Pydantic base that stamps + checks the field;
 * :func:`render_schema` — the canonical committed-schema string, so the
-  ``schema`` / ``schema --check`` CLI is identical everywhere.
+  ``schema`` / ``schema --check`` CLI is identical everywhere;
+* :func:`sync_schema` — that CLI's body: write the schema, or check the committed one.
 """
 
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from pydantic import BaseModel, model_validator
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
+    from pathlib import Path
 
 
 class VersionError(RuntimeError):
@@ -105,3 +107,27 @@ def render_schema(models: Iterable[type[BaseModel]], *, title: str) -> str:
     can never disagree about formatting.
     """
     return json.dumps(wire_schema(models, title=title), indent=2, sort_keys=True) + "\n"
+
+
+class SchemaSync(NamedTuple):
+    """What :func:`sync_schema` did: ``ok`` is false only when a check found the committed schema stale."""
+
+    ok: bool
+    message: str
+
+
+def sync_schema(rendered: str, path: Path, *, check: bool = False, command: str) -> SchemaSync:
+    """Write *rendered* to *path*, or with *check* compare it with the schema committed there.
+
+    The body of every stage's ``schema`` / ``schema --check`` command. *command* regenerates the file
+    (``"argus-mask schema"``) and is named in the stale message. A missing file is stale. The caller prints
+    ``message``, to stderr and exiting 1 when not ``ok``.
+    """
+    if check:
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        if existing != rendered:
+            return SchemaSync(False, f"{path} is stale: run `{command}` and commit the result.")
+        return SchemaSync(True, f"{path} is up to date.")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(rendered, encoding="utf-8")
+    return SchemaSync(True, f"Wrote wire schema -> {path}")

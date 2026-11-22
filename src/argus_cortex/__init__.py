@@ -78,11 +78,13 @@ from argus_cortex.store import (
 from argus_cortex.taxonomy import TargetCategory, TargetProfile, TargetStyle, taxonomy_schema
 from argus_cortex.timestamps import utc_now_iso
 from argus_cortex.wire import (
+    SchemaSync,
     VersionError,
     check_version,
     make_versioned_base,
     render_schema,
     schema_major,
+    sync_schema,
     wire_schema,
 )
 from argus_cortex.xmp import (
@@ -128,6 +130,8 @@ __all__ = [
     "make_versioned_base",
     "render_schema",
     "schema_major",
+    "sync_schema",
+    "SchemaSync",
     "wire_schema",
     # xmp sidecars
     "XmpData",
