@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `argus_cortex.hashing.sha256_hex(data)` (also `argus_cortex.sha256_hex`): the sha256 hex digest the stages record
   and compare, so they stop each defining their own copy. Standard library only. `content_key()` now calls it and
   returns the same value as before.
+- `argus_cortex.timestamps.utc_now_iso(timespec="seconds")` (also `argus_cortex.utc_now_iso`): the current UTC
+  time as ISO 8601 with a `+00:00` offset, for the `created_at` / `started_at` stamps the stages each defined.
+  `timespec="auto"` keeps a bare `isoformat()`'s microseconds.
 
 ### Changed
 - `release.yml` also sends `cortex-released` to argus-puppet, whose image (CPU and `-gpu`) installs cortex from its
