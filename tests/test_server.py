@@ -207,7 +207,7 @@ def test_cross_site_refuse_blocks_dns_rebinding() -> None:
     assert resp.status_code == 403
 
 
-@pytest.mark.parametrize("host", ["127.0.0.1:8100", "192.168.1.5:8100", "[::1]:8100", "localhost:8100"])
+@pytest.mark.parametrize("host", ["127.0.0.1:8100", "192.168.200.5:8100", "[::1]:8100", "localhost:8100"])
 def test_cross_site_refuse_allows_same_host_by_address(host: str) -> None:
     """An IP literal or localhost Host cannot come from a rebound name, so it needs no allow-list."""
     client = TestClient(_app(cross_site_refuse([])), base_url=f"http://{host}")

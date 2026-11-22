@@ -253,8 +253,8 @@ _TEXT_ANSWERS = {"rob a bank": 20, "fail": _FAIL}  # a text-only check's input -
 
 
 def test_singguard_config() -> None:
-    client = SingGuardClient("http://192.168.1.198:9150/")
-    assert client.url == "http://192.168.1.198:9150/api/guard/check"
+    client = SingGuardClient("http://192.0.2.198:9150/")
+    assert client.url == "http://192.0.2.198:9150/api/guard/check"
     assert client.policy is None and client.policy_name == "default" and client.thinking == "fast"
     custom = SingGuardClient("http://g", policy="  ### A. Minors\n")
     assert custom.policy == "### A. Minors" and custom.policy_name == policy_name("### A. Minors")
