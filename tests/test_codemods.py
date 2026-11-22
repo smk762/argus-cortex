@@ -128,6 +128,20 @@ def test_a_pattern_name_bound_more_than_once_is_left_alone(rebinding: str, first
     assert fullmatch.transform(code)[0] == code
 
 
+def test_a_pattern_name_captured_by_a_match_case_is_left_alone() -> None:
+    cases = [
+        "case PAT:\n        pass",
+        "case [1, *PAT]:\n        pass",
+        "case {**PAT}:\n        pass",
+        "case int() as PAT:\n        pass",
+    ]
+    codes = [
+        f'import re\nPAT = re.compile(r"^a$")\nmatch x:\n    {case}\n\ndef f(v):\n    return PAT.match(v)\n'
+        for case in cases
+    ]
+    assert [fullmatch.transform(code)[0] for code in codes] == codes
+
+
 def test_a_rebound_pattern_string_is_left_alone() -> None:
     code = 'import re\nP = r"^a$"\nP += "|b"\nX = re.compile(P)\n\ndef f(v):\n    return re.match(P, v) or X.match(v)\n'
     assert fullmatch.transform(code)[0] == code
@@ -240,6 +254,64 @@ def test_a_nested_function_sees_the_enclosing_uploads() -> None:
     assert "return await other.read()" in new  # the inner parameter is not the upload
     assert report.rewritten == ["line 3: await file.read()"]
     assert report.review == ["line 6: await other.read() (other is not a known UploadFile)"]
+
+
+@pytest.mark.parametrize(
+    "rebinding",
+    [
+        "file = open_stream()",
+        "file: Reader = open_stream()",
+        "file += 1",
+        "if (file := open_stream()):\n        pass",
+        "for file in streams:\n        pass",
+        "for i, file in enumerate(streams):\n        pass",
+        "async with session.get(url) as file:\n        pass",
+        "try:\n        pass\n    except Exception as file:\n        pass",
+    ],
+)
+def test_a_rebound_upload_name_is_no_longer_an_upload(rebinding: str) -> None:
+    """After the name is bound to something else, its read is not an upload read: reviewed, never rewritten."""
+    code = f"async def f(file: UploadFile, streams):\n    {rebinding}\n    return await file.read()\n"
+    new, report = read_upload.transform(code)
+    assert (new, report.rewritten) == (code, [])
+    assert [r.split(": ", 1)[1] for r in report.review] == ["await file.read() (file is not a known UploadFile)"]
+
+
+def test_an_upload_reassigned_to_a_file_handle_is_not_rewritten() -> None:
+    code = "async def f(file: UploadFile, path):\n    file = open(path, 'rb')\n    return await file.read()\n"
+    new, report = read_upload.transform(code)
+    assert (new, report.rewritten) == (code, [])
+
+
+def test_a_read_in_the_rebinding_value_is_still_the_upload() -> None:
+    code = "async def f(file: UploadFile):\n    file = await file.read()\n    return file\n"
+    new, report = read_upload.transform(code)
+    assert "file = await read_upload(file, MAX_UPLOAD_BYTES)" in new and report.rewritten == [
+        "line 2: await file.read()"
+    ]
+
+
+def test_an_upload_annotated_local_is_an_upload() -> None:
+    code = "async def f(form):\n    file: UploadFile = form['file']\n    return await file.read()\n"
+    assert "return await read_upload(file, MAX_UPLOAD_BYTES)" in read_upload.transform(code)[0]
+
+
+@pytest.mark.parametrize(
+    "comprehension",
+    ["[f for f in files]", "{f for f in files}", "{i: f for i, f in enumerate(files)}", "list(f for f in files)"],
+)
+def test_comprehension_targets_do_not_outlive_the_comprehension(comprehension: str) -> None:
+    code = f"async def g(files: list[UploadFile]):\n    all_ = {comprehension}\n    f = open_stream()\n    return await f.read()\n"
+    code2 = f"async def g(files: list[UploadFile], f):\n    all_ = {comprehension}\n    return await f.read()\n"
+    results = [read_upload.transform(c) for c in (code, code2)]
+    assert [(new, report.rewritten) for new, report in results] == [(code, []), (code2, [])]
+
+
+def test_a_comprehension_target_shadows_an_upload_only_inside_it() -> None:
+    code = "async def g(f: UploadFile, others):\n    xs = [await f.read() for f in others]\n    return await f.read()\n"
+    new, report = read_upload.transform(code)
+    assert report.rewritten == ["line 3: await f.read()"]
+    assert report.review == ["line 2: await f.read() (f is not a known UploadFile)"]
 
 
 def test_reads_it_cannot_rewrite_are_listed_for_review(tmp_path, capsys) -> None:
