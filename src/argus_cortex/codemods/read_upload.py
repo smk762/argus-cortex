@@ -63,6 +63,7 @@ class _Rewrite(cst.CSTTransformer):
     def __init__(self, report: Report) -> None:
         self.report = report
         self.scopes: list[tuple[set[str], set[str]]] = []  # (uploads, lists of uploads) per function
+        self._comp_pushed: list[bool] = []  # whether each open comprehension pushed a scope
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
         # A nested function (a helper, a closure) still sees the enclosing function's uploads,
@@ -88,32 +89,105 @@ class _Rewrite(cst.CSTTransformer):
         self.scopes.pop()
         return updated
 
+    def _unbind(self, target: cst.CSTNode | None) -> None:
+        """A name bound to something else (assigned, ``with ... as``, a loop target) is no longer an upload."""
+        if not self.scopes:
+            return
+        if isinstance(target, cst.Name):
+            for names in self.scopes[-1]:
+                names.discard(target.value)
+        elif isinstance(target, cst.Tuple | cst.List):
+            for element in target.elements:
+                self._unbind(element.value)
+        elif isinstance(target, cst.StarredElement):
+            self._unbind(target.value)
+
+    # Unbound on the way out, so a read in the value (``data = await file.read()``) still sees the upload.
+    def leave_Assign(self, original: cst.Assign, updated: cst.Assign) -> cst.Assign:
+        for t in original.targets:
+            self._unbind(t.target)
+        return updated
+
+    def leave_AnnAssign(self, original: cst.AnnAssign, updated: cst.AnnAssign) -> cst.AnnAssign:
+        self._unbind(original.target)
+        if self.scopes and isinstance(original.target, cst.Name):  # file: UploadFile = ...
+            uploads, lists = self.scopes[-1]
+            if _is_upload(original.annotation.annotation):
+                uploads.add(original.target.value)
+            elif _is_upload_list(original.annotation.annotation):
+                lists.add(original.target.value)
+        return updated
+
+    def leave_AugAssign(self, original: cst.AugAssign, updated: cst.AugAssign) -> cst.AugAssign:
+        self._unbind(original.target)
+        return updated
+
+    def leave_NamedExpr(self, original: cst.NamedExpr, updated: cst.NamedExpr) -> cst.BaseExpression:
+        self._unbind(original.target)
+        return updated
+
+    def leave_WithItem(self, original: cst.WithItem, updated: cst.WithItem) -> cst.WithItem:
+        if original.asname is not None:
+            self._unbind(original.asname.name)
+        return updated
+
+    def visit_ExceptHandler(self, node: cst.ExceptHandler) -> None:
+        if node.name is not None:
+            self._unbind(node.name.name)
+
     def visit_For(self, node: cst.For) -> None:
         self._loop(node.iter, node.target)
 
     def _comprehension(self, node: cst.BaseComp) -> None:
+        # A comprehension's targets are its own: they don't outlive it, so it gets a scope of its own.
+        pushed = bool(self.scopes)
+        self._comp_pushed.append(pushed)
+        if pushed:
+            uploads, lists = self.scopes[-1]
+            self.scopes.append((set(uploads), set(lists)))
         # The element is visited before its ``for`` clauses, so read the clauses here, on the way in.
         clause: cst.CompFor | None = node.for_in  # type: ignore[attr-defined]
         while clause is not None:
             self._loop(clause.iter, clause.target)
             clause = clause.inner_for_in
 
+    def _leave_comprehension(self) -> None:
+        if self._comp_pushed.pop():
+            self.scopes.pop()
+
     def visit_ListComp(self, node: cst.ListComp) -> None:
         self._comprehension(node)
+
+    def leave_ListComp(self, original: cst.ListComp, updated: cst.ListComp) -> cst.BaseExpression:
+        self._leave_comprehension()
+        return updated
 
     def visit_SetComp(self, node: cst.SetComp) -> None:
         self._comprehension(node)
 
+    def leave_SetComp(self, original: cst.SetComp, updated: cst.SetComp) -> cst.BaseExpression:
+        self._leave_comprehension()
+        return updated
+
     def visit_DictComp(self, node: cst.DictComp) -> None:
         self._comprehension(node)
 
+    def leave_DictComp(self, original: cst.DictComp, updated: cst.DictComp) -> cst.BaseExpression:
+        self._leave_comprehension()
+        return updated
+
     def visit_GeneratorExp(self, node: cst.GeneratorExp) -> None:
         self._comprehension(node)
+
+    def leave_GeneratorExp(self, original: cst.GeneratorExp, updated: cst.GeneratorExp) -> cst.BaseExpression:
+        self._leave_comprehension()
+        return updated
 
     def _loop(self, it: cst.BaseExpression, target: cst.BaseExpression) -> None:
         # for f in files:  /  for i, f in enumerate(files):  (a statement or a comprehension clause)
         if not self.scopes:
             return
+        self._unbind(target)  # for file in other_things: rebinds file, whatever it was
         uploads, lists = self.scopes[-1]
         if isinstance(it, cst.Name) and it.value in lists and isinstance(target, cst.Name):
             uploads.add(target.value)
