@@ -76,6 +76,7 @@ from argus_cortex.store import (
     open_vector_store,
 )
 from argus_cortex.taxonomy import TargetCategory, TargetProfile, TargetStyle, taxonomy_schema
+from argus_cortex.timestamps import utc_now_iso
 from argus_cortex.wire import (
     VersionError,
     check_version,
@@ -180,4 +181,6 @@ __all__ = [
     "content_key",
     # hashing
     "sha256_hex",
+    # timestamps
+    "utc_now_iso",
 ]
