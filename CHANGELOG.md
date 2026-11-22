@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `argus_cortex.hashing.sha256_hex(data)` (also `argus_cortex.sha256_hex`): the sha256 hex digest the stages record
+  and compare, so they stop each defining their own copy. Standard library only. `content_key()` now calls it and
+  returns the same value as before.
+
 ### Changed
 - `release.yml` also sends `cortex-released` to argus-puppet, whose image (CPU and `-gpu`) installs cortex from its
   pyproject range and rebuilds its newest release on it. `SUITE_DISPATCH_TOKEN` needs Contents: read & write on
