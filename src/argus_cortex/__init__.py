@@ -34,6 +34,7 @@ from argus_cortex.consent import (
     consent_schema,
     consent_valid,
 )
+from argus_cortex.hashing import sha256_hex
 from argus_cortex.moderation import (
     CheckFailed,
     GuardResult,
@@ -177,4 +178,6 @@ __all__ = [
     "S3BlobStore",
     "open_blob_store",
     "content_key",
+    # hashing
+    "sha256_hex",
 ]
