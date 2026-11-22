@@ -77,7 +77,7 @@ class _Patterns(cst.CSTVisitor):
     """Module-level ``NAME = r"^...$"`` and ``NAME = re.compile(r"^...$", flags)``.
 
     Only a name the file binds exactly once is known. One bound again anywhere (reassigned, ``+=``, a branch, a
-    tuple target, a walrus, ``global``, a parameter or local of the same name) may hold another pattern where it
+    tuple target, a walrus, a ``match`` capture, ``global``, a parameter or local of the same name) may hold another pattern where it
     is used, so it is dropped and its calls are left alone. Call :meth:`finish` after the visit.
     """
 
@@ -168,6 +168,15 @@ class _Patterns(cst.CSTVisitor):
 
     def visit_AsName(self, node: cst.AsName) -> None:  # with/except/import ... as NAME
         self._bind(node.name)
+
+    def visit_MatchAs(self, node: cst.MatchAs) -> None:  # case NAME: / case ... as NAME:
+        self._bind(node.name)
+
+    def visit_MatchStar(self, node: cst.MatchStar) -> None:  # case [*NAME]:
+        self._bind(node.name)
+
+    def visit_MatchMapping(self, node: cst.MatchMapping) -> None:  # case {**NAME}:
+        self._bind(node.rest)
 
     def visit_ImportAlias(self, node: cst.ImportAlias) -> None:
         if node.asname is None:

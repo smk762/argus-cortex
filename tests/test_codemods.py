@@ -128,6 +128,20 @@ def test_a_pattern_name_bound_more_than_once_is_left_alone(rebinding: str, first
     assert fullmatch.transform(code)[0] == code
 
 
+def test_a_pattern_name_captured_by_a_match_case_is_left_alone() -> None:
+    cases = [
+        "case PAT:\n        pass",
+        "case [1, *PAT]:\n        pass",
+        "case {**PAT}:\n        pass",
+        "case int() as PAT:\n        pass",
+    ]
+    codes = [
+        f'import re\nPAT = re.compile(r"^a$")\nmatch x:\n    {case}\n\ndef f(v):\n    return PAT.match(v)\n'
+        for case in cases
+    ]
+    assert [fullmatch.transform(code)[0] for code in codes] == codes
+
+
 def test_a_rebound_pattern_string_is_left_alone() -> None:
     code = 'import re\nP = r"^a$"\nP += "|b"\nX = re.compile(P)\n\ndef f(v):\n    return re.match(P, v) or X.match(v)\n'
     assert fullmatch.transform(code)[0] == code
