@@ -237,6 +237,16 @@ def test_other_spellings_of_a_uuid_do_not_alias_the_canonical_key() -> None:
     assert normalise_point_id(uid) == uid
 
 
+def test_a_uuid_key_never_lands_on_a_hashed_keys_point() -> None:
+    """The literal UUID5 a string key hashes to is a distinct key, so it gets its own point."""
+    hashed = normalise_point_id("cap-1")
+    assert normalise_point_id(str(hashed)) != hashed
+    assert normalise_point_id(str(normalise_point_id(-1))) != normalise_point_id(-1)
+    assert normalise_point_id(str(hashed)) == normalise_point_id(str(hashed))  # stable
+    uid4, uid1 = str(uuid.uuid4()), "a8098c1a-f86e-11da-bd1a-00112444be1e"  # other versions still pass through
+    assert (normalise_point_id(uid4), normalise_point_id(uid1)) == (uid4, uid1)
+
+
 def test_a_grpc_failure_is_a_store_error() -> None:
     grpc = pytest.importorskip("grpc")
 
