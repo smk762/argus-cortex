@@ -26,7 +26,7 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 
 | Never | Enforced by |
 |---|---|
-| Change `taxonomy.py`, `provenance.py`, `consent.py` or `gpu_wire.py` without `make schema` in the same commit | `test_taxonomy::test_committed_schema_matches_taxonomy`, `test_provenance::test_committed_schema_matches_provenance`, `test_consent::test_committed_schema_matches_consent`, `test_gpu_wire::test_committed_schema_is_current` |
+| Change `taxonomy.py`, `provenance.py`, `consent.py`, `gpu_wire.py` or `service.py` without `make schema` in the same commit | `test_taxonomy::test_committed_schema_matches_taxonomy`, `test_provenance::test_committed_schema_matches_provenance`, `test_consent::test_committed_schema_matches_consent`, `test_gpu_wire::test_committed_schema_is_current`, `test_service::test_committed_schema_is_current`, `test_peers::test_committed_directory_schema_is_current` |
 | Ship a breaking change to a committed schema in anything but a major release (and, for a `*_version` schema, a new wire major) | `test_schema_compat::test_committed_schemas_break_only_in_a_major_release`: compares each `*-schema.json` with the last `v*` tag; the release is the newest CHANGELOG heading |
 | Import NudeNet (AGPL-3.0): HTTP only | ruff `TID251` banned-api (`pyproject.toml`); `test_rules::test_cortex_never_imports_a_stage_or_nudenet` |
 | Import a stage from cortex | `test_rules::test_cortex_never_imports_a_stage_or_nudenet` |
@@ -45,9 +45,24 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 | `env_flag` silently disabling a protection on a typo | `test_server::test_env_flag_unrecognised_warns_and_is_off` |
 | A `TargetProfile` pairing a category with the other modality (an image profile carrying `voice`, a speech one `identity`) | `test_taxonomy::test_category_and_modality_must_match` |
 | `open_audio` decoding past its duration cap, whatever the header claims | `test_limits::test_an_oversized_header_claiming_a_short_duration_decodes_only_the_claim`, `::test_decoding_stops_at_the_cap_whatever_the_header_said`, `::test_a_clip_over_the_duration_cap_is_refused_before_decoding` |
-| `safe_join` returning the caller's spelling instead of the resolved path it checked | `test_fs::test_paths_under_the_root_are_returned_resolved` |
+| `safe_join` returning the caller's spelling instead of the resolved path it checked, or anything through a symlink loop | `test_fs::test_paths_under_the_root_are_returned_resolved`, `::test_a_path_through_a_symlink_loop_is_refused` |
 | A "skip pinning" option in `net`: an allow-listed host is still pinned | `test_net::test_an_allow_listed_host_is_still_pinned`, `::test_dns_rebinding_after_the_check_changes_nothing` |
 | `net` forwarding `Authorization` or `Cookie` across a redirect to another origin, or inflating a body past `max_bytes` | `test_net::test_credentials_are_not_forwarded_to_another_origin`, `::test_a_compression_bomb_is_never_inflated_past_the_cap` |
+| The suite file being read when someone else can write it, or read it (unless root owns it) | `test_settings::test_a_file_others_can_read_or_write_is_not_read`, `::test_root_owned_read_only_mount_is_accepted_but_never_a_writable_one`, `::test_a_file_owned_by_another_user_is_not_read` |
+| The suite file overriding a variable set in the process environment | `test_settings::test_the_environment_wins_and_blank_falls_through` |
+| `settings` printing or logging a value (names and line numbers only) | `test_settings::test_show_names_variables_and_never_a_value`, `::test_a_bad_line_is_reported_by_number_never_by_content` |
+| `settings.apply()` setting `PATH`, `LD_*`, `DYLD_*` or `PYTHON*` from a file | `test_settings::test_apply_fills_only_what_is_unset_and_never_loader_variables` |
+| `peers` skipping a malformed URL (it raises `PeerRefused`), or echoing the value | `test_peers::test_a_bad_url_is_refused_not_skipped_and_never_echoed` |
+| `ServiceHealth` and `ResidentHealth` sharing a field name (one body must be both) | `test_service::test_one_body_is_both_a_service_and_a_resident_health` |
+| A `/health` body carrying a credential, or a failed check's exception message (it can hold a URL, host or path) | `test_service::test_a_check_detail_never_carries_url_credentials`, `::test_a_check_that_raises_reports_its_type_and_never_its_message` |
+| `/health` answering 5xx because a dependency failed (that is `degraded`, `200`), or a check or `extra` taking the route down | `test_service::test_checks_decide_ok_or_degraded_and_both_answer_200`, `::test_a_slow_check_times_out_instead_of_holding_the_route`, `::test_a_broken_extra_never_takes_the_route_down` |
+| `extra` replacing one of `ServiceHealth`'s own fields | `test_service::test_extra_adds_resident_fields_and_never_replaces_the_contracts_own` |
+| `build` or `peer` read from the suite file (they describe one container) | `test_service::test_build_and_peer_come_from_this_process_never_the_suite_file` |
+| Rename an `argus.*` discovery label (compose files and iris's agents carry them) | `test_service::test_the_label_names_are_pinned` |
+| Peer discovery without a caller token, sending the token anywhere but the configured directory, or logging it | `test_peers::test_no_token_means_no_discovery`, `::test_a_directory_that_cannot_answer_is_not_found_never_an_error` (the redirect case), `::test_an_unreachable_directory_is_not_found` |
+| Peer discovery raising because the directory is down or wrong, or taking an entry for another peer or one with credentials | `test_peers::test_a_directory_that_cannot_answer_is_not_found_never_an_error`, `::test_only_a_usable_entry_for_this_peer_is_taken` |
+| A discovered peer turning into "not configured" when a later lookup fails (a guard would switch off) | `test_peers::test_a_peer_found_once_is_not_unfound_when_the_directory_fails` |
+| The directory overriding a variable, or being asked when `discover` is not set | `test_peers::test_a_variable_wins_over_the_directory_and_off_stops_before_it`, `::test_discovery_is_opt_in_and_asks_with_the_caller_token` |
 | `bearer()` leaving a route open when its token is unset, unless the route passes `open_when_unset=True` | `test_auth::test_unset_token_closes_the_route`, `::test_open_when_unset_is_explicit_and_logged` |
 
 ## Facts the code doesn't make obvious
@@ -55,7 +70,8 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 [README.md](README.md) is the source of truth for what each module does; read it before changing one.
 
 - **Contracts owned elsewhere.** argus-mask owns the meaning of `provenance` and `consent` fields, and argus-iris serves
-  `gpu_wire`: change them only in step with that repo. `gpu_wire` stays additive within a major. Replies ignore unknown
+  `gpu_wire` and the directory models in `service` (`PeerLookup`, `DirectoryEntry`, `EntryHealth`): change them only in
+  step with that repo. `gpu_wire` stays additive within a major. Replies ignore unknown
   fields, but manifests forbid them, so a new manifest field needs the schema regenerated and iris bumped.
 - **GPU lease lock.** `LeaseCoordinator` takes a host-wide `flock`, then waits for NVML free VRAM, so tenants outside
   the lock (ComfyUI, Ollama) are counted. The lock file must be on a volume every GPU container mounts: a per-container
@@ -65,6 +81,11 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 - **Blob identity** is the content's sha256 (`content_key()` == `source_asset.sha256`): storage, dedup and the lineage
   join share it.
 - Register `WriteGuard` *before* `CORSMiddleware`.
+- **Read settings through `argus_cortex.settings.get`, not `os.environ`**, so the suite file works for every variable
+  cortex reads. The exceptions are a variable whose blank value means something (`ARGUS_GPU_ADMIN_TOKEN_ENV`) and
+  one that describes a single container (`ARGUS_BUILD`, `ARGUS_PEER`). Tests
+  never see a developer's suite file: `tests/conftest.py` sets `ARGUS_ENV_FILE=off`. Use made-up variable names in
+  tests, because a real one may be exported in the shell and a failed assert would print it.
 - `net`'s tests fake DNS (`resolve=`) and the network (`transport=`). The Hypothesis tests in `test_fs.py`,
   `test_net.py` and `test_limits.py` are the hostile-input spec: keep them passing when you change a rule.
 - **Codemods** (`src/argus_cortex/codemods/`, the `[codemods]` extra) are dev tools. Nothing in the library imports them

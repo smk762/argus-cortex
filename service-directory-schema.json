@@ -1,0 +1,291 @@
+{
+  "$defs": {
+    "DependencyCheck": {
+      "description": "How one thing a service depends on is doing. Unknown fields are ignored, so a reader accepts a later 1.x.",
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Short and human-readable. Never a token; credentials in a URL are removed, and it is cut to 200 characters.",
+          "title": "Detail"
+        },
+        "latency_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latency Ms"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "required": {
+          "default": true,
+          "description": "A failed required check makes the service degraded. Others are reported and nothing more.",
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "title": "DependencyCheck",
+      "type": "object"
+    },
+    "DirectoryEntry": {
+      "description": "One place a peer runs: a container labelled ``argus.peer`` on a node, or a peer the directory's config names.\n\n``url`` is where callers reach it: for a labelled container, the node agent's host and the container's\npublished port, never a host anyone supplied. Null means not reachable, and ``reason`` says why.",
+      "properties": {
+        "container": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Container"
+        },
+        "health": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EntryHealth"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "health_path": {
+          "default": "/health",
+          "maxLength": 200,
+          "pattern": "^/\\S*$",
+          "title": "Health Path",
+          "type": "string"
+        },
+        "node": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Node"
+        },
+        "origin": {
+          "description": "How the directory knows it: label (a container) or config.",
+          "title": "Origin",
+          "type": "string"
+        },
+        "peer": {
+          "maxLength": 100,
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+          "title": "Peer",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "running": {
+          "default": true,
+          "title": "Running",
+          "type": "boolean"
+        },
+        "service": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The argus.service label, else what its health says.",
+          "title": "Service"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "peer",
+        "origin"
+      ],
+      "title": "DirectoryEntry",
+      "type": "object"
+    },
+    "EntryHealth": {
+      "description": "What the directory last read from an entry's health route.\n\nIn full when the body was a :class:`ServiceHealth` (``contract``), and as up or ``down`` from the HTTP status\notherwise. ``down`` exists here and not in :class:`ServiceHealth`: it is what a reader says of a service that\ndid not answer.",
+      "properties": {
+        "capabilities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "checked_at": {
+          "format": "date-time",
+          "title": "Checked At",
+          "type": "string"
+        },
+        "checks": {
+          "additionalProperties": {
+            "$ref": "#/$defs/DependencyCheck"
+          },
+          "title": "Checks",
+          "type": "object"
+        },
+        "contract": {
+          "default": false,
+          "description": "The body was a ServiceHealth.",
+          "title": "Contract",
+          "type": "boolean"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "http_status": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Null: no answer.",
+          "title": "Http Status"
+        },
+        "service": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Service"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "degraded",
+            "starting",
+            "down"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "wire": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Wire",
+          "type": "object"
+        }
+      },
+      "required": [
+        "checked_at",
+        "status"
+      ],
+      "title": "EntryHealth",
+      "type": "object"
+    },
+    "PeerLookup": {
+      "description": "``GET /directory/{peer}`` on argus-iris: where callers reach *peer*, best first.\n\nUnknown fields are ignored and ``directory_version`` defaults to 1.0, so a reader accepts a later 1.x and a\ndirectory that does not send the version yet.",
+      "properties": {
+        "directory_version": {
+          "default": "1.0",
+          "title": "Directory Version",
+          "type": "string"
+        },
+        "peer": {
+          "maxLength": 100,
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+          "title": "Peer",
+          "type": "string"
+        },
+        "urls": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/DirectoryEntry"
+          },
+          "title": "Urls",
+          "type": "array"
+        }
+      },
+      "required": [
+        "peer"
+      ],
+      "title": "PeerLookup",
+      "type": "object"
+    }
+  },
+  "title": "Argus service directory"
+}

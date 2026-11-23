@@ -9,7 +9,7 @@ Marks, lettering and font for the Argus suite. They live in cortex because corte
 | Data | quarry, curator, lens | `#1d5f74` | `#6fb7cc` |
 | Training | forge, proof | `#b33a2a` | `#e57a64` |
 | Apps | atlas, darkroom, mint, survey, mask | `#8f6210` | `#e8b54e` |
-| Foundation | cortex, studio, herald, scout | `#2a4a7a` | `#8eacdc` |
+| Foundation | cortex, studio, herald, scout, iris | `#2a4a7a` | `#8eacdc` |
 
 The suite mark's eye uses the Training red. Ink is `#1c1f22` on light backgrounds and `#e6e8ea` on dark.
 
@@ -28,7 +28,7 @@ The suite mark's eye uses the Training red. Ink is `#1c1f22` on light background
 | `sheet.html` | The identity sheet: every mark proofed at 16–128 px on light and dark, the construction rules, and the candidates that were considered. **Source of truth.** |
 | `tools/panoptes.py` | Regenerates everything above from `sheet.html`. |
 
-Demos and UIs use their package's mark: Lightbox uses lens, Cull uses curator, Realms uses atlas, Safelight uses darkroom, Assay uses mint, Sightline uses survey, and Studio uses the suite mark.
+Demos and UIs use their package's mark: Lightbox uses lens, Cull uses curator, Realms uses atlas, Safelight uses darkroom, Assay uses mint, Sightline uses survey, the iris dashboard uses iris, and Studio uses the suite mark.
 
 ## README header
 
@@ -55,6 +55,7 @@ Each UI uses its package's set. Studio uses the suite set. Every UI is a Next.js
 | argus-assay | `packages/mint/favicon/` | `web/src/app/` |
 | argus-sightline | `packages/survey/favicon/` | `src/app/` |
 | atlas-realms | `packages/atlas/favicon/` | its static root, with `<link rel="icon">` tags |
+| argus-iris dashboard | `packages/iris/favicon/` | `src/argus_iris/ui/` (plain static files, no build step), with `<link rel="icon">` tags |
 
 `icon-192.png` and `icon-512.png` are for a web app manifest, if a UI has one.
 

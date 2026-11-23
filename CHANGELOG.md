@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-23
+
+### Added
+- **`argus_cortex.service`: one health contract for every service** (#210, part of #212).
+  - `ServiceHealth` (`service_version` 1.0, committed `service-health-schema.json`): `service`, `version`, `status`
+    (`ok`, `degraded`, `starting`), `started_at`, `wire`, `capabilities`, `checks` (`DependencyCheck`), `read_only`,
+    `build`, `peer`. It allows extra fields and shares no field name with `ResidentHealth`, so one body is both.
+  - `install_health(app, service=...)` serves it on a Starlette or FastAPI app: `200` for `ok` and `degraded`, `503`
+    for `starting`. Dependency checks are cached (10 s), time-bounded (2 s) and refreshed by one request at a time;
+    `GET /health?checks=0` skips them. `extra` adds a service's own fields and never replaces the contract's. A
+    failed check reports the exception's type only, and URL credentials are removed from a `detail`.
+  - `build_info_text()`, `metrics_route()` and `build_info_collector()` (new `[metrics]` extra, `prometheus-client`)
+    give the `argus_build_info` gauge.
+  - Discovery labels for compose files: `argus.peer`, `argus.service`, `argus.health`, `argus.port` (`PEER_LABEL`
+    and the others). `ARGUS_BUILD` and `ARGUS_PEER` supply `build` and `peer`, from the process environment only.
+- **Peer discovery** (#207, part of #212). `peers.resolve_peer(..., discover=True)` and `peer_url(..., discover=True)`
+  ask argus-iris's directory (`GET /directory/<peer>` at `ARGUS_GPU_BROKER_URL`) after the variables and before the
+  default; `aresolve_peer()` and `apeer_url()` are the async forms. It is used only when `ARGUS_GPU_BROKER_TOKEN` is
+  set, answers are cached (60 s; a miss 15 s), and a directory that cannot answer is "not found", never an error. A
+  peer found once is kept if a later lookup fails. A discovered `Peer` has `source == "broker"`. Needs `[remote]`.
+- `service.PeerLookup`, `DirectoryEntry` and `EntryHealth` (`directory_version` 1.0, committed
+  `service-directory-schema.json`): the directory's reply, with the field names argus-iris already serves.
+- `peers.PEER_NAME_PATTERN`: the pattern a peer name matches, which `ServiceHealth.peer` shares.
+- **`LookAlike` on `Provenance`** (argus-mask#176): optional `lookalike` (`who`, `at`, `how`, `found`) for a
+  public look-alike check. Derived `demo_ready` is true only when the source is cleared and has one. The committed
+  schema lists `demo_ready` for readers but does not require it (additive since v0.14).
+- **`argus_cortex.settings`: one owner-only suite file** for the settings every Argus service on a host shares
+  (`ARGUS_ENV_FILE`, else `~/.config/argus/suite.env`, else `/etc/argus/suite.env`). `get(name)` reads the process
+  environment, then the file; `source(name)` says which; `environ` is the same as a mapping; `apply()` copies the
+  file's values into `os.environ` where a variable is unset (never `PATH`, `LD_*`, `DYLD_*`, `PYTHON*`). The file is
+  read only when it belongs to this user or root and is not writable by anyone else, nor readable by them unless
+  root owns it; otherwise it is ignored with a warning. Values are never logged. `python -m argus_cortex.settings`
+  shows the file in use and the names it sets, and `--init` creates one with mode 600. Standard library only.
+- **`argus_cortex.peers`: one name per peer.** `peer_url(name, *env, default=None)` and `resolve_peer()` return a
+  stage's own variable, else the suite-wide `ARGUS_<PEER>_URL` (`peer_env()`), else the default. `off` opts a
+  service out. A value that is not an absolute `http(s)` URL raises `PeerRefused`, naming the variable only.
+
+### Changed
+- `gpu.coordinator_from_env()`, `StoreConfig.from_env()`, `auth.bearer()` and `server.env_flag()` read through
+  `settings`, so each also finds its variable in the suite file when the environment does not set it. With no suite
+  file nothing changes, except that `StoreConfig.from_env()` now strips surrounding whitespace and treats a
+  whitespace-only value as unset. A service that must not use a suite-wide broker sets `ARGUS_GPU_COORDINATOR=none`.
+  `ARGUS_GPU_ADMIN_TOKEN_ENV` is still read from the environment only, since its empty value means "send none".
+
+### Security
+- `fs.safe_join` and `fs.is_within` no longer accept a path that goes through a symlink loop. Resolution stopped at
+  the loop and returned the rest of the path as written, so with a loop under the root, `loop/../link` came back as
+  an unfollowed `link`: a symlink that points outside the root was returned instead of refused. A path that does not
+  resolve to itself is now refused ("could not be resolved"). Paths without a loop are unaffected.
+
 ## [0.15.0] - 2026-11-23
 
 ### Added
@@ -574,7 +624,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/smk762/argus-cortex/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/smk762/argus-cortex/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/smk762/argus-cortex/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/smk762/argus-cortex/compare/v0.12.0...v0.13.0

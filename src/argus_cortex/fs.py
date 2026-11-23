@@ -37,6 +37,19 @@ def _refuse(label: str, why: str) -> PathRefused:
     return PathRefused(f"{label}: {why}")
 
 
+def _resolve(path: Path) -> Path:
+    """*path* with every symlink followed, or ``OSError`` when that cannot be finished.
+
+    ``Path.resolve(strict=False)`` stops at a symlink loop and returns the rest of the path as written, so
+    ``loop/../link`` came back as an unfollowed ``link`` that could point anywhere. A resolved path resolves to
+    itself; one that does not is refused.
+    """
+    resolved = path.resolve(strict=False)
+    if resolved.resolve(strict=False) != resolved:
+        raise OSError(f"{path.name!r} does not resolve to a fixed path (a symlink loop?)")
+    return resolved
+
+
 def safe_join(
     root: str | os.PathLike[str],
     user_path: str | os.PathLike[str],
@@ -70,8 +83,8 @@ def safe_join(
     if candidate.is_absolute() and not allow_absolute:
         raise _refuse(label, "must be relative")
     try:
-        base = Path(root).resolve(strict=False)
-        resolved = (base / candidate).resolve(strict=False)
+        base = _resolve(Path(root))
+        resolved = _resolve(base / candidate)
     except (OSError, RuntimeError, ValueError) as exc:
         raise _refuse(label, "could not be resolved") from exc
     if resolved == base:
@@ -86,8 +99,8 @@ def safe_join(
 def is_within(root: str | os.PathLike[str], path: str | os.PathLike[str]) -> bool:
     """Whether *path* resolves to *root* or somewhere under it. Never raises."""
     try:
-        base = Path(root).resolve(strict=False)
-        p = Path(path).resolve(strict=False)
+        base = _resolve(Path(root))
+        p = _resolve(Path(path))
     except (OSError, RuntimeError, ValueError):
         return False
     return p == base or p.is_relative_to(base)
