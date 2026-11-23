@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-23
+
 ### Added
 - `argus_cortex.hashing.sha256_hex(data)` (also `argus_cortex.sha256_hex`): the sha256 hex digest the stages record
   and compare, so they stop each defining their own copy. Standard library only. `content_key()` now calls it and
@@ -533,7 +535,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/smk762/argus-cortex/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/smk762/argus-cortex/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/smk762/argus-cortex/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/smk762/argus-cortex/compare/v0.10.0...v0.11.0
