@@ -50,7 +50,7 @@ from typing import Annotated, Any, Literal, get_args
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from argus_cortex.gpu_wire import Slug
+from argus_cortex.gpu_wire import RoutePath, Slug
 from argus_cortex.peers import PEER_NAME_PATTERN
 from argus_cortex.wire import make_versioned_base, render_schema
 
@@ -62,13 +62,18 @@ __all__ = [
     "PORT_LABEL",
     "SERVICE_LABEL",
     "SERVICE_VERSION",
+    "DIRECTORY_VERSION",
     "DependencyCheck",
+    "DirectoryEntry",
+    "EntryHealth",
+    "PeerLookup",
     "ServiceHealth",
     "ServiceStatus",
     "build_info_collector",
     "build_info_text",
     "install_health",
     "metrics_route",
+    "service_directory_schema",
     "service_health_schema",
 ]
 
@@ -167,6 +172,84 @@ class ServiceHealth(ServiceVersioned):
 def service_health_schema() -> str:
     """The committed ``service-health-schema.json`` (``make schema`` regenerates it; a test fails when it is stale)."""
     return render_schema([ServiceHealth], title=SERVICE_SCHEMA_TITLE)
+
+
+# ── the directory: where a peer is ───────────────────────────────────────────────────────────────────────────────
+
+DIRECTORY_VERSION = "1.0"
+DIRECTORY_MAJORS = ("1",)
+DIRECTORY_SCHEMA_TITLE = "Argus service directory"
+
+DirectoryStatus = Literal["ok", "degraded", "starting", "down"]
+
+
+class EntryHealth(BaseModel):
+    """What the directory last read from an entry's health route.
+
+    In full when the body was a :class:`ServiceHealth` (``contract``), and as up or ``down`` from the HTTP status
+    otherwise. ``down`` exists here and not in :class:`ServiceHealth`: it is what a reader says of a service that
+    did not answer.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    checked_at: AwareDatetime
+    status: DirectoryStatus
+    http_status: int | None = Field(None, description="Null: no answer.")
+    contract: bool = Field(False, description="The body was a ServiceHealth.")
+    service: str | None = None
+    version: str | None = None
+    wire: dict[str, str] = Field(default_factory=dict)
+    capabilities: tuple[str, ...] = ()
+    checks: dict[str, DependencyCheck] = Field(default_factory=dict)
+    error: str | None = Field(None, max_length=_DETAIL_MAX)
+
+
+class DirectoryEntry(BaseModel):
+    """One place a peer runs: a container labelled ``argus.peer`` on a node, or a peer the directory's config names.
+
+    ``url`` is where callers reach it: for a labelled container, the node agent's host and the container's
+    published port, never a host anyone supplied. Null means not reachable, and ``reason`` says why.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    peer: PeerName
+    origin: str = Field(description="How the directory knows it: label (a container) or config.")
+    service: str | None = Field(None, description="The argus.service label, else what its health says.")
+    node: str | None = None
+    container: str | None = None
+    running: bool = True
+    url: str | None = None
+    reason: str | None = None
+    health_path: RoutePath = "/health"
+    health: EntryHealth | None = None
+
+
+DirectoryVersioned = make_versioned_base(
+    "directory_version", DIRECTORY_VERSION, DIRECTORY_MAJORS, label="service directory", class_name="DirectoryVersioned"
+)
+
+
+class PeerLookup(DirectoryVersioned):
+    """``GET /directory/{peer}`` on argus-iris: where callers reach *peer*, best first.
+
+    Unknown fields are ignored and ``directory_version`` defaults to 1.0, so a reader accepts a later 1.x and a
+    directory that does not send the version yet.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    peer: PeerName
+    urls: tuple[DirectoryEntry, ...] = ()
+
+
+DIRECTORY_MODELS: tuple[type[BaseModel], ...] = (PeerLookup, DirectoryEntry)
+
+
+def service_directory_schema() -> str:
+    """The committed ``service-directory-schema.json`` (``make schema``; a test fails when it is stale)."""
+    return render_schema(DIRECTORY_MODELS, title=DIRECTORY_SCHEMA_TITLE)
 
 
 # ── identity and the build-info gauge ────────────────────────────────────────────────────────────────────────────

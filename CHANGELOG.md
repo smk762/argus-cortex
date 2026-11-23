@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     give the `argus_build_info` gauge.
   - Discovery labels for compose files: `argus.peer`, `argus.service`, `argus.health`, `argus.port` (`PEER_LABEL`
     and the others). `ARGUS_BUILD` and `ARGUS_PEER` supply `build` and `peer`, from the process environment only.
+- **Peer discovery** (#207, part of #212). `peers.resolve_peer(..., discover=True)` and `peer_url(..., discover=True)`
+  ask argus-iris's directory (`GET /directory/<peer>` at `ARGUS_GPU_BROKER_URL`) after the variables and before the
+  default; `aresolve_peer()` and `apeer_url()` are the async forms. It is used only when `ARGUS_GPU_BROKER_TOKEN` is
+  set, answers are cached (60 s; a miss 15 s), and a directory that cannot answer is "not found", never an error. A
+  peer found once is kept if a later lookup fails. A discovered `Peer` has `source == "broker"`. Needs `[remote]`.
+- `service.PeerLookup`, `DirectoryEntry` and `EntryHealth` (`directory_version` 1.0, committed
+  `service-directory-schema.json`): the directory's reply, with the field names argus-iris already serves.
 - `peers.PEER_NAME_PATTERN`: the pattern a peer name matches, which `ServiceHealth.peer` shares.
 - **`LookAlike` on `Provenance`** (argus-mask#176): optional `lookalike` (`who`, `at`, `how`, `found`) for a
   public look-alike check. Derived `demo_ready` is true only when the source is cleared and has one. The committed

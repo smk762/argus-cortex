@@ -20,8 +20,8 @@ format:  ## Ruff autoformat + autofix
 test:  ## Run the test suite
 	$(UV) run --no-sync pytest --tb=short -q
 
-schema:  ## Regenerate the committed taxonomy, provenance, consent, gpu-lease, gpu-tenant, gpu-resident and service-health schemas
-	$(UV) run --no-sync python -c "from pathlib import Path; from argus_cortex.taxonomy import taxonomy_schema; from argus_cortex.provenance import provenance_schema; from argus_cortex.consent import consent_schema; from argus_cortex.gpu_wire import lease_schema, tenant_schema, resident_schema; from argus_cortex.service import service_health_schema; [Path(f).write_text(r(), encoding='utf-8') for f, r in (('taxonomy-schema.json', taxonomy_schema), ('provenance-schema.json', provenance_schema), ('consent-schema.json', consent_schema), ('gpu-lease-schema.json', lease_schema), ('gpu-tenant-schema.json', tenant_schema), ('gpu-resident-schema.json', resident_schema), ('service-health-schema.json', service_health_schema))]"
+schema:  ## Regenerate the committed taxonomy, provenance, consent, gpu-lease, gpu-tenant, gpu-resident, service-health and service-directory schemas
+	$(UV) run --no-sync python -c "from pathlib import Path; from argus_cortex.taxonomy import taxonomy_schema; from argus_cortex.provenance import provenance_schema; from argus_cortex.consent import consent_schema; from argus_cortex.gpu_wire import lease_schema, tenant_schema, resident_schema; from argus_cortex.service import service_health_schema, service_directory_schema; [Path(f).write_text(r(), encoding='utf-8') for f, r in (('taxonomy-schema.json', taxonomy_schema), ('provenance-schema.json', provenance_schema), ('consent-schema.json', consent_schema), ('gpu-lease-schema.json', lease_schema), ('gpu-tenant-schema.json', tenant_schema), ('gpu-resident-schema.json', resident_schema), ('service-health-schema.json', service_health_schema), ('service-directory-schema.json', service_directory_schema))]"
 
 build:  ## Build sdist + wheel
 	$(UV) build

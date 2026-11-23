@@ -26,7 +26,7 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 
 | Never | Enforced by |
 |---|---|
-| Change `taxonomy.py`, `provenance.py`, `consent.py`, `gpu_wire.py` or `service.py` without `make schema` in the same commit | `test_taxonomy::test_committed_schema_matches_taxonomy`, `test_provenance::test_committed_schema_matches_provenance`, `test_consent::test_committed_schema_matches_consent`, `test_gpu_wire::test_committed_schema_is_current`, `test_service::test_committed_schema_is_current` |
+| Change `taxonomy.py`, `provenance.py`, `consent.py`, `gpu_wire.py` or `service.py` without `make schema` in the same commit | `test_taxonomy::test_committed_schema_matches_taxonomy`, `test_provenance::test_committed_schema_matches_provenance`, `test_consent::test_committed_schema_matches_consent`, `test_gpu_wire::test_committed_schema_is_current`, `test_service::test_committed_schema_is_current`, `test_peers::test_committed_directory_schema_is_current` |
 | Ship a breaking change to a committed schema in anything but a major release (and, for a `*_version` schema, a new wire major) | `test_schema_compat::test_committed_schemas_break_only_in_a_major_release`: compares each `*-schema.json` with the last `v*` tag; the release is the newest CHANGELOG heading |
 | Import NudeNet (AGPL-3.0): HTTP only | ruff `TID251` banned-api (`pyproject.toml`); `test_rules::test_cortex_never_imports_a_stage_or_nudenet` |
 | Import a stage from cortex | `test_rules::test_cortex_never_imports_a_stage_or_nudenet` |
@@ -59,6 +59,10 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 | `extra` replacing one of `ServiceHealth`'s own fields | `test_service::test_extra_adds_resident_fields_and_never_replaces_the_contracts_own` |
 | `build` or `peer` read from the suite file (they describe one container) | `test_service::test_build_and_peer_come_from_this_process_never_the_suite_file` |
 | Rename an `argus.*` discovery label (compose files and iris's agents carry them) | `test_service::test_the_label_names_are_pinned` |
+| Peer discovery without a caller token, sending the token anywhere but the configured directory, or logging it | `test_peers::test_no_token_means_no_discovery`, `::test_a_directory_that_cannot_answer_is_not_found_never_an_error` (the redirect case), `::test_an_unreachable_directory_is_not_found` |
+| Peer discovery raising because the directory is down or wrong, or taking an entry for another peer or one with credentials | `test_peers::test_a_directory_that_cannot_answer_is_not_found_never_an_error`, `::test_only_a_usable_entry_for_this_peer_is_taken` |
+| A discovered peer turning into "not configured" when a later lookup fails (a guard would switch off) | `test_peers::test_a_peer_found_once_is_not_unfound_when_the_directory_fails` |
+| The directory overriding a variable, or being asked when `discover` is not set | `test_peers::test_a_variable_wins_over_the_directory_and_off_stops_before_it`, `::test_discovery_is_opt_in_and_asks_with_the_caller_token` |
 | `bearer()` leaving a route open when its token is unset, unless the route passes `open_when_unset=True` | `test_auth::test_unset_token_closes_the_route`, `::test_open_when_unset_is_explicit_and_logged` |
 
 ## Facts the code doesn't make obvious
@@ -66,7 +70,8 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 [README.md](README.md) is the source of truth for what each module does; read it before changing one.
 
 - **Contracts owned elsewhere.** argus-mask owns the meaning of `provenance` and `consent` fields, and argus-iris serves
-  `gpu_wire`: change them only in step with that repo. `gpu_wire` stays additive within a major. Replies ignore unknown
+  `gpu_wire` and the directory models in `service` (`PeerLookup`, `DirectoryEntry`, `EntryHealth`): change them only in
+  step with that repo. `gpu_wire` stays additive within a major. Replies ignore unknown
   fields, but manifests forbid them, so a new manifest field needs the schema regenerated and iris bumped.
 - **GPU lease lock.** `LeaseCoordinator` takes a host-wide `flock`, then waits for NVML free VRAM, so tenants outside
   the lock (ComfyUI, Ollama) are counted. The lock file must be on a volume every GPU container mounts: a per-container
