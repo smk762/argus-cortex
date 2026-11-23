@@ -102,6 +102,31 @@ def test_a_stored_cleared_flag_is_recomputed_not_believed() -> None:
     assert Provenance.model_validate(data).cleared is False
 
 
+def test_lookalike_makes_a_cleared_face_demo_ready() -> None:
+    from datetime import date
+
+    from argus_cortex.provenance import LookAlike
+
+    bare = Provenance(kind="synthetic", source="flux", license="Apache-2.0")
+    assert bare.cleared is True and bare.demo_ready is False and bare.lookalike is None
+    checked = Provenance(
+        kind="synthetic",
+        source="flux",
+        license="Apache-2.0",
+        lookalike=LookAlike(
+            who="the maintainer",
+            at=date(2026, 11, 16),
+            how="Bing visual search of the portrait",
+            found="no match",
+        ),
+    )
+    assert checked.demo_ready is True
+    dumped = json.loads(checked.model_dump_json())
+    assert dumped["lookalike"]["who"] == "the maintainer"
+    assert Provenance.model_validate({**dumped, "demo_ready": False}).demo_ready is True
+
+
+
 def test_round_trips_with_cleared_in_the_payload() -> None:
     p = Provenance(kind="stock", source="unsplash", license="Unsplash")
     data = json.loads(p.model_dump_json())

@@ -33,6 +33,7 @@ every package that stores a ``Provenance`` reads these fields.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
@@ -71,6 +72,21 @@ class Generator(BaseModel):
         return self
 
 
+class LookAlike(BaseModel):
+    """A look-alike check for a face shown publicly (argus-mask#176): who looked, when, how, and what they found.
+
+    Cleared faces may be served without one; a demo or a published recording needs one. Until this field
+    existed the same facts lived in ``notes`` (splat-01 … splat-03).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    who: str = Field(..., min_length=1, max_length=200, description="who checked")
+    at: date = Field(..., description="the day of the check, UTC calendar date")
+    how: str = Field(..., min_length=1, max_length=500, description="how they checked (tool, what was searched)")
+    found: str = Field(..., min_length=1, max_length=2000, description="what they found")
+
+
 class Provenance(BaseModel):
     """Where a source came from. Required wherever the suite serves or trains on a likeness.
 
@@ -83,8 +99,8 @@ class Provenance(BaseModel):
     - ``curated``: reserved; not cleared.
 
     Unknown fields are refused, so a misspelt field cannot be dropped in silence (argus-mask#64).
-    ``licence`` is read as ``license``, and the derived ``cleared`` a dumped record carries is
-    dropped and recomputed, never believed.
+    ``licence`` is read as ``license``, and the derived ``cleared`` / ``demo_ready`` a dumped record
+    carries are dropped and recomputed, never believed.
     """
 
     # Frozen: the completeness check runs only at construction, so an assignment such as
@@ -98,13 +114,14 @@ class Provenance(BaseModel):
     subject: str = ""
     release_sha256: str | None = Field(None, pattern=SHA256_PATTERN)
     generator: Generator | None = None
+    lookalike: LookAlike | None = None
 
     @model_validator(mode="before")
     @classmethod
     def _read(cls, data: object) -> object:
         if not isinstance(data, dict):
             return data
-        data = {k: v for k, v in data.items() if k != "cleared"}
+        data = {k: v for k, v in data.items() if k not in ("cleared", "demo_ready")}
         if "licence" in data:
             licence = data.pop("licence")
             if "license" in data and data["license"] != licence:
@@ -135,6 +152,12 @@ class Provenance(BaseModel):
         """Whether the source may be shown beyond the user's own screens: a demo, a release, anything public."""
         return self.kind in CLEARED_KINDS
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def demo_ready(self) -> bool:
+        """Whether a cleared face may go in the hosted demo: needs a recorded look-alike check (argus-mask#176)."""
+        return self.cleared and self.lookalike is not None
+
 
 def pseudonymise(provenance: Provenance) -> Provenance:
     """A copy of the ``consented`` *provenance* whose ``subject`` is its release's subject ref, not a name.
@@ -146,7 +169,7 @@ def pseudonymise(provenance: Provenance) -> Provenance:
     """
     if provenance.kind != "consented" or provenance.release_sha256 is None:
         raise ValueError(f"only a consented source has a subject to pseudonymise, not a {provenance.kind} one")
-    data = provenance.model_dump(exclude={"cleared"})
+    data = provenance.model_dump(exclude={"cleared", "demo_ready"})
     data["subject"] = subject_ref_of(provenance.release_sha256)
     return Provenance.model_validate(data)
 
