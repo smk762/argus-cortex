@@ -32,12 +32,14 @@ from urllib.parse import urlsplit
 
 from argus_cortex import settings
 
-__all__ = ["OFF", "Peer", "PeerRefused", "peer_env", "peer_url", "resolve_peer"]
+__all__ = ["OFF", "PEER_NAME_PATTERN", "Peer", "PeerRefused", "peer_env", "peer_url", "resolve_peer"]
 
 _log = logging.getLogger(__name__)
 
 OFF = frozenset({"off", "none"})
-_PEER_NAME = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
+PEER_NAME_PATTERN = r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+"""A peer name: lower-case letters and digits, in words joined by single hyphens (``nudenet``, ``echo-xtts``)."""
+_PEER_NAME = re.compile(PEER_NAME_PATTERN)
 
 
 class PeerRefused(ValueError):

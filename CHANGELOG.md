@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`argus_cortex.service`: one health contract for every service** (#210, part of #212).
+  - `ServiceHealth` (`service_version` 1.0, committed `service-health-schema.json`): `service`, `version`, `status`
+    (`ok`, `degraded`, `starting`), `started_at`, `wire`, `capabilities`, `checks` (`DependencyCheck`), `read_only`,
+    `build`, `peer`. It allows extra fields and shares no field name with `ResidentHealth`, so one body is both.
+  - `install_health(app, service=...)` serves it on a Starlette or FastAPI app: `200` for `ok` and `degraded`, `503`
+    for `starting`. Dependency checks are cached (10 s), time-bounded (2 s) and refreshed by one request at a time;
+    `GET /health?checks=0` skips them. `extra` adds a service's own fields and never replaces the contract's. A
+    failed check reports the exception's type only, and URL credentials are removed from a `detail`.
+  - `build_info_text()`, `metrics_route()` and `build_info_collector()` (new `[metrics]` extra, `prometheus-client`)
+    give the `argus_build_info` gauge.
+  - Discovery labels for compose files: `argus.peer`, `argus.service`, `argus.health`, `argus.port` (`PEER_LABEL`
+    and the others). `ARGUS_BUILD` and `ARGUS_PEER` supply `build` and `peer`, from the process environment only.
+- `peers.PEER_NAME_PATTERN`: the pattern a peer name matches, which `ServiceHealth.peer` shares.
 - **`LookAlike` on `Provenance`** (argus-mask#176): optional `lookalike` (`who`, `at`, `how`, `found`) for a
   public look-alike check. Derived `demo_ready` is true only when the source is cleared and has one. The committed
   schema lists `demo_ready` for readers but does not require it (additive since v0.14).

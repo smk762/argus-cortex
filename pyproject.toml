@@ -44,6 +44,9 @@ gpu = ["nvidia-ml-py>=12.535"]
 # PyYAML, for argus_cortex.gpu_wire.load_tenant_manifest reading a gpu-tenant.yaml;
 # imported only there. JSON manifests need nothing.
 yaml = ["pyyaml>=6.0"]
+# prometheus-client, for argus_cortex.service.build_info_collector (a service that already serves
+# /metrics with it); imported only there. build_info_text and metrics_route need nothing.
+metrics = ["prometheus-client>=0.19"]
 # libcst, for the paved-road codemods (python -m argus_cortex.codemods); a dev tool, never
 # imported by the library itself.
 codemods = ["libcst>=1.4"]
@@ -68,6 +71,7 @@ dev = [
     "nvidia-ml-py>=12.535",
     "pyyaml>=6.0",
     "libcst>=1.4",
+    "prometheus-client>=0.19",
     "certifi>=2026.10.19",
 ]
 
