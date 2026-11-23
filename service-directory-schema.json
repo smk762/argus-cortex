@@ -158,6 +158,7 @@
       "properties": {
         "capabilities": {
           "default": [],
+          "description": "The names that are on (ServiceHealth.capability_names).",
           "items": {
             "type": "string"
           },
