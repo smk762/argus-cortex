@@ -220,6 +220,10 @@ def test_ints_qdrant_refuses_are_hashed_and_bools_refused() -> None:
         mapped = normalise_point_id(bad)
         assert isinstance(mapped, str) and uuid.UUID(mapped)  # a valid id, not one Qdrant rejects
     assert normalise_point_id(-1) != normalise_point_id(1)
+    # nor is a hashed int the point of the string that spells it
+    for bad in (-1, 2**64, 2**64 + 1):
+        assert normalise_point_id(bad) != normalise_point_id(str(bad))
+        assert normalise_point_id(bad) == normalise_point_id(bad)  # stable
     for flag in (True, False):
         with pytest.raises(ValueError, match="bool"):
             normalise_point_id(flag)
@@ -231,6 +235,16 @@ def test_other_spellings_of_a_uuid_do_not_alias_the_canonical_key() -> None:
     ids = {normalise_point_id(s) for s in spellings} | {normalise_point_id(uid)}
     assert len(ids) == len(spellings) + 1  # each key its own point
     assert normalise_point_id(uid) == uid
+
+
+def test_a_uuid_key_never_lands_on_a_hashed_keys_point() -> None:
+    """The literal UUID5 a string key hashes to is a distinct key, so it gets its own point."""
+    hashed = normalise_point_id("cap-1")
+    assert normalise_point_id(str(hashed)) != hashed
+    assert normalise_point_id(str(normalise_point_id(-1))) != normalise_point_id(-1)
+    assert normalise_point_id(str(hashed)) == normalise_point_id(str(hashed))  # stable
+    uid4, uid1 = str(uuid.uuid4()), "a8098c1a-f86e-11da-bd1a-00112444be1e"  # other versions still pass through
+    assert (normalise_point_id(uid4), normalise_point_id(uid1)) == (uid4, uid1)
 
 
 def test_a_grpc_failure_is_a_store_error() -> None:

@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-23
+
+### Added
+- `argus_cortex.hashing.sha256_hex(data)` (also `argus_cortex.sha256_hex`): the sha256 hex digest the stages record
+  and compare, so they stop each defining their own copy. Standard library only. `content_key()` now calls it and
+  returns the same value as before.
+- `argus_cortex.timestamps.utc_now_iso(timespec="seconds")` (also `argus_cortex.utc_now_iso`): the current UTC
+  time as ISO 8601 with a `+00:00` offset, for the `created_at` / `started_at` stamps the stages each defined.
+  `timespec="auto"` keeps a bare `isoformat()`'s microseconds.
+- `argus_cortex.wire.sync_schema(rendered, path, check=..., command=...)` (also `argus_cortex.sync_schema`): the
+  body of every stage's `schema` / `schema --check` command. It writes the rendered schema, or checks the committed
+  one, and returns a `SchemaSync(ok, message)` for the stage's CLI to print.
+
+### Changed
+- `release.yml` also sends `cortex-released` to argus-puppet, whose image (CPU and `-gpu`) installs cortex from its
+  pyproject range and rebuilds its newest release on it. `SUITE_DISPATCH_TOKEN` needs Contents: read & write on
+  argus-puppet too, or the dispatch job fails.
+
+### Fixed
+- **Lineage: a membership and a move of its edit could both commit.** The `dataset_membership` trigger now locks
+  the edit row it checks (`FOR SHARE`), so a concurrent `UPDATE human_edit SET caption_id` and an insert naming
+  that edit serialise instead of each passing its own check. `ensure_schema()` replaces the function in place.
+- **Lineage: `close()` racing the first use could leave an open pool.** `close()` now takes the lock the lazy
+  open builds under, so a pool being opened is waited for and closed.
+- **GPU broker: a lease re-attached while the work was ending is released.** A heartbeat that found its lease
+  forgotten and re-attached could finish after the release had gone out for the old id (sync), or be cancelled
+  mid-request (async), leaving the new lease to its TTL. The sync heartbeat now releases a lease it re-attached
+  too late, and the async one learns the new id before it stops.
+- **`open_image`: `max_pixels` above Pillow's own limit is honoured.** An image over 2 x `Image.MAX_IMAGE_PIXELS`
+  (about 179M pixels) was refused as `TooLarge` whatever `max_pixels` allowed. Pillow's limit is now raised to
+  `max_pixels` for that one header read, under a lock; caps at or below the default are unaffected.
+- **Vector: an int Qdrant refuses and the string that spells it no longer share a point.** `normalise_point_id(-1)`
+  and `normalise_point_id("-1")` hashed to the same UUID. Hashed ints now have their own namespace. A point
+  stored under a negative or over-64-bit int id moves: re-upsert it. Ints in range and string keys are unchanged.
+- **OCR: `normalize_text` keeps combining marks.** Vowel signs, viramas and tone marks (Devanagari, Thai, Arabic,
+  uncommon Latin diacritics) were dropped as non-alphanumeric, so words differing only by a mark compared equal.
+- **Moderation: an integer score too large for a float is refused** as not a number, where it raised
+  `OverflowError`.
+- **Codemods.** `fullmatch` leaves alone any pattern name the file binds more than once (a reassignment, `+=`, a
+  branch, a tuple target, a walrus, `global`, a parameter of the same name), which it could rewrite from a stale
+  anchored value. `read-upload` now sees `Union[UploadFile, None]`, `Annotated[UploadFile, File(...)]` and
+  `Annotated[list[UploadFile], ...]`, uploads iterated in a comprehension, and an enclosing function's uploads
+  read in a nested one; reads it leaves alone are listed as `REVIEW`. The runner skips a file it can't decode
+  and carries on, and keeps a rewritten file's line endings (CRLF stays CRLF).
+
 ## [0.13.0] - 2026-11-21
 
 ### Added
@@ -490,7 +535,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/smk762/argus-cortex/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/smk762/argus-cortex/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/smk762/argus-cortex/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/smk762/argus-cortex/compare/v0.10.0...v0.11.0

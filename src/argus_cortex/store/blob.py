@@ -22,12 +22,12 @@ call in ``asyncio.to_thread(...)``.
 from __future__ import annotations
 
 import functools
-import hashlib
 import io
 from datetime import timedelta
 from typing import Any, Protocol, runtime_checkable
 from urllib.parse import urlparse
 
+from argus_cortex.hashing import sha256_hex
 from argus_cortex.store.config import StoreConfig, secret_value
 from argus_cortex.store.errors import StoreError, require_extra, resolve_error_types, wrap_errors
 
@@ -46,7 +46,7 @@ def content_key(data: bytes) -> str:
     The same value phase 1 stores as ``source_asset.sha256``, so a blob, its
     lineage row, and its vector payload all share one identity.
     """
-    return hashlib.sha256(data).hexdigest()
+    return sha256_hex(data)
 
 
 def _parse_endpoint(endpoint: str) -> tuple[str, bool]:

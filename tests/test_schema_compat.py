@@ -86,8 +86,9 @@ def _one(old: dict[str, Any], new: dict[str, Any], path: str) -> list[str]:
     ]
     for name in op.keys() & np_.keys():
         out += breaks(op[name], np_[name], f"{path}.{name}")
-    if "items" in old and "items" in new:
-        out += breaks(old["items"], new["items"], f"{path}[]")
+    if isinstance(new.get("items"), dict):  # an array's element schema (list[X]), now or newly typed
+        oi = old.get("items")
+        out += breaks(oi if isinstance(oi, dict) else {}, new["items"], f"{path}[]")
     return out
 
 
@@ -226,6 +227,13 @@ KIND = {"enum": ["a", "b"], "type": "string"}
         (obj({"r": {"$ref": "#/$defs/A"}}), obj({"r": {"$ref": "#/$defs/B"}}), "now refers to"),
         (obj({"l": {"type": "array", "items": KIND}}), obj({"l": {"type": "array", "items": STR}}), ""),
         (obj({"l": {"type": "array", "items": STR}}), obj({"l": {"type": "array", "items": KIND}}), "l[]"),
+        # list -> list[int]: an untyped array took any element
+        (
+            obj({"l": {"type": "array"}}),
+            obj({"l": {"type": "array", "items": {"type": "integer"}}}),
+            "l[]: now restricted to type ['integer']",
+        ),
+        (obj({"l": {"type": "array"}}), obj({"l": {"type": "array", "items": KIND}}), "l[]: now restricted to"),
         # dict[str, int] -> dict[str, str]: the map's value type changed
         (
             obj({"m": {"type": "object", "additionalProperties": {"type": "integer"}}}),
@@ -268,6 +276,8 @@ def test_breaking_changes_are_found(old: dict, new: dict, expect: str) -> None:
         ),
         (obj({"m": {"type": "object", "additionalProperties": STR}}), obj({"m": {"type": "object"}})),
         (obj({}, additionalProperties=False), obj({}, additionalProperties=STR)),
+        (obj({"l": {"type": "array", "items": STR}}), obj({"l": {"type": "array"}})),  # list[str] -> list
+        (obj({"l": {"type": "array"}}), obj({"l": {"type": "array", "items": {}}})),  # list -> list[Any]
     ],
 )
 def test_additive_changes_pass(old: dict, new: dict) -> None:

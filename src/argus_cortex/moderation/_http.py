@@ -51,8 +51,14 @@ def is_number(value: object) -> bool:
     """A finite int or float, not a bool.
 
     json.loads accepts bare NaN/Infinity; a NaN score would compare False against every threshold.
+    It also returns an integer literal of any length exactly; one too large for a float is not a score.
     """
-    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:  # an int past the float range
+        return False
 
 
 def multipart_image(data: bytes, filename: str, field: str = "f1") -> tuple[bytes, str]:

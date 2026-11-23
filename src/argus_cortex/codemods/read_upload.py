@@ -15,7 +15,16 @@ CAP_LINE = f"{CAP} = 50 * 1024 * 1024  # per upload; argus_cortex.limits.read_up
 @dataclass
 class Report:
     rewritten: list[str] = field(default_factory=list)
+    review: list[str] = field(default_factory=list)  # reads left as they were, for a person to check
     added_cap: bool = False
+
+
+def _subscript(annotation: cst.BaseExpression) -> tuple[str, list[cst.BaseExpression]] | None:
+    """``Outer[a, b]`` (or ``typing.Outer[a, b]``) as its outer name and elements."""
+    if isinstance(annotation, cst.Subscript) and isinstance(annotation.value, cst.Name | cst.Attribute):
+        outer = annotation.value.value if isinstance(annotation.value, cst.Name) else annotation.value.attr.value
+        return outer, [e.slice.value for e in annotation.slice if isinstance(e.slice, cst.Index)]
+    return None
 
 
 def _is_upload(annotation: cst.BaseExpression) -> bool:
@@ -25,51 +34,161 @@ def _is_upload(annotation: cst.BaseExpression) -> bool:
         return annotation.attr.value == "UploadFile"
     if isinstance(annotation, cst.BinaryOperation):  # UploadFile | None
         return _is_upload(annotation.left) or _is_upload(annotation.right)
-    if isinstance(annotation, cst.Subscript) and isinstance(annotation.value, cst.Name | cst.Attribute):
-        outer = annotation.value.value if isinstance(annotation.value, cst.Name) else annotation.value.attr.value
-        if outer == "Optional":
-            return any(isinstance(e.slice, cst.Index) and _is_upload(e.slice.value) for e in annotation.slice)
+    if sub := _subscript(annotation):
+        outer, elements = sub
+        if outer in {"Optional", "Union"}:
+            return any(_is_upload(e) for e in elements)
+        if outer == "Annotated":  # Annotated[UploadFile, File(...)]: the type is the first element only
+            return bool(elements) and _is_upload(elements[0])
     return False
 
 
 def _is_upload_list(annotation: cst.BaseExpression) -> bool:
-    if isinstance(annotation, cst.Subscript) and isinstance(annotation.value, cst.Name | cst.Attribute):
-        outer = annotation.value.value if isinstance(annotation.value, cst.Name) else annotation.value.attr.value
+    if isinstance(annotation, cst.BinaryOperation):  # list[UploadFile] | None
+        return _is_upload_list(annotation.left) or _is_upload_list(annotation.right)
+    if sub := _subscript(annotation):
+        outer, elements = sub
         if outer in {"list", "List", "Sequence"}:
-            return any(isinstance(e.slice, cst.Index) and _is_upload(e.slice.value) for e in annotation.slice)
+            return any(_is_upload(e) for e in elements)
+        if outer in {"Optional", "Union"}:
+            return any(_is_upload_list(e) for e in elements)
+        if outer == "Annotated":
+            return bool(elements) and _is_upload_list(elements[0])
     return False
 
 
 class _Rewrite(cst.CSTTransformer):
-    METADATA_DEPENDENCIES = (cst.metadata.PositionProvider,)
+    METADATA_DEPENDENCIES = (cst.metadata.PositionProvider, cst.metadata.ParentNodeProvider)
 
     def __init__(self, report: Report) -> None:
         self.report = report
         self.scopes: list[tuple[set[str], set[str]]] = []  # (uploads, lists of uploads) per function
+        self._comp_pushed: list[bool] = []  # whether each open comprehension pushed a scope
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
-        uploads: set[str] = set()
-        lists: set[str] = set()
-        params = [*node.params.posonly_params, *node.params.params, *node.params.kwonly_params]
-        for p in params:
-            if p.annotation is None:
+        # A nested function (a helper, a closure) still sees the enclosing function's uploads,
+        # except the names its own parameters rebind.
+        outer_uploads, outer_lists = self.scopes[-1] if self.scopes else (set(), set())
+        uploads, lists = set(outer_uploads), set(outer_lists)
+        p = node.params
+        params = [*p.posonly_params, *p.params, *p.kwonly_params]
+        params += [s for s in (p.star_arg, p.star_kwarg) if isinstance(s, cst.Param)]
+        for param in params:
+            name = param.name.value
+            uploads.discard(name)
+            lists.discard(name)
+            if param.annotation is None:
                 continue
-            if _is_upload(p.annotation.annotation):
-                uploads.add(p.name.value)
-            elif _is_upload_list(p.annotation.annotation):
-                lists.add(p.name.value)
+            if _is_upload(param.annotation.annotation):
+                uploads.add(name)
+            elif _is_upload_list(param.annotation.annotation):
+                lists.add(name)
         self.scopes.append((uploads, lists))
 
     def leave_FunctionDef(self, original: cst.FunctionDef, updated: cst.FunctionDef) -> cst.FunctionDef:
         self.scopes.pop()
         return updated
 
-    def visit_For(self, node: cst.For) -> None:
-        # for f in files:  /  for i, f in enumerate(files):
+    def _unbind(self, target: cst.CSTNode | None) -> None:
+        """A name bound to something else (assigned, ``with ... as``, a loop target) is no longer an upload."""
         if not self.scopes:
             return
+        if isinstance(target, cst.Name):
+            for names in self.scopes[-1]:
+                names.discard(target.value)
+        elif isinstance(target, cst.Tuple | cst.List):
+            for element in target.elements:
+                self._unbind(element.value)
+        elif isinstance(target, cst.StarredElement):
+            self._unbind(target.value)
+
+    # Unbound on the way out, so a read in the value (``data = await file.read()``) still sees the upload.
+    def leave_Assign(self, original: cst.Assign, updated: cst.Assign) -> cst.Assign:
+        for t in original.targets:
+            self._unbind(t.target)
+        return updated
+
+    def leave_AnnAssign(self, original: cst.AnnAssign, updated: cst.AnnAssign) -> cst.AnnAssign:
+        self._unbind(original.target)
+        if self.scopes and isinstance(original.target, cst.Name):  # file: UploadFile = ...
+            uploads, lists = self.scopes[-1]
+            if _is_upload(original.annotation.annotation):
+                uploads.add(original.target.value)
+            elif _is_upload_list(original.annotation.annotation):
+                lists.add(original.target.value)
+        return updated
+
+    def leave_AugAssign(self, original: cst.AugAssign, updated: cst.AugAssign) -> cst.AugAssign:
+        self._unbind(original.target)
+        return updated
+
+    def leave_NamedExpr(self, original: cst.NamedExpr, updated: cst.NamedExpr) -> cst.BaseExpression:
+        self._unbind(original.target)
+        return updated
+
+    def leave_WithItem(self, original: cst.WithItem, updated: cst.WithItem) -> cst.WithItem:
+        if original.asname is not None:
+            self._unbind(original.asname.name)
+        return updated
+
+    def visit_ExceptHandler(self, node: cst.ExceptHandler) -> None:
+        if node.name is not None:
+            self._unbind(node.name.name)
+
+    def visit_For(self, node: cst.For) -> None:
+        self._loop(node.iter, node.target)
+
+    def _comprehension(self, node: cst.BaseComp) -> None:
+        # A comprehension's targets are its own: they don't outlive it, so it gets a scope of its own.
+        pushed = bool(self.scopes)
+        self._comp_pushed.append(pushed)
+        if pushed:
+            uploads, lists = self.scopes[-1]
+            self.scopes.append((set(uploads), set(lists)))
+        # The element is visited before its ``for`` clauses, so read the clauses here, on the way in.
+        clause: cst.CompFor | None = node.for_in  # type: ignore[attr-defined]
+        while clause is not None:
+            self._loop(clause.iter, clause.target)
+            clause = clause.inner_for_in
+
+    def _leave_comprehension(self) -> None:
+        if self._comp_pushed.pop():
+            self.scopes.pop()
+
+    def visit_ListComp(self, node: cst.ListComp) -> None:
+        self._comprehension(node)
+
+    def leave_ListComp(self, original: cst.ListComp, updated: cst.ListComp) -> cst.BaseExpression:
+        self._leave_comprehension()
+        return updated
+
+    def visit_SetComp(self, node: cst.SetComp) -> None:
+        self._comprehension(node)
+
+    def leave_SetComp(self, original: cst.SetComp, updated: cst.SetComp) -> cst.BaseExpression:
+        self._leave_comprehension()
+        return updated
+
+    def visit_DictComp(self, node: cst.DictComp) -> None:
+        self._comprehension(node)
+
+    def leave_DictComp(self, original: cst.DictComp, updated: cst.DictComp) -> cst.BaseExpression:
+        self._leave_comprehension()
+        return updated
+
+    def visit_GeneratorExp(self, node: cst.GeneratorExp) -> None:
+        self._comprehension(node)
+
+    def leave_GeneratorExp(self, original: cst.GeneratorExp, updated: cst.GeneratorExp) -> cst.BaseExpression:
+        self._leave_comprehension()
+        return updated
+
+    def _loop(self, it: cst.BaseExpression, target: cst.BaseExpression) -> None:
+        # for f in files:  /  for i, f in enumerate(files):  (a statement or a comprehension clause)
+        if not self.scopes:
+            return
+        self._unbind(target)  # for file in other_things: rebinds file, whatever it was
         uploads, lists = self.scopes[-1]
-        it, target = node.iter, node.target
         if isinstance(it, cst.Name) and it.value in lists and isinstance(target, cst.Name):
             uploads.add(target.value)
         elif (
@@ -85,20 +204,36 @@ class _Rewrite(cst.CSTTransformer):
         ):
             uploads.add(target.elements[1].value.value)
 
-    def leave_Await(self, original: cst.Await, updated: cst.Await) -> cst.BaseExpression:
-        call = updated.expression
-        if not (
-            self.scopes
-            and isinstance(call, cst.Call)
+    @staticmethod
+    def _unbounded_read(call: cst.BaseExpression) -> str | None:
+        """The name in ``NAME.read()`` (no arguments), else None."""
+        if (
+            isinstance(call, cst.Call)
             and not call.args
             and isinstance(call.func, cst.Attribute)
             and call.func.attr.value == "read"
             and isinstance(call.func.value, cst.Name)
-            and call.func.value.value in self.scopes[-1][0]
         ):
+            return call.func.value.value
+        return None
+
+    def leave_Call(self, original: cst.Call, updated: cst.Call) -> cst.BaseExpression:
+        # upload.read() handed to something else (asyncio.gather, a task): no ``await`` here to rewrite.
+        name = self._unbounded_read(updated)
+        parent = self.get_metadata(cst.metadata.ParentNodeProvider, original, None)
+        if name and self.scopes and name in self.scopes[-1][0] and not isinstance(parent, cst.Await):
+            line = self.get_metadata(cst.metadata.PositionProvider, original).start.line
+            self.report.review.append(f"line {line}: {name}.read() is an upload read with no await of its own")
+        return updated
+
+    def leave_Await(self, original: cst.Await, updated: cst.Await) -> cst.BaseExpression:
+        name = self._unbounded_read(updated.expression)
+        if not (name and self.scopes):
             return updated
-        name = call.func.value.value
         line = self.get_metadata(cst.metadata.PositionProvider, original).start.line
+        if name not in self.scopes[-1][0]:
+            self.report.review.append(f"line {line}: await {name}.read() ({name} is not a known UploadFile)")
+            return updated
         self.report.rewritten.append(f"line {line}: await {name}.read()")
         new_call = cst.Call(func=cst.Name("read_upload"), args=[cst.Arg(cst.Name(name)), cst.Arg(cst.Name(CAP))])
         return updated.with_changes(expression=new_call)
@@ -114,8 +249,17 @@ def _defines(module: cst.Module, name: str) -> bool:
     return False
 
 
+def _is_docstring(stmt: cst.CSTNode) -> bool:
+    return (
+        isinstance(stmt, cst.SimpleStatementLine)
+        and len(stmt.body) == 1
+        and isinstance(stmt.body[0], cst.Expr)
+        and isinstance(stmt.body[0].value, cst.SimpleString | cst.ConcatenatedString)
+    )
+
+
 def _with_cap(module: cst.Module) -> cst.Module:
-    """Insert the cap constant after the last top-level import."""
+    """Insert the cap constant after the last top-level import, or after the docstring when there is none."""
     body = list(module.body)
     last = -1
     for i, stmt in enumerate(body):
@@ -123,6 +267,8 @@ def _with_cap(module: cst.Module) -> cst.Module:
             isinstance(s, cst.Import | cst.ImportFrom) for s in stmt.body
         ):
             last = i
+    if last == -1 and body and _is_docstring(body[0]):  # above it, the string would stop being __doc__
+        last = 0
     line = cst.parse_statement(CAP_LINE)
     line = line.with_changes(leading_lines=[cst.EmptyLine()])
     body.insert(last + 1, line)
@@ -146,6 +292,7 @@ def transform(source: str) -> tuple[str, Report]:
 
 def summary(report: Report) -> list[str]:
     out = [f"read_upload: {r}" for r in report.rewritten]
+    out += [f"REVIEW, left as it was: {r}" for r in report.review]
     if report.added_cap:
         out.append(f"added {CAP} (50 MiB): set the cap this service needs, ideally from an env var")
     if report.rewritten:

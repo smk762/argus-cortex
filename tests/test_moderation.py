@@ -253,8 +253,8 @@ _TEXT_ANSWERS = {"rob a bank": 20, "fail": _FAIL}  # a text-only check's input -
 
 
 def test_singguard_config() -> None:
-    client = SingGuardClient("http://192.168.1.198:9150/")
-    assert client.url == "http://192.168.1.198:9150/api/guard/check"
+    client = SingGuardClient("http://192.0.2.198:9150/")
+    assert client.url == "http://192.0.2.198:9150/api/guard/check"
     assert client.policy is None and client.policy_name == "default" and client.thinking == "fast"
     custom = SingGuardClient("http://g", policy="  ### A. Minors\n")
     assert custom.policy == "### A. Minors" and custom.policy_name == policy_name("### A. Minors")
@@ -571,6 +571,25 @@ def test_normalize_text() -> None:
     assert normalize_text("STRASSE") == normalize_text("Straße")  # casefold, not lower
     assert normalize_text("ﬁle") == "file"  # NFKC: ligatures and full-width forms
     assert normalize_text("Espinàs") != normalize_text("Espinas")  # accents are the caller's policy
+
+
+def test_normalize_text_keeps_combining_marks() -> None:
+    """A mark with no precomposed letter is not alphanumeric on its own, and is still part of the word."""
+    assert normalize_text("हिन्दी") == "हिन्दी"  # vowel signs and the virama stay
+    assert normalize_text("किताब") != normalize_text("कताब")  # so words that differ only by a vowel sign differ
+    assert normalize_text("ไก่") != normalize_text("ไก้")  # Thai tone marks
+    assert normalize_text("q\u0303a") != normalize_text("qa")  # a Latin letter with no precomposed form
+    assert normalize_text("Espin\u0061\u0300s") == normalize_text("Espinàs")  # NFKC still composes what it can
+    assert normalize_text("हिन्दी, भाषा!") == "हिन्दीभाषा"  # spaces and punctuation still go
+
+
+def test_is_number_refuses_an_int_past_the_float_range() -> None:
+    from argus_cortex.moderation._http import is_number
+
+    huge = json.loads("1" + "0" * 400)  # json.loads returns it exactly; math.isfinite alone raises OverflowError
+    assert not is_number(huge) and not is_number(-huge)
+    assert is_number(0) and is_number(10**300) and is_number(0.5)
+    assert not is_number(True) and not is_number(float("nan")) and not is_number(float("inf")) and not is_number("1")
 
 
 def test_ocr_parsing_ignores_malformed_entries() -> None:

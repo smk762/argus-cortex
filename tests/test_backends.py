@@ -117,8 +117,8 @@ def test_remote_backend_normalizes_url_and_sets_auth() -> None:
 
 
 def test_remote_backend_from_host() -> None:
-    b = RemoteBackend.from_host("192.168.1.20", 8188)
-    assert b.base_url == "http://192.168.1.20:8188"
+    b = RemoteBackend.from_host("192.0.2.20", 8188)
+    assert b.base_url == "http://192.0.2.20:8188"
 
 
 @pytest.mark.parametrize(

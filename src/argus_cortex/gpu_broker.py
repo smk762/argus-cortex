@@ -121,6 +121,19 @@ def _heartbeat_body(handle: GpuLease) -> dict[str, Any]:
     return beat.model_dump(mode="json")
 
 
+class _Ending:
+    """How a sync lease ended, shared with its heartbeat thread.
+
+    The release reads ``handle.lease_id`` once the heartbeat has stopped, but it waits for that only so long. A
+    re-attach still in flight then would set a new id nobody releases; under *lock* it sees *released* instead and
+    releases the lease it made.
+    """
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.released: tuple[ReleaseOutcome, int | None, str | None] | None = None
+
+
 class BrokerCoordinator:
     """Leases from the GPU broker at *url*, falling back to *fallback* when it cannot be reached.
 
@@ -336,8 +349,12 @@ class BrokerCoordinator:
 
             handle = self._handle(status)
             stop = threading.Event()
+            ending = _Ending()
             beat = threading.Thread(
-                target=self._heartbeat_loop, args=(req, handle, status.ttl_s, stop), daemon=True, name="gpu-heartbeat"
+                target=self._heartbeat_loop,
+                args=(req, handle, status.ttl_s, stop, ending),
+                daemon=True,
+                name="gpu-heartbeat",
             )
             beat.start()
             outcome: ReleaseOutcome = "ok"
@@ -350,7 +367,10 @@ class BrokerCoordinator:
             finally:
                 stop.set()
                 beat.join(timeout=self.request_timeout_s)
-                self._release(client, handle.lease_id, outcome, handle.peak_vram_mb, detail)
+                with ending.lock:  # a re-attach that lands after this releases its own lease (see _Ending)
+                    ending.released = (outcome, handle.peak_vram_mb, detail)
+                    lease_id = handle.lease_id
+                self._release(client, lease_id, outcome, handle.peak_vram_mb, detail)
 
     def _send(self, call: Any, *args: Any, **kwargs: Any) -> Any:
         try:
@@ -414,7 +434,7 @@ class BrokerCoordinator:
             raise
         return self._granted_or_raise(status)
 
-    def _beat(self, client: Any, req: LeaseRequest, handle: GpuLease) -> HeartbeatReply | None:
+    def _beat(self, client: Any, req: LeaseRequest, handle: GpuLease, ending: _Ending) -> HeartbeatReply | None:
         body = _heartbeat_body(handle)
         reply = self._parse(self._send(client.post, f"/leases/{handle.lease_id}/heartbeat", json=body), HeartbeatReply)
         if reply is None:  # the broker forgot the lease (restart): register and re-attach, the work is already running
@@ -424,17 +444,24 @@ class BrokerCoordinator:
             _log.info(
                 "GPU broker forgot lease %s; re-attached as %s (%s)", handle.lease_id, status.lease_id, status.state
             )
-            handle.lease_id = status.lease_id
+            with ending.lock:
+                released = ending.released
+                if released is None:
+                    handle.lease_id = status.lease_id
+            if released is not None:  # the work ended and the old id was released while this was in flight
+                self._release(client, status.lease_id, *released)
         return reply
 
-    def _heartbeat_loop(self, req: LeaseRequest, handle: GpuLease, ttl_s: float, stop: threading.Event) -> None:
+    def _heartbeat_loop(
+        self, req: LeaseRequest, handle: GpuLease, ttl_s: float, stop: threading.Event, ending: _Ending
+    ) -> None:
         httpx = _httpx()
         lost = [False]
         interval = ttl_s / 3
         with httpx.Client(transport=self._transport, timeout=self.request_timeout_s, **self._client_kwargs()) as client:
             while not stop.wait(interval):
                 try:
-                    interval = self._after_beat(self._beat(client, req, handle), handle, lost)
+                    interval = self._after_beat(self._beat(client, req, handle, ending), handle, lost)
                 except (_Unreachable, BrokerError) as exc:
                     _log.debug("GPU broker heartbeat for %s failed: %s", handle.lease_id, exc)
                 except Exception:  # noqa: BLE001 - one odd reply must not end the heartbeat for the rest of the lease
@@ -585,7 +612,16 @@ class BrokerCoordinator:
         if reply is None:  # see _beat
             self._forget_registration()
             await self._aregister(client)
-            status = await self._apost_lease(client, req.model_copy(update={"resume": handle.lease_id, "wait_s": 0.0}))
+            resume = req.model_copy(update={"resume": handle.lease_id, "wait_s": 0.0})
+            reattach = asyncio.ensure_future(self._apost_lease(client, resume))
+            try:
+                status = await asyncio.shield(reattach)
+            except asyncio.CancelledError:
+                # The lease ended mid re-attach. The broker may already hold the new lease, so learn its id
+                # before going: alease() releases handle.lease_id once this task is done.
+                with contextlib.suppress(Exception):
+                    handle.lease_id = (await reattach).lease_id
+                raise
             _log.info(
                 "GPU broker forgot lease %s; re-attached as %s (%s)", handle.lease_id, status.lease_id, status.state
             )

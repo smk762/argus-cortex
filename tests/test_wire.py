@@ -9,6 +9,7 @@ from argus_cortex.wire import (
     make_versioned_base,
     render_schema,
     schema_major,
+    sync_schema,
     wire_schema,
 )
 
@@ -112,3 +113,40 @@ def test_render_schema_is_canonical_and_deterministic() -> None:
     assert a.endswith("\n")
     # sorted keys: within a properties block, keys are alphabetical
     assert a.index('"a"') < a.index('"flag"')
+
+
+def test_sync_schema_writes_and_creates_the_directory(tmp_path) -> None:
+    path = tmp_path / "schema" / "x-wire.schema.json"
+    result = sync_schema("{}\n", path, command="argus-x schema")
+    assert result.ok
+    assert result.message == f"Wrote wire schema -> {path}"
+    assert path.read_text(encoding="utf-8") == "{}\n"
+
+
+def test_sync_schema_check_passes_on_the_committed_text_and_writes_nothing(tmp_path) -> None:
+    path = tmp_path / "x.json"
+    path.write_text("{}\n", encoding="utf-8")
+    before = path.stat().st_mtime_ns
+    assert sync_schema("{}\n", path, check=True, command="argus-x schema") == (True, f"{path} is up to date.")
+    assert path.stat().st_mtime_ns == before
+
+
+@pytest.mark.parametrize("committed", [None, "{}", '{"stale": true}\n'])
+def test_sync_schema_check_fails_on_a_missing_or_different_file_and_leaves_it(tmp_path, committed) -> None:
+    path = tmp_path / "x.json"
+    if committed is not None:
+        path.write_text(committed, encoding="utf-8")
+    result = sync_schema("{}\n", path, check=True, command="argus-x schema")
+    assert not result.ok
+    assert result.message == f"{path} is stale: run `argus-x schema` and commit the result."
+    assert (path.read_text(encoding="utf-8") if path.exists() else None) == committed
+
+
+def test_sync_schema_round_trips_render_schema(tmp_path) -> None:
+    class M(BaseModel):
+        a: int
+
+    path = tmp_path / "m.json"
+    rendered = render_schema([M], title="t")
+    sync_schema(rendered, path, command="c")
+    assert sync_schema(render_schema([M], title="t"), path, check=True, command="c").ok

@@ -34,6 +34,7 @@ from argus_cortex.consent import (
     consent_schema,
     consent_valid,
 )
+from argus_cortex.hashing import sha256_hex
 from argus_cortex.moderation import (
     CheckFailed,
     GuardResult,
@@ -75,12 +76,15 @@ from argus_cortex.store import (
     open_vector_store,
 )
 from argus_cortex.taxonomy import TargetCategory, TargetProfile, TargetStyle, taxonomy_schema
+from argus_cortex.timestamps import utc_now_iso
 from argus_cortex.wire import (
+    SchemaSync,
     VersionError,
     check_version,
     make_versioned_base,
     render_schema,
     schema_major,
+    sync_schema,
     wire_schema,
 )
 from argus_cortex.xmp import (
@@ -126,6 +130,8 @@ __all__ = [
     "make_versioned_base",
     "render_schema",
     "schema_major",
+    "sync_schema",
+    "SchemaSync",
     "wire_schema",
     # xmp sidecars
     "XmpData",
@@ -177,4 +183,8 @@ __all__ = [
     "S3BlobStore",
     "open_blob_store",
     "content_key",
+    # hashing
+    "sha256_hex",
+    # timestamps
+    "utc_now_iso",
 ]

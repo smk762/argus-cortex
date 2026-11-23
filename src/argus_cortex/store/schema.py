@@ -80,15 +80,21 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     # text comes from another image. A trigger rather than a composite FK: it runs
     # on PostgreSQL 13+ (a composite FK's ``ON DELETE SET NULL (edit_id)`` needs 15)
     # and reaches tables created before it, which CREATE TABLE IF NOT EXISTS skips.
+    # FOR SHARE locks the edit row it checked. The FK's own FOR KEY SHARE does not conflict
+    # with an UPDATE of human_edit.caption_id (a non-key column), so without it a concurrent
+    # move of the edit and this insert could each pass their check and both commit. With it
+    # the two serialise: whichever runs second waits, then sees the other's committed row.
     """
     CREATE OR REPLACE FUNCTION dataset_membership_edit_matches_caption() RETURNS trigger
     LANGUAGE plpgsql AS $$
     BEGIN
-        IF NEW.edit_id IS NOT NULL AND NOT EXISTS (
-            SELECT 1 FROM human_edit WHERE id = NEW.edit_id AND caption_id = NEW.caption_id
-        ) THEN
-            RAISE EXCEPTION 'dataset_membership.edit_id % is not an edit of caption %', NEW.edit_id, NEW.caption_id
-                USING ERRCODE = 'foreign_key_violation';
+        IF NEW.edit_id IS NOT NULL THEN
+            PERFORM 1 FROM human_edit WHERE id = NEW.edit_id AND caption_id = NEW.caption_id FOR SHARE;
+            IF NOT FOUND THEN
+                RAISE EXCEPTION 'dataset_membership.edit_id % is not an edit of caption %',
+                    NEW.edit_id, NEW.caption_id
+                    USING ERRCODE = 'foreign_key_violation';
+            END IF;
         END IF;
         RETURN NEW;
     END
