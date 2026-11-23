@@ -58,13 +58,15 @@ def test_hostile_paths_are_refused(tree: Path, rel: str, why: str) -> None:
         safe_join(tree, rel)
 
 
-def test_symlink_loop_is_refused_not_a_crash(tree: Path) -> None:
-    try:
-        got = safe_join(tree, "loop1/x")
-    except PathRefused:
-        return
-    # Some Pythons resolve a loop non-strictly to a path under the root; that's still contained.
-    assert got.is_relative_to(tree.resolve())
+@pytest.mark.parametrize(
+    "rel", ["loop1", "loop1/x", "loop1/../in_link", "loop1/../out_link", "loop1/../out_link/secret.txt"]
+)
+def test_a_path_through_a_symlink_loop_is_refused(tree: Path, rel: str) -> None:
+    """A loop stops resolution early, leaving the rest of the path unfollowed: ``loop1/../out_link`` came back as
+    an unresolved ``out_link`` pointing outside the root. Nothing through a loop is returned."""
+    with pytest.raises(PathRefused, match="could not be resolved"):
+        safe_join(tree, rel)
+    assert not is_within(tree, tree / rel)
 
 
 def test_tilde_is_not_expanded(tree: Path) -> None:

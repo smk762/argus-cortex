@@ -45,7 +45,7 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 | `env_flag` silently disabling a protection on a typo | `test_server::test_env_flag_unrecognised_warns_and_is_off` |
 | A `TargetProfile` pairing a category with the other modality (an image profile carrying `voice`, a speech one `identity`) | `test_taxonomy::test_category_and_modality_must_match` |
 | `open_audio` decoding past its duration cap, whatever the header claims | `test_limits::test_an_oversized_header_claiming_a_short_duration_decodes_only_the_claim`, `::test_decoding_stops_at_the_cap_whatever_the_header_said`, `::test_a_clip_over_the_duration_cap_is_refused_before_decoding` |
-| `safe_join` returning the caller's spelling instead of the resolved path it checked | `test_fs::test_paths_under_the_root_are_returned_resolved` |
+| `safe_join` returning the caller's spelling instead of the resolved path it checked, or anything through a symlink loop | `test_fs::test_paths_under_the_root_are_returned_resolved`, `::test_a_path_through_a_symlink_loop_is_refused` |
 | A "skip pinning" option in `net`: an allow-listed host is still pinned | `test_net::test_an_allow_listed_host_is_still_pinned`, `::test_dns_rebinding_after_the_check_changes_nothing` |
 | `net` forwarding `Authorization` or `Cookie` across a redirect to another origin, or inflating a body past `max_bytes` | `test_net::test_credentials_are_not_forwarded_to_another_origin`, `::test_a_compression_bomb_is_never_inflated_past_the_cap` |
 | `bearer()` leaving a route open when its token is unset, unless the route passes `open_when_unset=True` | `test_auth::test_unset_token_closes_the_route`, `::test_open_when_unset_is_explicit_and_logged` |
