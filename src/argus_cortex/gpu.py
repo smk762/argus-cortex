@@ -411,6 +411,7 @@ def build_coordinator(
     tenant: str | None = None,
     manifest_path: str | None = None,
     fallback: str = "lease",
+    admin_token: str | None = None,
 ) -> GpuCoordinator:
     """A coordinator by name, one of :data:`COORDINATORS` (empty is ``none``).
 
@@ -456,6 +457,7 @@ def build_coordinator(
             manifest=manifest,
             fallback=local,
             timeout_s=DEFAULT_TIMEOUT_S if timeout_s is None else timeout_s,
+            admin_token=admin_token,
         )
     raise ValueError(f"unknown GPU coordinator {name!r}; choose from: {', '.join(COORDINATORS)}")
 
@@ -477,17 +479,69 @@ def _env_number(name: str, kind: type[float] | type[int]) -> float | int | None:
     return value
 
 
+MANIFEST_CANDIDATES: tuple[str, ...] = ("gpu-tenant.yaml", "/app/gpu-tenant.yaml")
+"""Where :func:`coordinator_from_env` looks for a tenant manifest when ``ARGUS_GPU_TENANT_MANIFEST`` is unset: the
+working directory, then ``/app``, where the suite's images copy it."""
+
+
+def find_tenant_manifest(candidates: tuple[str, ...] = MANIFEST_CANDIDATES) -> str | None:
+    """The first of *candidates* that is a file, or ``None``."""
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
 def coordinator_from_env() -> GpuCoordinator:
-    """The coordinator the environment names; ``none`` when ``ARGUS_GPU_COORDINATOR`` is unset."""
+    """The coordinator the environment names.
+
+    ``ARGUS_GPU_COORDINATOR`` picks it; unset, it is ``broker`` when ``ARGUS_GPU_BROKER_URL`` is set and ``none``
+    otherwise, so a service joins the broker with a URL and a token alone. The tenant manifest is
+    ``ARGUS_GPU_TENANT_MANIFEST``, else the first of :data:`MANIFEST_CANDIDATES` that exists, and the tenant name is
+    ``ARGUS_GPU_TENANT``, else the manifest's. The admin token handed to the broker for this service's ``/admin/*``
+    routes is read from the variable ``ARGUS_GPU_ADMIN_TOKEN_ENV`` names (default ``ARGUS_ADMIN_TOKEN``; empty: none).
+    """
     device = _env_number("ARGUS_GPU_DEVICE", int)
+    broker_url = os.environ.get("ARGUS_GPU_BROKER_URL", "").strip() or None
+    name = os.environ.get("ARGUS_GPU_COORDINATOR", "").strip() or ("broker" if broker_url else "none")
+    manifest_path = os.environ.get("ARGUS_GPU_TENANT_MANIFEST", "").strip() or None
+    if name.lower() == "broker" and manifest_path is None:
+        manifest_path = find_tenant_manifest()
+    token_env = os.environ.get("ARGUS_GPU_ADMIN_TOKEN_ENV", "ARGUS_ADMIN_TOKEN").strip()
+    admin_token = (os.environ.get(token_env, "").strip() or None) if token_env else None
     return build_coordinator(
-        os.environ.get("ARGUS_GPU_COORDINATOR", "none"),
+        name,
         lock_path=os.environ.get("ARGUS_GPU_LEASE_PATH") or None,
         timeout_s=_env_number("ARGUS_GPU_LEASE_TIMEOUT_S", float),
         device=0 if device is None else int(device),
-        broker_url=os.environ.get("ARGUS_GPU_BROKER_URL", "").strip() or None,
+        broker_url=broker_url,
         broker_token=os.environ.get("ARGUS_GPU_BROKER_TOKEN", "").strip() or None,
         tenant=os.environ.get("ARGUS_GPU_TENANT", "").strip() or None,
-        manifest_path=os.environ.get("ARGUS_GPU_TENANT_MANIFEST", "").strip() or None,
+        manifest_path=manifest_path,
         fallback=os.environ.get("ARGUS_GPU_BROKER_FALLBACK", "lease"),
+        admin_token=admin_token,
     )
+
+
+@contextlib.contextmanager
+def registered(coordinator: GpuCoordinator) -> Iterator[None]:
+    """Keep *coordinator*'s tenant registered with the GPU broker for the body (see ``BrokerCoordinator.registered``);
+    a no-op for the local coordinators. Wrap a service's lifetime in it so the broker knows the service from startup,
+    not from its first lease."""
+    keep = getattr(coordinator, "registered", None)
+    if keep is None:
+        yield
+        return
+    with keep():
+        yield
+
+
+@contextlib.asynccontextmanager
+async def aregistered(coordinator: GpuCoordinator) -> AsyncIterator[None]:
+    """:func:`registered` for an async lifespan."""
+    keep = getattr(coordinator, "aregistered", None)
+    if keep is None:
+        yield
+        return
+    async with keep():
+        yield

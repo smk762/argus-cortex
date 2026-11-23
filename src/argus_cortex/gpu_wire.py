@@ -32,7 +32,7 @@ from argus_cortex.wire import make_versioned_base, render_schema
 
 LEASE_VERSION = "1.1"
 LEASE_MAJORS = ("1",)
-TENANT_VERSION = "1.0"
+TENANT_VERSION = "1.1"
 TENANT_MAJORS = ("1",)
 RESIDENT_VERSION = "1.0"
 RESIDENT_MAJORS = ("1",)
@@ -278,6 +278,14 @@ class TenantResident(BaseModel):
         max_length=200,
         description="The compose container name. The broker's node agent matches GPU processes to this resident by "
         "it, for every adapter, and starts it to warm a stopped service (e.g. ComfyUI).",
+    )
+    port: int | None = Field(
+        None,
+        ge=1,
+        le=65535,
+        description="The port the service listens on inside its container, so a broker that finds the container "
+        "through its node agent can resolve the published host port. Needed only when the container publishes "
+        "several ports.",
     )
     health_path: RoutePath = Field(
         "/health", description="argus-http: status route, answering a ResidentHealth (model state, busy, idle)."

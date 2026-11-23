@@ -29,10 +29,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import re
 import threading
 import time
 import uuid
 from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from argus_cortex.gpu import (
@@ -68,6 +70,19 @@ DEFAULT_TTL_S = 60.0
 # The broker keeps tenants in memory, so the manifest is posted again this often (and at once after the broker was
 # unreachable or forgot a lease): a restarted broker would otherwise never learn it from a long-lived client.
 REREGISTER_S = 300.0
+# After a failed registration the keep-registered loop tries again this soon, not a whole REREGISTER_S later.
+REREGISTER_RETRY_S = 30.0
+
+ADMIN_TOKEN_HEADER = "X-Argus-Admin-Token"
+"""Sent with ``POST /tenants`` when the manifest has a resident with ``admin_auth``: the token the broker presents back
+to this service's ``/admin/*`` routes. Never part of the manifest, never logged."""
+CONTAINER_ID_HEADER = "X-Argus-Container-Id"
+"""Sent with ``POST`` and ``DELETE /tenants`` when this process runs in a container: its full (64-hex) id, so the broker
+can ask its node agents which host, GPU and published ports the container has."""
+
+_CONTAINER_ID_RE = re.compile(r"(?:containers/|docker[-/]|libpod-|cri-containerd-|crio-)([0-9a-f]{64})")
+_FULL_ID_RE = re.compile(r"^[0-9a-f]{64}$")
+_SHORT_ID_RE = re.compile(r"^[0-9a-f]{12}$")
 
 
 class BrokerError(RuntimeError):
@@ -103,6 +118,41 @@ def _gave_up(exc: BaseException) -> str:
     if isinstance(exc, asyncio.CancelledError):
         return "caller cancelled"
     return f"gave up while queued: {type(exc).__name__}: {exc}"[:2000]
+
+
+def own_container_id(
+    sources: tuple[str | Path, ...] = ("/proc/self/mountinfo", "/proc/self/cgroup"),
+    hostname: str | None = None,
+) -> str | None:
+    """This process's container id (64 hex), or ``None`` outside a container or when it cannot be told.
+
+    Docker and Podman bind-mount ``/etc/hostname`` (and ``resolv.conf``, ``hosts``) from a directory named after the
+    container, which ``/proc/self/mountinfo`` shows under cgroup v1 and v2 alike; ``/proc/self/cgroup`` names it under
+    cgroup v1 or a host cgroup namespace. The hostname alone is never trusted: it only picks between several ids
+    found there (a container's default hostname is its id's first 12 characters).
+    """
+    found: list[str] = []
+    for source in sources:
+        try:
+            text = Path(source).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for cid in _CONTAINER_ID_RE.findall(text):
+            if cid not in found:
+                found.append(cid)
+        if found:
+            break
+    if len(found) == 1:
+        return found[0]
+    if not found:
+        return None
+    if hostname is None:
+        import socket  # noqa: PLC0415 - only when there is something to choose between
+
+        hostname = socket.gethostname()
+    host = hostname.strip().lower()
+    matches = [cid for cid in found if (_SHORT_ID_RE.match(host) and cid.startswith(host)) or cid == host]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _heartbeat_body(handle: GpuLease) -> dict[str, Any]:
@@ -141,6 +191,14 @@ class BrokerCoordinator:
     the broker before the first lease, again every :data:`REREGISTER_S`, and again after the broker was unreachable
     or forgot a lease (a restart). *timeout_s* bounds the whole wait for a grant. *transport* and
     *async_transport* inject httpx transports (tests).
+
+    A service that keeps models resident registers at startup rather than at its first lease: wrap its lifetime in
+    :meth:`registered` (or :meth:`aregistered` in a FastAPI lifespan), which registers in the background, keeps it
+    registered, and says goodbye on the way out. Each registration carries *admin_token* (``X-Argus-Admin-Token``)
+    when a resident in the manifest has ``admin_auth``, so the broker can call this service's ``/admin/*`` routes
+    without its operator configuring a token, and this process's container id (``X-Argus-Container-Id``; found by
+    :func:`own_container_id` unless *container_id* is given or *detect_container* is false), so the broker can find
+    the host, GPU and ports itself.
     """
 
     name = "broker"
@@ -160,6 +218,9 @@ class BrokerCoordinator:
         request_timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S,
         transport: Any = None,
         async_transport: Any = None,
+        admin_token: str | None = None,
+        container_id: str | None = None,
+        detect_container: bool = True,
     ) -> None:
         LeaseRequest(tenant=tenant, ttl_s=ttl_s)  # fail fast on a bad tenant slug or TTL, not at the first lease
         self.url = url.rstrip("/")
@@ -177,6 +238,10 @@ class BrokerCoordinator:
         self._registered_at: float | None = None  # time.monotonic() of the last POST /tenants; None: post it next
         self._register_lock = threading.Lock()
         self._unreachable_warned = False
+        self._admin_token = admin_token or None
+        if container_id is not None and not _FULL_ID_RE.match(container_id):
+            raise ValueError("container_id must be a full 64-character hex container id")
+        self.container_id = container_id or (own_container_id() if detect_container else None)
 
     # --- shared pieces -------------------------------------------------------------------------------------------
 
@@ -261,6 +326,28 @@ class BrokerCoordinator:
             via="broker", lease_id=status.lease_id, node=status.node, device=status.device, base_url=status.base_url
         )
 
+    def _registration(self) -> TenantManifest | None:
+        """What to POST to /tenants: the manifest, else a bare one naming the tenant (so the broker still learns the
+        container); ``None`` when there is no tenant name to give."""
+        if self.manifest is not None:
+            return self.manifest
+        if self.tenant == "unknown":
+            return None
+        return TenantManifest(tenant=self.tenant)
+
+    def _manifest_body(self, manifest: TenantManifest) -> dict[str, Any]:
+        # Fields left at None are left out, so a broker on an older manifest minor (which forbids fields it does not
+        # know) still accepts a manifest that does not use the new ones.
+        return manifest.model_dump(mode="json", exclude_none=True)
+
+    def _tenant_headers(self, manifest: TenantManifest | None) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        if self.container_id:
+            headers[CONTAINER_ID_HEADER] = self.container_id
+        if self._admin_token and manifest is not None and any(r.admin_auth for r in manifest.residents):
+            headers[ADMIN_TOKEN_HEADER] = self._admin_token
+        return headers
+
     def _needs_register(self) -> bool:
         if self.manifest is None:
             return False
@@ -271,12 +358,13 @@ class BrokerCoordinator:
         """Post the manifest again before the next lease: the broker may have restarted and lost it."""
         self._registered_at = None
 
-    def _note_registered(self, status_code: int) -> None:
+    def _note_registered(self, status_code: int, manifest: TenantManifest | None = None) -> None:
         """Record a POST /tenants answer. A 5xx is unreachable; a 4xx is logged and retried only after the interval."""
         if status_code >= 500:
             raise _Unreachable(f"broker answered {status_code} registering the tenant")
-        if status_code >= 400 and self.manifest is not None:
-            _log.warning("GPU broker refused tenant manifest %s (%d)", self.manifest.tenant, status_code)
+        manifest = manifest or self.manifest
+        if status_code >= 400 and manifest is not None:
+            _log.warning("GPU broker refused tenant manifest %s (%d)", manifest.tenant, status_code)
         self._registered_at = time.monotonic()
 
     def _note_unreachable(self, exc: BaseException) -> None:
@@ -305,6 +393,142 @@ class BrokerCoordinator:
             )
             lost[0] = True
         return reply.ttl_s / 3
+
+    # --- registration --------------------------------------------------------------------------------------------
+
+    def _http_client(self) -> Any:
+        return _httpx().Client(transport=self._transport, timeout=self.request_timeout_s, **self._client_kwargs())
+
+    def _async_http_client(self) -> Any:
+        return _httpx().AsyncClient(
+            transport=self._async_transport, timeout=self.request_timeout_s, **self._client_kwargs()
+        )
+
+    def _registered_ok(self, code: int | None) -> bool:
+        if code is not None and code < 400:
+            self._note_reachable()
+            return True
+        return False
+
+    def register(self) -> bool:
+        """Register the tenant with the broker now (``POST /tenants``). True when the broker accepted it.
+
+        Fails open: an unreachable broker or a refusal is logged and answers False, and the next lease or
+        :meth:`registered` loop tries again.
+        """
+        manifest = self._registration()
+        if manifest is None:
+            return False
+        try:
+            with self._http_client() as client, self._register_lock:
+                return self._registered_ok(self._post_tenant(client, manifest))
+        except _Unreachable as exc:
+            self._note_unreachable(exc)
+            return False
+
+    async def aregister(self) -> bool:
+        """:meth:`register`, async."""
+        manifest = self._registration()
+        if manifest is None:
+            return False
+        try:
+            async with self._async_http_client() as client:
+                return self._registered_ok(await self._apost_tenant(client, manifest))
+        except _Unreachable as exc:
+            self._note_unreachable(exc)
+            return False
+
+    def _delete_path(self) -> str:
+        return f"/tenants/{self.tenant}"
+
+    def _note_unregistered(self, code: int) -> bool:
+        self._forget_registration()
+        if code < 400 or code in (404, 405):  # 404/405: already gone, or a broker without the route
+            return code < 400
+        _log.warning("GPU broker refused to unregister tenant %s (%d)", self.tenant, code)
+        return False
+
+    def unregister(self) -> bool:
+        """Tell the broker this process is going away (``DELETE /tenants/{tenant}``). True when it acknowledged."""
+        if self._registration() is None:
+            return False
+        try:
+            with self._http_client() as client:
+                response = self._send(client.delete, self._delete_path(), headers=self._tenant_headers(None))
+        except _Unreachable as exc:
+            _log.debug("GPU broker unreachable unregistering %s (%s)", self.tenant, exc)
+            return False
+        return self._note_unregistered(response.status_code)
+
+    async def aunregister(self) -> bool:
+        """:meth:`unregister`, async."""
+        if self._registration() is None:
+            return False
+        try:
+            async with self._async_http_client() as client:
+                response = await self._asend(client.delete, self._delete_path(), headers=self._tenant_headers(None))
+        except _Unreachable as exc:
+            _log.debug("GPU broker unreachable unregistering %s (%s)", self.tenant, exc)
+            return False
+        return self._note_unregistered(response.status_code)
+
+    def _next_registration(self, ok: bool, interval_s: float) -> float:
+        return interval_s if ok else min(REREGISTER_RETRY_S, interval_s)
+
+    @contextlib.contextmanager
+    def registered(self, *, interval_s: float = REREGISTER_S, unregister: bool = True) -> Iterator[None]:
+        """Keep the tenant registered for the body: a daemon thread registers at once, again every *interval_s*
+        (sooner after a failure), and *unregister* says goodbye on the way out. Never blocks or raises on the
+        broker's account, so a service starts whether or not the broker is up."""
+        stop = threading.Event()
+
+        def loop() -> None:
+            while not stop.is_set():
+                try:
+                    ok = self.register()
+                except Exception:  # noqa: BLE001 - one bad answer must not end registration for the process's life
+                    _log.warning("GPU broker registration for %s failed", self.tenant, exc_info=True)
+                    ok = False
+                stop.wait(self._next_registration(ok, interval_s))
+
+        thread = threading.Thread(target=loop, daemon=True, name="gpu-broker-register")
+        thread.start()
+        try:
+            yield
+        finally:
+            stop.set()
+            thread.join(timeout=self.request_timeout_s)
+            if unregister:
+                with contextlib.suppress(Exception):
+                    self.unregister()
+
+    @contextlib.asynccontextmanager
+    async def aregistered(self, *, interval_s: float = REREGISTER_S, unregister: bool = True) -> AsyncIterator[None]:
+        """:meth:`registered` as an asyncio task, for a FastAPI lifespan::
+
+        async with coordinator.aregistered():
+            yield
+        """
+
+        async def loop() -> None:
+            while True:
+                try:
+                    ok = await self.aregister()
+                except Exception:  # noqa: BLE001 - see registered()
+                    _log.warning("GPU broker registration for %s failed", self.tenant, exc_info=True)
+                    ok = False
+                await asyncio.sleep(self._next_registration(ok, interval_s))
+
+        task = asyncio.create_task(loop(), name="gpu-broker-register")
+        try:
+            yield
+        finally:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
+            if unregister:
+                with contextlib.suppress(Exception):
+                    await self.aunregister()
 
     # --- sync ----------------------------------------------------------------------------------------------------
 
@@ -384,8 +608,14 @@ class BrokerCoordinator:
         with self._register_lock:
             if not self._needs_register() or self.manifest is None:
                 return
-            response = self._send(client.post, "/tenants", json=self.manifest.model_dump(mode="json"))
-            self._note_registered(response.status_code)
+            self._post_tenant(client, self.manifest)
+
+    def _post_tenant(self, client: Any, manifest: TenantManifest) -> int:
+        response = self._send(
+            client.post, "/tenants", json=self._manifest_body(manifest), headers=self._tenant_headers(manifest)
+        )
+        self._note_registered(response.status_code, manifest)
+        return response.status_code
 
     def _post_lease(self, client: Any, req: LeaseRequest) -> LeaseStatus:
         response = self._send(
@@ -553,8 +783,14 @@ class BrokerCoordinator:
     async def _aregister(self, client: Any) -> None:
         if not self._needs_register() or self.manifest is None:
             return
-        response = await self._asend(client.post, "/tenants", json=self.manifest.model_dump(mode="json"))
-        self._note_registered(response.status_code)
+        await self._apost_tenant(client, self.manifest)
+
+    async def _apost_tenant(self, client: Any, manifest: TenantManifest) -> int:
+        response = await self._asend(
+            client.post, "/tenants", json=self._manifest_body(manifest), headers=self._tenant_headers(manifest)
+        )
+        self._note_registered(response.status_code, manifest)
+        return response.status_code
 
     async def _apost_lease(self, client: Any, req: LeaseRequest) -> LeaseStatus:
         response = await self._asend(
@@ -658,4 +894,10 @@ class BrokerCoordinator:
             _log.warning("GPU broker unreachable releasing %s (%s); its TTL will expire it", lease_id, exc)
 
 
-__all__ = ["BrokerCoordinator", "BrokerError"]
+__all__ = [
+    "ADMIN_TOKEN_HEADER",
+    "CONTAINER_ID_HEADER",
+    "BrokerCoordinator",
+    "BrokerError",
+    "own_container_id",
+]
