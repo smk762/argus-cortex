@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-23
+
 ### Added
 - **GPU broker: zero-config clients.** With `ARGUS_GPU_COORDINATOR` unset, `ARGUS_GPU_BROKER_URL` alone selects the
   broker coordinator (an explicit `ARGUS_GPU_COORDINATOR` still wins). With `ARGUS_GPU_TENANT_MANIFEST` unset, the
@@ -572,7 +574,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/smk762/argus-cortex/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/smk762/argus-cortex/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/smk762/argus-cortex/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/smk762/argus-cortex/compare/v0.11.0...v0.12.0
