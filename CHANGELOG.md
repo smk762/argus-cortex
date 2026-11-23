@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`argus_cortex.settings`: one owner-only suite file** for the settings every Argus service on a host shares
+  (`ARGUS_ENV_FILE`, else `~/.config/argus/suite.env`, else `/etc/argus/suite.env`). `get(name)` reads the process
+  environment, then the file; `source(name)` says which; `environ` is the same as a mapping; `apply()` copies the
+  file's values into `os.environ` where a variable is unset (never `PATH`, `LD_*`, `DYLD_*`, `PYTHON*`). The file is
+  read only when it belongs to this user or root and is not writable by anyone else, nor readable by them unless
+  root owns it; otherwise it is ignored with a warning. Values are never logged. `python -m argus_cortex.settings`
+  shows the file in use and the names it sets, and `--init` creates one with mode 600. Standard library only.
+- **`argus_cortex.peers`: one name per peer.** `peer_url(name, *env, default=None)` and `resolve_peer()` return a
+  stage's own variable, else the suite-wide `ARGUS_<PEER>_URL` (`peer_env()`), else the default. `off` opts a
+  service out. A value that is not an absolute `http(s)` URL raises `PeerRefused`, naming the variable only.
+
+### Changed
+- `gpu.coordinator_from_env()`, `StoreConfig.from_env()`, `auth.bearer()` and `server.env_flag()` read through
+  `settings`, so each also finds its variable in the suite file when the environment does not set it. With no suite
+  file nothing changes, except that `StoreConfig.from_env()` now strips surrounding whitespace and treats a
+  whitespace-only value as unset. A service that must not use a suite-wide broker sets `ARGUS_GPU_COORDINATOR=none`.
+  `ARGUS_GPU_ADMIN_TOKEN_ENV` is still read from the environment only, since its empty value means "send none".
+
 ### Security
 - `fs.safe_join` and `fs.is_within` no longer accept a path that goes through a symlink loop. Resolution stopped at
   the loop and returned the rest of the path as written, so with a loop under the root, `loop/../link` came back as
