@@ -1,0 +1,157 @@
+{
+  "$defs": {
+    "DependencyCheck": {
+      "description": "How one thing a service depends on is doing. Unknown fields are ignored, so a reader accepts a later 1.x.",
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Short and human-readable. Never a token; credentials in a URL are removed, and it is cut to 200 characters.",
+          "title": "Detail"
+        },
+        "latency_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latency Ms"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "required": {
+          "default": true,
+          "description": "A failed required check makes the service degraded. Others are reported and nothing more.",
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "title": "DependencyCheck",
+      "type": "object"
+    },
+    "ServiceHealth": {
+      "additionalProperties": true,
+      "description": "A service's ``GET /health`` body.\n\n``extra=\"allow\"``: a service keeps its own fields beside these, and a GPU resident's body is also a\n``gpu_wire.ResidentHealth``. Never in it: tokens, credentials, internal URLs, hostnames or file paths.",
+      "properties": {
+        "build": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The image's build id (a git sha or tag), if known.",
+          "title": "Build"
+        },
+        "capabilities": {
+          "default": [],
+          "description": "What it can do now, e.g. tts, voice-clone.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "checks": {
+          "additionalProperties": {
+            "$ref": "#/$defs/DependencyCheck"
+          },
+          "title": "Checks",
+          "type": "object"
+        },
+        "peer": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The container's argus.peer label, if it was told it.",
+          "title": "Peer"
+        },
+        "read_only": {
+          "default": false,
+          "title": "Read Only",
+          "type": "boolean"
+        },
+        "service": {
+          "description": "The package name (argus-lens), the same on every host.",
+          "maxLength": 100,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "title": "Service",
+          "type": "string"
+        },
+        "service_version": {
+          "default": "1.0",
+          "title": "Service Version",
+          "type": "string"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "degraded",
+            "starting"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "version": {
+          "description": "The installed package version.",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        },
+        "wire": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Wire contracts it speaks and their versions: {\"caption_version\": \"2.3\"}.",
+          "title": "Wire",
+          "type": "object"
+        }
+      },
+      "required": [
+        "service",
+        "version",
+        "status",
+        "started_at"
+      ],
+      "title": "ServiceHealth",
+      "type": "object"
+    }
+  },
+  "title": "Argus service health"
+}

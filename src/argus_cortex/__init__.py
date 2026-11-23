@@ -52,6 +52,7 @@ from argus_cortex.provenance import (
     provenance_schema,
 )
 from argus_cortex.resident import admin_evict, admin_wake
+from argus_cortex.service import DependencyCheck, ServiceHealth, install_health, service_health_schema
 from argus_cortex.store import (
     IMAGE_COLLECTION,
     TAGSET_COLLECTION,
@@ -184,6 +185,11 @@ __all__ = [
     "S3BlobStore",
     "open_blob_store",
     "content_key",
+    # service health
+    "DependencyCheck",
+    "ServiceHealth",
+    "install_health",
+    "service_health_schema",
     # resident admin (evict / wake)
     "admin_evict",
     "admin_wake",

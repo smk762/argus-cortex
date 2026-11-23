@@ -26,7 +26,7 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 
 | Never | Enforced by |
 |---|---|
-| Change `taxonomy.py`, `provenance.py`, `consent.py` or `gpu_wire.py` without `make schema` in the same commit | `test_taxonomy::test_committed_schema_matches_taxonomy`, `test_provenance::test_committed_schema_matches_provenance`, `test_consent::test_committed_schema_matches_consent`, `test_gpu_wire::test_committed_schema_is_current` |
+| Change `taxonomy.py`, `provenance.py`, `consent.py`, `gpu_wire.py` or `service.py` without `make schema` in the same commit | `test_taxonomy::test_committed_schema_matches_taxonomy`, `test_provenance::test_committed_schema_matches_provenance`, `test_consent::test_committed_schema_matches_consent`, `test_gpu_wire::test_committed_schema_is_current`, `test_service::test_committed_schema_is_current` |
 | Ship a breaking change to a committed schema in anything but a major release (and, for a `*_version` schema, a new wire major) | `test_schema_compat::test_committed_schemas_break_only_in_a_major_release`: compares each `*-schema.json` with the last `v*` tag; the release is the newest CHANGELOG heading |
 | Import NudeNet (AGPL-3.0): HTTP only | ruff `TID251` banned-api (`pyproject.toml`); `test_rules::test_cortex_never_imports_a_stage_or_nudenet` |
 | Import a stage from cortex | `test_rules::test_cortex_never_imports_a_stage_or_nudenet` |
@@ -53,6 +53,12 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 | `settings` printing or logging a value (names and line numbers only) | `test_settings::test_show_names_variables_and_never_a_value`, `::test_a_bad_line_is_reported_by_number_never_by_content` |
 | `settings.apply()` setting `PATH`, `LD_*`, `DYLD_*` or `PYTHON*` from a file | `test_settings::test_apply_fills_only_what_is_unset_and_never_loader_variables` |
 | `peers` skipping a malformed URL (it raises `PeerRefused`), or echoing the value | `test_peers::test_a_bad_url_is_refused_not_skipped_and_never_echoed` |
+| `ServiceHealth` and `ResidentHealth` sharing a field name (one body must be both) | `test_service::test_one_body_is_both_a_service_and_a_resident_health` |
+| A `/health` body carrying a credential, or a failed check's exception message (it can hold a URL, host or path) | `test_service::test_a_check_detail_never_carries_url_credentials`, `::test_a_check_that_raises_reports_its_type_and_never_its_message` |
+| `/health` answering 5xx because a dependency failed (that is `degraded`, `200`), or a check or `extra` taking the route down | `test_service::test_checks_decide_ok_or_degraded_and_both_answer_200`, `::test_a_slow_check_times_out_instead_of_holding_the_route`, `::test_a_broken_extra_never_takes_the_route_down` |
+| `extra` replacing one of `ServiceHealth`'s own fields | `test_service::test_extra_adds_resident_fields_and_never_replaces_the_contracts_own` |
+| `build` or `peer` read from the suite file (they describe one container) | `test_service::test_build_and_peer_come_from_this_process_never_the_suite_file` |
+| Rename an `argus.*` discovery label (compose files and iris's agents carry them) | `test_service::test_the_label_names_are_pinned` |
 | `bearer()` leaving a route open when its token is unset, unless the route passes `open_when_unset=True` | `test_auth::test_unset_token_closes_the_route`, `::test_open_when_unset_is_explicit_and_logged` |
 
 ## Facts the code doesn't make obvious
@@ -71,7 +77,8 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
   join share it.
 - Register `WriteGuard` *before* `CORSMiddleware`.
 - **Read settings through `argus_cortex.settings.get`, not `os.environ`**, so the suite file works for every variable
-  cortex reads. The exception is a variable whose blank value means something (`ARGUS_GPU_ADMIN_TOKEN_ENV`). Tests
+  cortex reads. The exceptions are a variable whose blank value means something (`ARGUS_GPU_ADMIN_TOKEN_ENV`) and
+  one that describes a single container (`ARGUS_BUILD`, `ARGUS_PEER`). Tests
   never see a developer's suite file: `tests/conftest.py` sets `ARGUS_ENV_FILE=off`. Use made-up variable names in
   tests, because a real one may be exported in the shell and a failed assert would print it.
 - `net`'s tests fake DNS (`resolve=`) and the network (`transport=`). The Hypothesis tests in `test_fs.py`,

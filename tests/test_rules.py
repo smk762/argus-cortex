@@ -32,6 +32,7 @@ EXTRAS = (
     "pynvml",
     "yaml",
     "libcst",
+    "prometheus_client",
 )
 
 
