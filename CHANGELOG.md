@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`LookAlike` on `Provenance`** (argus-mask#176): optional `lookalike` (`who`, `at`, `how`, `found`) for a
+  public look-alike check. Derived `demo_ready` is true only when the source is cleared and has one. The committed
+  schema lists `demo_ready` for readers but does not require it (additive since v0.14).
 - **`argus_cortex.settings`: one owner-only suite file** for the settings every Argus service on a host shares
   (`ARGUS_ENV_FILE`, else `~/.config/argus/suite.env`, else `/etc/argus/suite.env`). `get(name)` reads the process
   environment, then the file; `source(name)` says which; `environ` is the same as a mapping; `apply()` copies the

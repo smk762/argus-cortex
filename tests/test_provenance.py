@@ -102,6 +102,30 @@ def test_a_stored_cleared_flag_is_recomputed_not_believed() -> None:
     assert Provenance.model_validate(data).cleared is False
 
 
+def test_lookalike_makes_a_cleared_face_demo_ready() -> None:
+    from datetime import date
+
+    from argus_cortex.provenance import LookAlike
+
+    bare = Provenance(kind="synthetic", source="flux", license="Apache-2.0")
+    assert bare.cleared is True and bare.demo_ready is False and bare.lookalike is None
+    checked = Provenance(
+        kind="synthetic",
+        source="flux",
+        license="Apache-2.0",
+        lookalike=LookAlike(
+            who="the maintainer",
+            at=date(2026, 11, 16),
+            how="Bing visual search of the portrait",
+            found="no match",
+        ),
+    )
+    assert checked.demo_ready is True
+    dumped = json.loads(checked.model_dump_json())
+    assert dumped["lookalike"]["who"] == "the maintainer"
+    assert Provenance.model_validate({**dumped, "demo_ready": False}).demo_ready is True
+
+
 def test_round_trips_with_cleared_in_the_payload() -> None:
     p = Provenance(kind="stock", source="unsplash", license="Unsplash")
     data = json.loads(p.model_dump_json())
@@ -129,9 +153,13 @@ def test_committed_schema_matches_provenance() -> None:
 
 
 def test_schema_lists_every_kind_and_marks_cleared_read_only() -> None:
-    props = json.loads(provenance_schema())["$defs"]["Provenance"]["properties"]
+    schema = json.loads(provenance_schema())["$defs"]["Provenance"]
+    props = schema["properties"]
     assert props["kind"]["enum"] == list(PROVENANCE_KINDS)
     assert props["cleared"]["readOnly"] is True
+    assert props["demo_ready"]["readOnly"] is True
+    # Additive since v0.14: listed for readers, not required (#105 / mask#176).
+    assert "demo_ready" in props and "demo_ready" not in schema["required"]
 
 
 GEN = {"model": "flux1-dev", "model_sha256": "e" * 64, "seed": 42, "prompt": "a portrait, studio light"}
