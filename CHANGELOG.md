@@ -30,6 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `gpu_wire.TenantResident.port` (1-65535, optional): the port the service listens on inside its container, so a
   broker that finds the container through its node agent can pick the published host port when there are several.
   `tenant_version` 1.1, additive. Regenerated `gpu-tenant-schema.json`.
+- `argus_cortex.resident.admin_evict` and `admin_wake` (also `argus_cortex.admin_evict` / `admin_wake`): the shared
+  body of `POST /admin/evict` and `POST /admin/wake` for a resident whose manager demotes with `demote_to_cpu()` and
+  loads with `ensure_ready()`. The 200 body is `{"status", "model_state"}`. `on_error` maps a failure into the
+  service's own response; evict without it lets the exception propagate. That covers both Miso servers: argus-echo's
+  manager swallows a failed demote, voluptas's raises `MisoLoadError` and the route maps that one type. A handler
+  that answers 409 while busy, reports `gpu` or `unloaded`, or calls `evict` / `ensure_gpu` / `ensure_loaded` stays
+  in the service.
 
 ### Changed
 - The broker client posts manifests without their `None`-valued fields, so a broker that understands only
