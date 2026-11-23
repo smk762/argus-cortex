@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-23
+
+### Added
+- **GPU broker: zero-config clients.** With `ARGUS_GPU_COORDINATOR` unset, `ARGUS_GPU_BROKER_URL` alone selects the
+  broker coordinator (an explicit `ARGUS_GPU_COORDINATOR` still wins). With `ARGUS_GPU_TENANT_MANIFEST` unset, the
+  first of `./gpu-tenant.yaml` and `/app/gpu-tenant.yaml` is the manifest (`gpu.MANIFEST_CANDIDATES`,
+  `gpu.find_tenant_manifest()`), and the tenant name comes from it as before. A URL and a token are all a service
+  needs.
+- **GPU broker: registration at startup, not at the first lease.** `BrokerCoordinator.register()` / `aregister()`
+  post the manifest once (a bare one naming the tenant if there is none) and `unregister()` / `aunregister()` send
+  `DELETE /tenants/{tenant}`. `BrokerCoordinator.registered()` (a thread) and `aregistered()` (an asyncio task, for a
+  FastAPI lifespan) keep it registered every `REREGISTER_S`, 30 s after a failure (`REREGISTER_RETRY_S`), and
+  unregister on the way out (`unregister=False` to skip). They fail open and never block startup.
+  `gpu.registered(coordinator)` / `gpu.aregistered(coordinator)` do the same for any coordinator, and nothing for the
+  local ones.
+- **GPU broker: the broker can find and call a registered service.** Every `POST /tenants` carries
+  `X-Argus-Container-Id` (`gpu_broker.CONTAINER_ID_HEADER`): this process's 64-hex container id, read from
+  `/proc/self/mountinfo` or `/proc/self/cgroup` by `gpu_broker.own_container_id()` (never guessed from the hostname
+  alone; `detect_container=False` or `container_id=` on the coordinator override it). When a resident in the manifest
+  has `admin_auth`, it also carries `X-Argus-Admin-Token` (`ADMIN_TOKEN_HEADER`): the token the broker presents to the
+  service's `/admin/*` routes, from the variable `ARGUS_GPU_ADMIN_TOKEN_ENV` names (default `ARGUS_ADMIN_TOKEN`; empty
+  sends none), or `admin_token=`. Neither is part of the manifest.
+- `gpu_wire.TenantResident.port` (1-65535, optional): the port the service listens on inside its container, so a
+  broker that finds the container through its node agent can pick the published host port when there are several.
+  `tenant_version` 1.1, additive. Regenerated `gpu-tenant-schema.json`.
+- `argus_cortex.resident.admin_evict` and `admin_wake` (also `argus_cortex.admin_evict` / `admin_wake`): the shared
+  body of `POST /admin/evict` and `POST /admin/wake` for a resident whose manager demotes with `demote_to_cpu()` and
+  loads with `ensure_ready()`. The 200 body is `{"status", "model_state"}`. `on_error` maps a failure into the
+  service's own response; evict without it lets the exception propagate. That covers both Miso servers: argus-echo's
+  manager swallows a failed demote, voluptas's raises `MisoLoadError` and the route maps that one type. A handler
+  that answers 409 while busy, reports `gpu` or `unloaded`, or calls `evict` / `ensure_gpu` / `ensure_loaded` stays
+  in the service.
+
+### Changed
+- The broker client posts manifests without their `None`-valued fields, so a broker that understands only
+  `tenant_version` 1.0 (and forbids fields it does not know) still accepts a manifest that does not set `port`.
+- **Behaviour change:** a service that set `ARGUS_GPU_BROKER_URL` but left `ARGUS_GPU_COORDINATOR` unset used to get
+  the `none` coordinator and now gets the broker. Set `ARGUS_GPU_COORDINATOR=none` to keep the old behaviour.
+
 ## [0.14.0] - 2026-11-23
 
 ### Added
@@ -535,7 +574,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/smk762/argus-cortex/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/smk762/argus-cortex/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/smk762/argus-cortex/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/smk762/argus-cortex/compare/v0.11.0...v0.12.0

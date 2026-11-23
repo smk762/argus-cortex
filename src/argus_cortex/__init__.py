@@ -51,6 +51,7 @@ from argus_cortex.provenance import (
     ProvenanceKind,
     provenance_schema,
 )
+from argus_cortex.resident import admin_evict, admin_wake
 from argus_cortex.store import (
     IMAGE_COLLECTION,
     TAGSET_COLLECTION,
@@ -183,6 +184,9 @@ __all__ = [
     "S3BlobStore",
     "open_blob_store",
     "content_key",
+    # resident admin (evict / wake)
+    "admin_evict",
+    "admin_wake",
     # hashing
     "sha256_hex",
     # timestamps

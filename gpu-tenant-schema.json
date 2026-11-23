@@ -184,7 +184,7 @@
           "type": "string"
         },
         "tenant_version": {
-          "default": "1.0",
+          "default": "1.1",
           "title": "Tenant Version",
           "type": "string"
         }
@@ -305,6 +305,21 @@
           "description": "Hint: never evict (e.g. SingGuard's model, a2f during a broadcast).",
           "title": "Pinned",
           "type": "boolean"
+        },
+        "port": {
+          "anyOf": [
+            {
+              "maximum": 65535,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The port the service listens on inside its container, so a broker that finds the container through its node agent can resolve the published host port. Needed only when the container publishes several ports.",
+          "title": "Port"
         },
         "target": {
           "default": "in-process",
