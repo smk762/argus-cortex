@@ -48,6 +48,11 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 | `safe_join` returning the caller's spelling instead of the resolved path it checked | `test_fs::test_paths_under_the_root_are_returned_resolved` |
 | A "skip pinning" option in `net`: an allow-listed host is still pinned | `test_net::test_an_allow_listed_host_is_still_pinned`, `::test_dns_rebinding_after_the_check_changes_nothing` |
 | `net` forwarding `Authorization` or `Cookie` across a redirect to another origin, or inflating a body past `max_bytes` | `test_net::test_credentials_are_not_forwarded_to_another_origin`, `::test_a_compression_bomb_is_never_inflated_past_the_cap` |
+| The suite file being read when someone else can write it, or read it (unless root owns it) | `test_settings::test_a_file_others_can_read_or_write_is_not_read`, `::test_root_owned_read_only_mount_is_accepted_but_never_a_writable_one`, `::test_a_file_owned_by_another_user_is_not_read` |
+| The suite file overriding a variable set in the process environment | `test_settings::test_the_environment_wins_and_blank_falls_through` |
+| `settings` printing or logging a value (names and line numbers only) | `test_settings::test_show_names_variables_and_never_a_value`, `::test_a_bad_line_is_reported_by_number_never_by_content` |
+| `settings.apply()` setting `PATH`, `LD_*`, `DYLD_*` or `PYTHON*` from a file | `test_settings::test_apply_fills_only_what_is_unset_and_never_loader_variables` |
+| `peers` skipping a malformed URL (it raises `PeerRefused`), or echoing the value | `test_peers::test_a_bad_url_is_refused_not_skipped_and_never_echoed` |
 | `bearer()` leaving a route open when its token is unset, unless the route passes `open_when_unset=True` | `test_auth::test_unset_token_closes_the_route`, `::test_open_when_unset_is_explicit_and_logged` |
 
 ## Facts the code doesn't make obvious
@@ -65,6 +70,10 @@ import or API) belongs in argus-ci's `suite-rules/` catalogue rather than a test
 - **Blob identity** is the content's sha256 (`content_key()` == `source_asset.sha256`): storage, dedup and the lineage
   join share it.
 - Register `WriteGuard` *before* `CORSMiddleware`.
+- **Read settings through `argus_cortex.settings.get`, not `os.environ`**, so the suite file works for every variable
+  cortex reads. The exception is a variable whose blank value means something (`ARGUS_GPU_ADMIN_TOKEN_ENV`). Tests
+  never see a developer's suite file: `tests/conftest.py` sets `ARGUS_ENV_FILE=off`. Use made-up variable names in
+  tests, because a real one may be exported in the shell and a failed assert would print it.
 - `net`'s tests fake DNS (`resolve=`) and the network (`transport=`). The Hypothesis tests in `test_fs.py`,
   `test_net.py` and `test_limits.py` are the hostile-input spec: keep them passing when you change a rule.
 - **Codemods** (`src/argus_cortex/codemods/`, the `[codemods]` extra) are dev tools. Nothing in the library imports them

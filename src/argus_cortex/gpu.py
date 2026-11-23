@@ -58,6 +58,8 @@ from collections.abc import AsyncIterator, Callable, Iterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
+from argus_cortex import settings
+
 if TYPE_CHECKING:
     from argus_cortex.gpu_wire import GpuConstraints, PriorityClass
 
@@ -463,7 +465,7 @@ def build_coordinator(
 
 
 def _env_number(name: str, kind: type[float] | type[int]) -> float | int | None:
-    raw = os.environ.get(name, "").strip()
+    raw = settings.get(name, "")
     if not raw:
         return None
     try:
@@ -500,25 +502,27 @@ def coordinator_from_env() -> GpuCoordinator:
     ``ARGUS_GPU_TENANT_MANIFEST``, else the first of :data:`MANIFEST_CANDIDATES` that exists, and the tenant name is
     ``ARGUS_GPU_TENANT``, else the manifest's. The admin token handed to the broker for this service's ``/admin/*``
     routes is read from the variable ``ARGUS_GPU_ADMIN_TOKEN_ENV`` names (default ``ARGUS_ADMIN_TOKEN``; empty: none).
+
+    Each variable is read through :mod:`argus_cortex.settings`: the process environment, then the suite file.
     """
     device = _env_number("ARGUS_GPU_DEVICE", int)
-    broker_url = os.environ.get("ARGUS_GPU_BROKER_URL", "").strip() or None
-    name = os.environ.get("ARGUS_GPU_COORDINATOR", "").strip() or ("broker" if broker_url else "none")
-    manifest_path = os.environ.get("ARGUS_GPU_TENANT_MANIFEST", "").strip() or None
+    broker_url = settings.get("ARGUS_GPU_BROKER_URL")
+    name = settings.get("ARGUS_GPU_COORDINATOR") or ("broker" if broker_url else "none")
+    manifest_path = settings.get("ARGUS_GPU_TENANT_MANIFEST")
     if name.lower() == "broker" and manifest_path is None:
         manifest_path = find_tenant_manifest()
     token_env = os.environ.get("ARGUS_GPU_ADMIN_TOKEN_ENV", "ARGUS_ADMIN_TOKEN").strip()
-    admin_token = (os.environ.get(token_env, "").strip() or None) if token_env else None
+    admin_token = settings.get(token_env) if token_env else None
     return build_coordinator(
         name,
-        lock_path=os.environ.get("ARGUS_GPU_LEASE_PATH") or None,
+        lock_path=settings.get("ARGUS_GPU_LEASE_PATH"),
         timeout_s=_env_number("ARGUS_GPU_LEASE_TIMEOUT_S", float),
         device=0 if device is None else int(device),
         broker_url=broker_url,
-        broker_token=os.environ.get("ARGUS_GPU_BROKER_TOKEN", "").strip() or None,
-        tenant=os.environ.get("ARGUS_GPU_TENANT", "").strip() or None,
+        broker_token=settings.get("ARGUS_GPU_BROKER_TOKEN"),
+        tenant=settings.get("ARGUS_GPU_TENANT"),
         manifest_path=manifest_path,
-        fallback=os.environ.get("ARGUS_GPU_BROKER_FALLBACK", "lease"),
+        fallback=settings.get("ARGUS_GPU_BROKER_FALLBACK", "lease"),
         admin_token=admin_token,
     )
 
