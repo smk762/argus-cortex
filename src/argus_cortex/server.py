@@ -27,9 +27,10 @@ from __future__ import annotations
 
 import ipaddress
 import logging
-import os
 from collections.abc import Callable, Iterable
 from urllib.parse import urlsplit
+
+from argus_cortex import settings
 
 try:
     from starlette.datastructures import Headers
@@ -68,7 +69,7 @@ def env_flag(name: str) -> bool:
     logs a warning and is treated as **off**, so a mistyped protection flag is
     visible in the logs rather than silently leaving the guard disabled.
     """
-    raw = os.environ.get(name, "").strip().lower()
+    raw = settings.get(name, "").lower()
     if raw in TRUTHY:
         return True
     if raw not in FALSY:

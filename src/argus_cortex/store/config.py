@@ -13,10 +13,11 @@ without reshaping config.
 
 from __future__ import annotations
 
-import os
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, SecretStr
+
+from argus_cortex import settings
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -52,12 +53,13 @@ class StoreConfig(BaseModel):
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> StoreConfig:
-        """Read ``CORTEX_*`` variables from *env* (defaults to ``os.environ``).
+        """Read ``CORTEX_*`` variables from *env* (defaults to the process environment with the suite file behind
+        it, :data:`argus_cortex.settings.environ`).
 
         An empty string is treated as unset, so ``CORTEX_PG_URL=`` in a ``.env``
         disables the feature just like omitting it.
         """
-        env = os.environ if env is None else env
+        env = settings.environ if env is None else env
 
         def get(key: str) -> str | None:
             return env.get(key) or None

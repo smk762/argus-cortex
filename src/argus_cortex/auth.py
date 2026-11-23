@@ -10,7 +10,8 @@
     @app.post("/admin/unload", dependencies=[Depends(require_admin)])
     def unload(): ...
 
-* The token is read from the environment on every request, so rotating it needs no restart.
+* The token is read on every request, from the environment or else the suite file
+  (:mod:`argus_cortex.settings`), so rotating it needs no restart.
 * **Not configured means refused** (``503``), unless the route opts in with
   ``open_when_unset=True``. That keeps today's "open in dev" behaviour visible in the code
   instead of implicit, and logs a warning the first time it lets a request through.
@@ -26,8 +27,9 @@ from __future__ import annotations
 
 import hmac
 import logging
-import os
 from collections.abc import Awaitable, Callable
+
+from argus_cortex import settings
 
 try:
     from starlette.exceptions import HTTPException
@@ -65,7 +67,7 @@ def bearer(
 
     async def require_bearer(conn: HTTPConnection) -> None:
         nonlocal warned
-        token = os.environ.get(env_var, "").strip()
+        token = settings.get(env_var, "")
         if not token:
             if open_when_unset:
                 if not warned:
