@@ -173,8 +173,7 @@
       "required": [
         "kind",
         "source",
-        "cleared",
-        "demo_ready"
+        "cleared"
       ],
       "title": "Provenance",
       "type": "object"

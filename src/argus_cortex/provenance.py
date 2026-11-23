@@ -33,6 +33,7 @@ every package that stores a ``Provenance`` reads these fields.
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from typing import Literal, get_args
 
@@ -182,5 +183,12 @@ def provenance_schema() -> str:
 
     Non-Python clients generate their types from that file. ``tests/test_provenance.py`` fails if
     the committed file and this module drift; regenerate it with ``make schema``.
+
+    ``demo_ready`` is derived like ``cleared``, but is kept *optional* in the schema so adding it
+    is additive (argus-mask#176): a newly required property would need a major release (#105).
     """
-    return render_schema([Provenance], title=PROVENANCE_SCHEMA_TITLE)
+    data = json.loads(render_schema([Provenance], title=PROVENANCE_SCHEMA_TITLE))
+    prov = data.get("$defs", {}).get("Provenance")
+    if isinstance(prov, dict) and "required" in prov:
+        prov["required"] = [name for name in prov["required"] if name != "demo_ready"]
+    return json.dumps(data, indent=2, sort_keys=True) + "\n"

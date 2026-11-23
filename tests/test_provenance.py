@@ -153,9 +153,13 @@ def test_committed_schema_matches_provenance() -> None:
 
 
 def test_schema_lists_every_kind_and_marks_cleared_read_only() -> None:
-    props = json.loads(provenance_schema())["$defs"]["Provenance"]["properties"]
+    schema = json.loads(provenance_schema())["$defs"]["Provenance"]
+    props = schema["properties"]
     assert props["kind"]["enum"] == list(PROVENANCE_KINDS)
     assert props["cleared"]["readOnly"] is True
+    assert props["demo_ready"]["readOnly"] is True
+    # Additive since v0.14: listed for readers, not required (#105 / mask#176).
+    assert "demo_ready" in props and "demo_ready" not in schema["required"]
 
 
 GEN = {"model": "flux1-dev", "model_sha256": "e" * 64, "seed": 42, "prompt": "a portrait, studio light"}
