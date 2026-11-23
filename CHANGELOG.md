@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whitespace-only value as unset. A service that must not use a suite-wide broker sets `ARGUS_GPU_COORDINATOR=none`.
   `ARGUS_GPU_ADMIN_TOKEN_ENV` is still read from the environment only, since its empty value means "send none".
 
+### Security
+- `fs.safe_join` and `fs.is_within` no longer accept a path that goes through a symlink loop. Resolution stopped at
+  the loop and returned the rest of the path as written, so with a loop under the root, `loop/../link` came back as
+  an unfollowed `link`: a symlink that points outside the root was returned instead of refused. A path that does not
+  resolve to itself is now refused ("could not be resolved"). Paths without a loop are unaffected.
+
 ## [0.15.0] - 2026-11-23
 
 ### Added
