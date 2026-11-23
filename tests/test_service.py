@@ -28,6 +28,7 @@ from argus_cortex.service import (
     ServiceHealth,
     build_info_collector,
     build_info_text,
+    capability_names,
     install_health,
     metrics_route,
     service_health_schema,
@@ -312,6 +313,32 @@ def test_starting_is_503_and_runs_no_checks(caplog: pytest.LogCaptureFixture) ->
     assert "RuntimeError" in caplog.text and SECRET not in caplog.text
 
 
+def test_capabilities_may_be_a_map_of_name_to_whether_it_is_on() -> None:
+    """A service whose clients already read ``capabilities`` as an object keeps it (argus-mint)."""
+    caps = {"create_drafts": True, "identity_check": False}
+    c = client(capabilities=lambda: caps)
+    body = c.get("/health").json()
+    assert body["capabilities"] == caps  # served as given, not rewritten into a list
+    health = ServiceHealth.model_validate(body)
+    assert health.capabilities == caps and health.capability_names == ("create_drafts",)
+    caps["identity_check"] = True
+    assert ServiceHealth.model_validate(c.get("/health").json()).capability_names == ("create_drafts", "identity_check")
+    # A static map works too, and the list form answers the same question.
+    assert client(capabilities={"b": True, "a": True}).get("/health").json()["capabilities"] == {"a": True, "b": True}
+    assert ServiceHealth.model_validate(client(capabilities=["tts"]).get("/health").json()).capability_names == ("tts",)
+    assert capability_names(["x", "y"]) == ("x", "y") and capability_names({"x": False}) == ()
+
+
+def test_a_capability_map_holds_booleans_only() -> None:
+    """A count or a string is not "on": the body is refused, never coerced."""
+    base = ServiceHealth.model_validate(client().get("/health").json()).model_dump(mode="json")
+    for bad in ({"queue": 3}, {"tts": "yes"}, {"tts": None}):
+        with pytest.raises(ValidationError):
+            ServiceHealth.model_validate({**base, "capabilities": bad})
+    with pytest.raises(ValueError, match="capabilities"):
+        client(capabilities={"queue": 3})
+
+
 def test_capabilities_may_change_while_running() -> None:
     caps = ["tts"]
     c = client(capabilities=lambda: caps)
@@ -351,7 +378,7 @@ def test_a_broken_extra_never_takes_the_route_down(kind: str, caplog: pytest.Log
 
 def test_build_info_text(monkeypatch: pytest.MonkeyPatch) -> None:
     text = build_info_text("argus-lens", version="0.14.2")
-    assert text.splitlines()[-1] == 'argus_build_info{service="argus-lens",version="0.14.2",service_version="1.0"} 1'
+    assert text.splitlines()[-1] == 'argus_build_info{service="argus-lens",version="0.14.2",service_version="1.1"} 1'
     assert "# TYPE argus_build_info gauge" in text and text.endswith("\n")
     monkeypatch.setenv(BUILD_ENV, 'sha"1\\2\n3')
     assert 'build="sha\\"1\\\\2\\n3"} 1' in build_info_text("argus-lens", version="1")
@@ -373,6 +400,6 @@ def test_build_info_collector_matches_the_text() -> None:
     registry.register(build_info_collector("argus-test", version="1.2.3", build="abc"))
     out = generate_latest(registry).decode()
     sample = next(line for line in out.splitlines() if line.startswith("argus_build_info{"))
-    for label in ('service="argus-test"', 'version="1.2.3"', 'service_version="1.0"', 'build="abc"'):
+    for label in ('service="argus-test"', 'version="1.2.3"', 'service_version="1.1"', 'build="abc"'):
         assert label in sample  # the same labels as the text form; the library sorts them
     assert sample.endswith("} 1.0") and "# TYPE argus_build_info gauge" in out

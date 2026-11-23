@@ -26,6 +26,9 @@ ready, and how its dependencies are doing. ``install_health`` serves it::
   requests get its last result.
 * **It composes with ``ResidentHealth``.** Both models allow extra fields and share no field name, so one body is
   both. A field from ``extra`` never replaces one of the contract's own.
+* **Capabilities, two forms.** A list of names, or a map of every capability the service knows to whether it is on
+  (``service_version`` 1.1), so a service whose clients already read such a map keeps it. A reader asks
+  ``ServiceHealth.capability_names`` and gets the names that are on either way.
 * **Nothing private in the body.** The route is unauthenticated and scraped. A check that raises reports the
   exception's type only, and ``user:password@`` in a detail is removed.
 
@@ -48,7 +51,7 @@ from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, get_args
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictBool, ValidationError, field_validator
 
 from argus_cortex.gpu_wire import RoutePath, Slug
 from argus_cortex.peers import PEER_NAME_PATTERN
@@ -71,6 +74,7 @@ __all__ = [
     "ServiceStatus",
     "build_info_collector",
     "build_info_text",
+    "capability_names",
     "install_health",
     "metrics_route",
     "service_directory_schema",
@@ -79,7 +83,7 @@ __all__ = [
 
 _log = logging.getLogger(__name__)
 
-SERVICE_VERSION = "1.0"
+SERVICE_VERSION = "1.1"
 SERVICE_MAJORS = ("1",)
 SERVICE_SCHEMA_TITLE = "Argus service health"
 
@@ -157,7 +161,13 @@ class ServiceHealth(ServiceVersioned):
     wire: dict[str, str] = Field(
         default_factory=dict, description='Wire contracts it speaks and their versions: {"caption_version": "2.3"}.'
     )
-    capabilities: tuple[str, ...] = Field((), description="What it can do now, e.g. tts, voice-clone.")
+    capabilities: tuple[str, ...] | dict[str, StrictBool] = Field(
+        (),
+        description=(
+            "What it can do now: a list of names (tts, voice-clone), or every capability it knows with whether it is "
+            'on ({"identity_check": false}). Since 1.1; a 1.0 body has the list.'
+        ),
+    )
     checks: dict[str, DependencyCheck] = Field(default_factory=dict)
     read_only: bool = False
     build: str | None = Field(None, max_length=200, description="The image's build id (a git sha or tag), if known.")
@@ -167,6 +177,19 @@ class ServiceHealth(ServiceVersioned):
     def ready(self) -> bool:
         """It is serving (``ok`` or ``degraded``), which is when the route answers 200."""
         return self.status != "starting"
+
+    @property
+    def capability_names(self) -> tuple[str, ...]:
+        """The capabilities that are on, whichever form the body used: the list as given, or the map's true names
+        in order. Read this, not ``capabilities``, to ask "can it do X"."""
+        return capability_names(self.capabilities)
+
+
+def capability_names(capabilities: Sequence[str] | Mapping[str, bool]) -> tuple[str, ...]:
+    """The names that are on: a list as given, or the sorted names a map marks true."""
+    if isinstance(capabilities, Mapping):
+        return tuple(sorted(name for name, on in capabilities.items() if on))
+    return tuple(capabilities)
 
 
 def service_health_schema() -> str:
@@ -200,7 +223,7 @@ class EntryHealth(BaseModel):
     service: str | None = None
     version: str | None = None
     wire: dict[str, str] = Field(default_factory=dict)
-    capabilities: tuple[str, ...] = ()
+    capabilities: tuple[str, ...] = Field((), description="The names that are on (ServiceHealth.capability_names).")
     checks: dict[str, DependencyCheck] = Field(default_factory=dict)
     error: str | None = Field(None, max_length=_DETAIL_MAX)
 
@@ -407,13 +430,20 @@ class _CachedCheck:
         return await asyncio.shield(self._refresh)
 
 
+Capabilities = Sequence[str] | Mapping[str, bool]
+
+
+def _capabilities(value: Capabilities) -> tuple[str, ...] | dict[str, bool]:
+    return dict(value) if isinstance(value, Mapping) else tuple(value)
+
+
 def install_health(
     app: Any,
     *,
     service: str,
     version: str | None = None,
     wire: Mapping[str, str] | None = None,
-    capabilities: Sequence[str] | Callable[[], Sequence[str]] | None = None,
+    capabilities: Capabilities | Callable[[], Capabilities] | None = None,
     checks: Mapping[str, Check] | None = None,
     informational: Collection[str] = (),
     read_only: bool = False,
@@ -433,7 +463,9 @@ def install_health(
     * *checks*: name → a callable, sync or async, that returns a :class:`DependencyCheck`, a bool (``None`` is ok)
       or raises. A sync one runs in a worker thread. Names in *informational* are reported but never make the
       service ``degraded``.
-    * *capabilities*: a list, or a callable for a service whose capabilities change while it runs.
+    * *capabilities*: a list of names, or a map of every capability to whether it is on (for a service whose
+      clients already read such a map), or a callable returning either for a service whose capabilities change
+      while it runs.
     * *readiness*: returns ``"starting"`` while the service is not ready (models loading), else ``None``. While
       starting the route answers ``503`` and runs no checks. It and *extra* are called on every request, on the
       event loop, so they must only read state.
@@ -462,7 +494,7 @@ def install_health(
         "build": build if build is not None else _own(BUILD_ENV),
         "peer": peer if peer is not None else _own(PEER_ENV),
     }
-    static_capabilities = () if capabilities is None or callable(capabilities) else tuple(capabilities)
+    static_capabilities = () if capabilities is None or callable(capabilities) else _capabilities(capabilities)
     try:  # fail at startup on a bad name, not on every request
         ServiceHealth(**fixed, status="starting", capabilities=static_capabilities)
     except ValidationError as exc:
@@ -497,7 +529,7 @@ def install_health(
             **fixed,
             "status": status,
             "checks": results,
-            "capabilities": tuple(capabilities()) if callable(capabilities) else static_capabilities,
+            "capabilities": _capabilities(capabilities()) if callable(capabilities) else static_capabilities,
         }
         extras: dict[str, Any] = {}
         if extra is not None:

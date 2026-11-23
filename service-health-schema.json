@@ -66,13 +66,23 @@
           "title": "Build"
         },
         "capabilities": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "additionalProperties": {
+                "type": "boolean"
+              },
+              "type": "object"
+            }
+          ],
           "default": [],
-          "description": "What it can do now, e.g. tts, voice-clone.",
-          "items": {
-            "type": "string"
-          },
-          "title": "Capabilities",
-          "type": "array"
+          "description": "What it can do now: a list of names (tts, voice-clone), or every capability it knows with whether it is on ({\"identity_check\": false}). Since 1.1; a 1.0 body has the list.",
+          "title": "Capabilities"
         },
         "checks": {
           "additionalProperties": {
@@ -109,7 +119,7 @@
           "type": "string"
         },
         "service_version": {
-          "default": "1.0",
+          "default": "1.1",
           "title": "Service Version",
           "type": "string"
         },

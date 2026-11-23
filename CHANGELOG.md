@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-11-23
+
+### Added
+- `ServiceHealth.capabilities` also accepts a map of every capability to whether it is on
+  (`{"identity_check": false}`), beside the list of names (`service_version` 1.1). A service whose clients already
+  read `capabilities` as such a map (argus-mint) can serve the contract on `/health` without renaming it.
+  `install_health(capabilities=...)` takes a map, or a callable returning one. Values must be booleans.
+- `ServiceHealth.capability_names` and `service.capability_names()`: the names that are on, whichever form the body
+  used. A reader uses these and never branches on the form. `EntryHealth.capabilities` (the directory) stays a list
+  of the names that are on.
+
+A reader on cortex 0.16.0 refuses a body that uses the map, so it sees that service as off the contract until it
+moves to 0.16.1. Bodies that use the list are unchanged.
+
 ## [0.16.0] - 2026-11-23
 
 ### Added
@@ -624,7 +638,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`LocalBackend`, `RemoteBackend`, `RemoteProvider`, `with_retries`
     retrying only transient errors, `resolve_device`).
 
-[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/smk762/argus-cortex/compare/v0.16.1...HEAD
+[0.16.1]: https://github.com/smk762/argus-cortex/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/smk762/argus-cortex/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/smk762/argus-cortex/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/smk762/argus-cortex/compare/v0.13.0...v0.14.0
