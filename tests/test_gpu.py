@@ -242,7 +242,13 @@ def test_a_short_poll_is_waited_out_not_crashed_on(tmp_path) -> None:
 
 
 def test_coordinator_from_env(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
-    for name in ("ARGUS_GPU_COORDINATOR", "ARGUS_GPU_LEASE_PATH", "ARGUS_GPU_LEASE_TIMEOUT_S", "ARGUS_GPU_DEVICE"):
+    for name in (
+        "ARGUS_GPU_COORDINATOR",
+        "ARGUS_GPU_BROKER_URL",  # set alone, it selects the broker
+        "ARGUS_GPU_LEASE_PATH",
+        "ARGUS_GPU_LEASE_TIMEOUT_S",
+        "ARGUS_GPU_DEVICE",
+    ):
         monkeypatch.delenv(name, raising=False)
     assert isinstance(gpu.coordinator_from_env(), gpu.NullCoordinator)
     monkeypatch.setenv("ARGUS_GPU_COORDINATOR", "lease")

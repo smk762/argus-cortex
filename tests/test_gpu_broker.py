@@ -36,6 +36,8 @@ class FakeBroker:
     base_url: str | None = "http://dragon:11434"
     requests: list[dict] = field(default_factory=list)
     tenants: list[dict] = field(default_factory=list)
+    tenant_headers: list[dict] = field(default_factory=list)
+    deletes: list[tuple[str, dict]] = field(default_factory=list)
     beats: list[dict] = field(default_factory=list)
     releases: dict[str, dict] = field(default_factory=dict)
     _ids: Any = field(default_factory=lambda: itertools.count(1))
@@ -61,6 +63,10 @@ class FakeBroker:
         body = json.loads(request.content) if request.content else {}
         if request.method == "POST" and path == "/tenants":
             self.tenants.append(body)
+            self.tenant_headers.append(dict(request.headers))
+            return httpx.Response(200, json={"ok": True})
+        if request.method == "DELETE" and path.startswith("/tenants/"):
+            self.deletes.append((path.removeprefix("/tenants/"), dict(request.headers)))
             return httpx.Response(200, json={"ok": True})
         if request.method == "POST" and path == "/leases":
             self.requests.append(body)
@@ -106,6 +112,7 @@ def _coordinator(broker: FakeBroker, **kwargs: Any) -> BrokerCoordinator:
         "poll_wait_s": 0.01,
         "min_poll_s": 0.005,
         "fallback": NullCoordinator(),
+        "detect_container": False,  # the test host may itself be a container
     }
     options.update(kwargs)
     return BrokerCoordinator("http://iris:8120/", transport=transport, async_transport=transport, **options)
@@ -745,6 +752,61 @@ def test_broker_without_url_falls_back_with_a_warning(caplog: pytest.LogCaptureF
     assert isinstance(gpu.build_coordinator("broker", fallback="none"), NullCoordinator)
 
 
+def _clear_gpu_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in (
+        "ARGUS_GPU_COORDINATOR",
+        "ARGUS_GPU_BROKER_URL",
+        "ARGUS_GPU_BROKER_TOKEN",
+        "ARGUS_GPU_TENANT",
+        "ARGUS_GPU_TENANT_MANIFEST",
+        "ARGUS_GPU_ADMIN_TOKEN_ENV",
+        "ARGUS_ADMIN_TOKEN",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_a_broker_url_alone_selects_the_broker(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _clear_gpu_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)  # no gpu-tenant.yaml here
+    monkeypatch.setattr(gpu, "MANIFEST_CANDIDATES", ("gpu-tenant.yaml",))
+    assert isinstance(gpu.coordinator_from_env(), NullCoordinator)
+    monkeypatch.setenv("ARGUS_GPU_BROKER_URL", "http://iris:8120")
+    assert isinstance(gpu.coordinator_from_env(), BrokerCoordinator)
+    monkeypatch.setenv("ARGUS_GPU_COORDINATOR", "none")  # an explicit choice still wins
+    assert isinstance(gpu.coordinator_from_env(), NullCoordinator)
+
+
+def test_the_manifest_is_found_without_being_named(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _clear_gpu_env(monkeypatch)
+    (tmp_path / "gpu-tenant.yaml").write_text(MANIFEST.model_dump_json(), encoding="utf-8")  # JSON is YAML
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ARGUS_GPU_BROKER_URL", "http://iris:8120")
+    coordinator = gpu.coordinator_from_env()
+    assert isinstance(coordinator, BrokerCoordinator)
+    assert coordinator.manifest == MANIFEST
+    assert coordinator.tenant == "argus-darkroom"
+
+
+def test_find_tenant_manifest_takes_the_first_that_exists(tmp_path: Path) -> None:
+    second = tmp_path / "b.yaml"
+    second.write_text("tenant: x\n", encoding="utf-8")
+    assert gpu.find_tenant_manifest((str(tmp_path / "a.yaml"), str(second))) == str(second)
+    assert gpu.find_tenant_manifest((str(tmp_path / "a.yaml"),)) is None
+
+
+def test_admin_token_comes_from_the_named_variable(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_gpu_env(monkeypatch)
+    monkeypatch.setenv("ARGUS_GPU_BROKER_URL", "http://iris:8120")
+    monkeypatch.setenv("ARGUS_GPU_TENANT", "argus-lens")
+    monkeypatch.setenv("ARGUS_ADMIN_TOKEN", "adm1n")
+    assert gpu.coordinator_from_env()._admin_token == "adm1n"
+    monkeypatch.setenv("ARGUS_GPU_ADMIN_TOKEN_ENV", "LENS_ADMIN_TOKEN")
+    monkeypatch.setenv("LENS_ADMIN_TOKEN", "lens")
+    assert gpu.coordinator_from_env()._admin_token == "lens"
+    monkeypatch.setenv("ARGUS_GPU_ADMIN_TOKEN_ENV", "")
+    assert gpu.coordinator_from_env()._admin_token is None
+
+
 def test_coordinator_from_env_builds_the_broker(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     manifest = tmp_path / "gpu-tenant.json"
     manifest.write_text(MANIFEST.model_dump_json(), encoding="utf-8")
@@ -775,3 +837,188 @@ def test_unreadable_manifest_does_not_stop_the_service(
         )
     assert isinstance(coordinator, BrokerCoordinator) and coordinator.manifest is None
     assert "not loaded" in caplog.text
+
+
+# --- startup registration ----------------------------------------------------------------------------------------
+
+CID = "a" * 12 + "0123456789abcdef" * 3 + "b" * 4
+LENS = TenantManifest.model_validate(
+    {
+        "tenant": "argus-lens",
+        "residents": [
+            {"name": "lens-captioner", "adapter": "argus-http", "container": "argus-lens", "admin_auth": True}
+        ],
+    }
+)
+
+
+def test_register_posts_the_manifest_with_container_and_admin_token() -> None:
+    broker = FakeBroker()
+    coordinator = _coordinator(broker, tenant="argus-lens", manifest=LENS, admin_token="adm1n", container_id=CID)
+    assert coordinator.register() is True
+    assert broker.tenants[0]["tenant"] == "argus-lens"
+    headers = broker.tenant_headers[0]
+    assert headers["x-argus-container-id"] == CID
+    assert headers["x-argus-admin-token"] == "adm1n"
+    assert "adm1n" not in json.dumps(broker.tenants[0])  # never in the manifest
+
+
+def test_admin_token_is_sent_only_for_residents_with_admin_auth() -> None:
+    broker = FakeBroker()
+    _coordinator(broker, manifest=MANIFEST, admin_token="adm1n").register()
+    assert "x-argus-admin-token" not in broker.tenant_headers[0]
+    assert "x-argus-container-id" not in broker.tenant_headers[0]  # not in a container
+
+
+def test_lease_time_registration_carries_the_headers_too() -> None:
+    broker = FakeBroker()
+    coordinator = _coordinator(broker, tenant="argus-lens", manifest=LENS, admin_token="adm1n", container_id=CID)
+    with coordinator.lease(caller="x", min_vram_mb=0):
+        pass
+    assert broker.tenant_headers[0]["x-argus-admin-token"] == "adm1n"
+
+
+def test_manifest_body_leaves_unset_fields_out() -> None:
+    """A broker on an older manifest minor forbids fields it does not know, so None-valued new ones are not sent."""
+    broker = FakeBroker()
+    _coordinator(broker, tenant="argus-lens", manifest=LENS).register()
+    assert "port" not in broker.tenants[0]["residents"][0]
+    assert TenantManifest.model_validate(broker.tenants[0]) == LENS
+
+
+def test_register_without_a_manifest_names_the_tenant() -> None:
+    broker = FakeBroker()
+    assert _coordinator(broker, container_id=CID).register() is True
+    assert broker.tenants == [
+        {"tenant_version": "1.1", "tenant": "argus-darkroom", "description": "", "kinds": [], "residents": []}
+    ]
+    assert _coordinator(FakeBroker(), tenant="unknown").register() is False
+
+
+def test_register_fails_open() -> None:
+    assert _coordinator(FakeBroker(down=True), manifest=MANIFEST).register() is False
+    assert _coordinator(FakeBroker(status_code=503), manifest=MANIFEST).register() is False
+    assert _coordinator(FakeBroker(status_code=422), manifest=MANIFEST).register() is False
+
+
+def test_bad_container_id_is_refused() -> None:
+    with pytest.raises(ValueError, match="64-character"):
+        _coordinator(FakeBroker(), container_id="argus-lens")
+
+
+def test_unregister_deletes_the_tenant() -> None:
+    broker = FakeBroker()
+    coordinator = _coordinator(broker, manifest=MANIFEST, container_id=CID, admin_token="adm1n")
+    assert coordinator.unregister() is True
+    path, headers = broker.deletes[0]
+    assert path == "argus-darkroom"
+    assert headers["x-argus-container-id"] == CID
+    assert "x-argus-admin-token" not in headers
+    assert _coordinator(FakeBroker(status_code=404), manifest=MANIFEST).unregister() is False
+    assert _coordinator(FakeBroker(down=True), manifest=MANIFEST).unregister() is False
+
+
+def test_registered_keeps_it_registered_and_says_goodbye(monkeypatch: pytest.MonkeyPatch) -> None:
+    broker = FakeBroker()
+    coordinator = _coordinator(broker, manifest=MANIFEST)
+    with coordinator.registered(interval_s=0.01):
+        assert _wait_for(lambda: len(broker.tenants) >= 3)
+    assert [d[0] for d in broker.deletes] == ["argus-darkroom"]
+
+
+def test_registered_retries_sooner_after_a_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gpu_broker, "REREGISTER_RETRY_S", 0.01)
+    broker = FakeBroker(down=True)
+    coordinator = _coordinator(broker, manifest=MANIFEST)
+    with coordinator.registered(interval_s=3600, unregister=False):
+        time.sleep(0.05)
+        broker.down = False
+        assert _wait_for(lambda: len(broker.tenants) >= 1)
+    assert broker.deletes == []
+
+
+def test_registered_does_not_block_while_the_broker_is_down() -> None:
+    coordinator = _coordinator(FakeBroker(down=True), manifest=MANIFEST)
+    started = time.monotonic()
+    with coordinator.registered():
+        pass
+    assert time.monotonic() - started < 2
+
+
+async def test_aregistered_keeps_it_registered_and_says_goodbye() -> None:
+    broker = FakeBroker()
+    coordinator = _coordinator(broker, tenant="argus-lens", manifest=LENS, admin_token="adm1n", container_id=CID)
+    async with coordinator.aregistered(interval_s=0.01):
+        for _ in range(200):
+            if len(broker.tenants) >= 2:
+                break
+            await asyncio.sleep(0.01)
+    assert len(broker.tenants) >= 2
+    assert broker.tenant_headers[0]["x-argus-admin-token"] == "adm1n"
+    assert [d[0] for d in broker.deletes] == ["argus-lens"]
+
+
+async def test_aregistered_survives_a_down_broker() -> None:
+    async with _coordinator(FakeBroker(down=True), manifest=MANIFEST).aregistered():
+        await asyncio.sleep(0.01)
+
+
+def test_gpu_registered_helpers_are_no_ops_for_local_coordinators() -> None:
+    with gpu.registered(NullCoordinator()):
+        pass
+    broker = FakeBroker()
+    with gpu.registered(_coordinator(broker, manifest=MANIFEST)):
+        assert _wait_for(lambda: len(broker.tenants) >= 1)
+
+
+async def test_gpu_aregistered_helper() -> None:
+    async with gpu.aregistered(NullCoordinator()):
+        pass
+    broker = FakeBroker()
+    async with gpu.aregistered(_coordinator(broker, manifest=MANIFEST)):
+        for _ in range(200):
+            if broker.tenants:
+                break
+            await asyncio.sleep(0.01)
+    assert broker.tenants and broker.deletes
+
+
+# --- own container id -------------------------------------------------------------------------------------------
+
+FULL = "4f1c2b9e8d7a6c5b4f1c2b9e8d7a6c5b4f1c2b9e8d7a6c5b4f1c2b9e8d7a6c5b"
+OTHER = "9" * 64
+
+
+def test_container_id_from_mountinfo(tmp_path: Path) -> None:
+    mountinfo = tmp_path / "mountinfo"
+    mountinfo.write_text(
+        "1 0 0:1 / / rw - overlay overlay rw\n"
+        f"2 1 8:1 /var/lib/docker/containers/{FULL}/hostname /etc/hostname rw - ext4 /dev/sda1 rw\n"
+        f"3 1 8:1 /var/lib/docker/containers/{FULL}/hosts /etc/hosts rw - ext4 /dev/sda1 rw\n",
+        encoding="utf-8",
+    )
+    assert gpu_broker.own_container_id((mountinfo,)) == FULL
+
+
+def test_container_id_from_cgroup_v1_and_systemd(tmp_path: Path) -> None:
+    v1 = tmp_path / "v1"
+    v1.write_text(f"12:memory:/docker/{FULL}\n", encoding="utf-8")
+    scope = tmp_path / "scope"
+    scope.write_text(f"0::/system.slice/docker-{FULL}.scope\n", encoding="utf-8")
+    assert gpu_broker.own_container_id((tmp_path / "missing", v1)) == FULL
+    assert gpu_broker.own_container_id((scope,)) == FULL
+
+
+def test_no_container_id_on_a_host_or_cgroup_v2_namespace(tmp_path: Path) -> None:
+    v2 = tmp_path / "cgroup"
+    v2.write_text("0::/\n", encoding="utf-8")
+    assert gpu_broker.own_container_id((v2, tmp_path / "missing")) is None
+
+
+def test_several_ids_are_told_apart_by_the_hostname_only(tmp_path: Path) -> None:
+    mountinfo = tmp_path / "mountinfo"
+    mountinfo.write_text(
+        f"/var/lib/docker/containers/{FULL}/hostname\n/var/lib/docker/containers/{OTHER}/hosts\n", encoding="utf-8"
+    )
+    assert gpu_broker.own_container_id((mountinfo,), hostname=FULL[:12]) == FULL
+    assert gpu_broker.own_container_id((mountinfo,), hostname="argus-lens") is None  # never a guess
