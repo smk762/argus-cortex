@@ -18,6 +18,7 @@ from argus_cortex.gpu_wire import (
     ResidentBusyReply,
     ResidentHealth,
     TenantManifest,
+    TenantResident,
     lease_schema,
     load_tenant_manifest,
     resident_schema,
@@ -227,6 +228,21 @@ def test_resident_base_url_is_an_http_url_to_a_host(url: str) -> None:
 def test_resident_base_url_accepts_service_urls(url: str) -> None:
     resident = {"name": "svc", "adapter": "argus-http", "base_url": url}
     assert TenantManifest.model_validate({"tenant": "t", "residents": [resident]}).residents[0].base_url == url
+
+
+def test_resident_port_is_a_tcp_port_and_optional() -> None:
+    base = {"name": "xtts", "adapter": "argus-http", "container": "argus-echo-xtts"}
+    assert TenantResident.model_validate(base).port is None
+    assert TenantResident.model_validate({**base, "port": 8141}).port == 8141
+    for bad in (0, 65536, -1):
+        with pytest.raises(ValidationError):
+            TenantResident.model_validate({**base, "port": bad})
+
+
+def test_a_1_0_manifest_still_loads() -> None:
+    manifest = TenantManifest.model_validate({**DARKROOM, "tenant_version": "1.0"})
+    assert manifest.tenant_version == "1.0"
+    assert TenantManifest.model_validate(DARKROOM).tenant_version == "1.1"
 
 
 def test_resident_refuses_informational_fields() -> None:
