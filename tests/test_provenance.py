@@ -126,7 +126,6 @@ def test_lookalike_makes_a_cleared_face_demo_ready() -> None:
     assert Provenance.model_validate({**dumped, "demo_ready": False}).demo_ready is True
 
 
-
 def test_round_trips_with_cleared_in_the_payload() -> None:
     p = Provenance(kind="stock", source="unsplash", license="Unsplash")
     data = json.loads(p.model_dump_json())

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`LookAlike` on `Provenance`** (argus-mask#176): optional `lookalike` (`who`, `at`, `how`, `found`) for a
+  public look-alike check. Derived `demo_ready` is true only when the source is cleared and has one.
+
 ## [0.14.0] - 2026-11-23
 
 ### Added
