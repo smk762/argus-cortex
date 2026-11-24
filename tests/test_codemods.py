@@ -307,6 +307,25 @@ def test_comprehension_targets_do_not_outlive_the_comprehension(comprehension: s
     assert [(new, report.rewritten) for new, report in results] == [(code, []), (code2, [])]
 
 
+@pytest.mark.parametrize(
+    "comprehension",
+    [
+        "[(file := pick(x)) for x in xs]",
+        "{(file := pick(x)) for x in xs}",
+        "{x: (file := pick(x)) for x in xs}",
+        "any((file := pick(x)) for x in xs)",
+        "[x for x in xs if (file := pick(x))]",
+        "[[(file := pick(y)) for y in x] for x in xs]",
+    ],
+)
+def test_a_walrus_in_a_comprehension_rebinds_the_functions_name(comprehension: str) -> None:
+    """PEP 572: it binds in the enclosing function, so the name is no longer an upload after the comprehension."""
+    code = f"async def g(file: UploadFile, xs):\n    {comprehension}\n    return await file.read()\n"
+    new, report = read_upload.transform(code)
+    assert new == code and report.rewritten == []
+    assert report.review == ["line 3: await file.read() (file is not a known UploadFile)"]
+
+
 def test_a_comprehension_target_shadows_an_upload_only_inside_it() -> None:
     code = "async def g(f: UploadFile, others):\n    xs = [await f.read() for f in others]\n    return await f.read()\n"
     new, report = read_upload.transform(code)

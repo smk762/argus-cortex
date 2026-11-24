@@ -124,6 +124,12 @@ class _Rewrite(cst.CSTTransformer):
 
     def leave_NamedExpr(self, original: cst.NamedExpr, updated: cst.NamedExpr) -> cst.BaseExpression:
         self._unbind(original.target)
+        # Inside comprehensions it binds in the function around them all (PEP 572), so it outlives their scopes.
+        comprehensions = sum(self._comp_pushed)
+        if comprehensions and isinstance(original.target, cst.Name):
+            for scope in self.scopes[-1 - comprehensions : -1]:
+                for names in scope:
+                    names.discard(original.target.value)
         return updated
 
     def leave_WithItem(self, original: cst.WithItem, updated: cst.WithItem) -> cst.WithItem:

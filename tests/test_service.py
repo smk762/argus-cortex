@@ -347,6 +347,29 @@ def test_capabilities_may_change_while_running() -> None:
     assert c.get("/health").json()["capabilities"] == ["tts", "voice-clone"]
 
 
+@pytest.mark.parametrize("bad", ["raises", "not-booleans", "not-a-list"])
+def test_broken_capabilities_never_take_the_route_down(bad: str, caplog: pytest.LogCaptureFixture) -> None:
+    answers: list = []
+
+    def capabilities() -> object:
+        if answers:
+            return answers[0]
+        if bad == "raises":
+            raise RuntimeError(SECRET)
+        return {"queue": 3} if bad == "not-booleans" else 7
+
+    with caplog.at_level(logging.WARNING):
+        c = client(capabilities=capabilities)
+        first = c.get("/health")
+        answers.append({"tts": True})
+        assert c.get("/health").json()["capabilities"] == {"tts": True}
+        answers.clear()
+        again = c.get("/health")
+    assert first.status_code == 200 and first.json()["capabilities"] == []
+    assert again.status_code == 200 and again.json()["capabilities"] == {"tts": True}  # the last good value
+    assert caplog.text.count("reporting the last good value") == 1 and SECRET not in caplog.text
+
+
 def test_extra_adds_resident_fields_and_never_replaces_the_contracts_own(caplog: pytest.LogCaptureFixture) -> None:
     async def resident() -> dict:
         return {"model_state": "cpu", "busy": True, "idle_s": None, "status": "healthy", "version": "9", "models": 2}

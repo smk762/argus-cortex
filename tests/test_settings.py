@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -137,7 +138,9 @@ def test_a_bad_line_is_reported_by_number_never_by_content(suite: Path, caplog: 
     suite.write_text(f"GOOD=1\n{SECRET}\n", encoding="utf-8")
     with caplog.at_level(logging.WARNING):
         assert settings.suite_settings() == {"GOOD": "1"}
-    assert "2" in caplog.text and SECRET not in caplog.text
+    assert (
+        any(re.search(r"lines that are not NAME=value: 2$", m) for m in caplog.messages) and SECRET not in caplog.text
+    )
 
 
 def test_a_changed_file_is_re_read(suite: Path) -> None:
@@ -153,13 +156,13 @@ def test_apply_fills_only_what_is_unset_and_never_loader_variables(suite: Path, 
         "HF_TOKEN=hf\nARGUS_KEEP=file\nARGUS_SKIP=x\nLD_PRELOAD=/tmp/evil.so\nPYTHONPATH=/tmp\nPATH=/tmp\n",
         encoding="utf-8",
     )
+    monkeypatch.setenv("HF_TOKEN", "x")  # records how it was (delenv alone does not, if unset), to restore it after
     for name in ("HF_TOKEN", "ARGUS_SKIP", "LD_PRELOAD", "PYTHONPATH"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("ARGUS_KEEP", "env")
     path_before = os.environ["PATH"]
     with caplog.at_level(logging.WARNING):
         assert settings.apply(names={"HF_TOKEN", "ARGUS_KEEP", "LD_PRELOAD", "PYTHONPATH", "PATH"}) == ["HF_TOKEN"]
-    monkeypatch.setenv("HF_TOKEN", os.environ["HF_TOKEN"])  # so monkeypatch removes it afterwards
     assert os.environ["HF_TOKEN"] == "hf" and os.environ["ARGUS_KEEP"] == "env"
     assert "ARGUS_SKIP" not in os.environ and "LD_PRELOAD" not in os.environ and "PYTHONPATH" not in os.environ
     assert os.environ["PATH"] == path_before and "LD_PRELOAD" in caplog.text

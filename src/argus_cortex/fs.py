@@ -14,6 +14,7 @@ writing into a directory others can write to need ``O_NOFOLLOW`` / ``openat``.
 
 from __future__ import annotations
 
+import errno
 import os
 import re
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -42,11 +43,24 @@ def _resolve(path: Path) -> Path:
 
     ``Path.resolve(strict=False)`` stops at a symlink loop and returns the rest of the path as written, so
     ``loop/../link`` came back as an unfollowed ``link`` that could point anywhere. A resolved path resolves to
-    itself; one that does not is refused.
+    itself; one that does not is refused. From Python 3.13 a loop resolves to itself (``loop``, ``loop/x``) or is
+    stepped back out of (``loop/../link``), so the OS is asked about both paths, and ``ELOOP`` is refused. Before
+    3.13 a loop is a ``RuntimeError``, raised here as the ``OSError`` it stands for.
     """
-    resolved = path.resolve(strict=False)
-    if resolved.resolve(strict=False) != resolved:
-        raise OSError(f"{path.name!r} does not resolve to a fixed path (a symlink loop?)")
+    looped = OSError(errno.ELOOP, f"{path.name!r} does not resolve to a fixed path (a symlink loop?)")
+    try:
+        resolved = path.resolve(strict=False)
+        fixed = resolved.resolve(strict=False) == resolved
+    except RuntimeError as exc:
+        raise looped from exc
+    if not fixed:
+        raise looped
+    for spelling in (path, resolved):
+        try:
+            os.stat(spelling)
+        except OSError as exc:  # any other failure (it need not exist yet) is the caller's to meet
+            if exc.errno == errno.ELOOP:
+                raise looped from exc
     return resolved
 
 
