@@ -926,6 +926,45 @@ def test_registered_keeps_it_registered_and_says_goodbye(monkeypatch: pytest.Mon
     assert [d[0] for d in broker.deletes] == ["argus-darkroom"]
 
 
+@pytest.mark.parametrize("late", [False, True], ids=["outlasts-one-phase", "outlasts-the-wait"])
+def test_a_registration_in_flight_at_shutdown_does_not_outlive_the_goodbye(late: bool) -> None:
+    """One POST can take longer than the per-phase timeout; landing after the DELETE, it would register a process
+    that is exiting."""
+    landed: list[str] = []
+    posting, land = threading.Event(), threading.Event()
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            posting.set()
+            land.wait(10)
+        landed.append(request.method)
+        return httpx.Response(200, json={})
+
+    coordinator = BrokerCoordinator(
+        "http://broker.test",
+        tenant="argus-darkroom",
+        manifest=MANIFEST,
+        transport=httpx.MockTransport(handle),
+        request_timeout_s=0.05 if late else 0.5,
+        detect_container=False,
+    )
+    with coordinator.registered():
+        assert posting.wait(10)
+        if not late:
+            threading.Timer(0.8, land.set).start()
+    land.set()
+    assert _wait_for(lambda: "POST" in landed and landed[-1] == "DELETE")
+    assert landed == (["DELETE", "POST", "DELETE"] if late else ["POST", "DELETE"])
+
+
+def test_a_registration_waiting_its_turn_at_shutdown_is_not_posted() -> None:
+    broker = FakeBroker()
+    coordinator = _coordinator(broker, manifest=MANIFEST)
+    stop = threading.Event()
+    stop.set()
+    assert coordinator._register_now(stop) is False and broker.tenants == []
+
+
 def test_registered_retries_sooner_after_a_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(gpu_broker, "REREGISTER_RETRY_S", 0.01)
     broker = FakeBroker(down=True)

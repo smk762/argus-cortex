@@ -93,7 +93,9 @@ def test_a_bad_url_is_refused_not_skipped_and_never_echoed(monkeypatch: pytest.M
         peer_url("nudenet", "ARGUS_CURATOR_NUDENET_URL")
     assert "ARGUS_CURATOR_NUDENET_URL" in str(exc.value)
     assert SECRET not in str(exc.value) and value not in str(exc.value)
-    assert exc.value.__cause__ is None  # no chained parser error, which could quote the value
+    # No chained parser error, explicit or implicit, which could quote the value in a traceback.
+    assert exc.value.__cause__ is None
+    assert exc.value.__context__ is None or exc.value.__suppress_context__
 
 
 def test_credentials_are_kept_in_the_url_and_out_of_the_repr(monkeypatch: pytest.MonkeyPatch) -> None:

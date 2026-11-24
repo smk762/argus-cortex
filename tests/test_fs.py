@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import os
 from pathlib import Path
 
@@ -9,7 +10,7 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from argus_cortex.fs import PathRefused, is_within, safe_basename, safe_join, safe_name
+from argus_cortex.fs import PathRefused, _resolve, is_within, safe_basename, safe_join, safe_name
 
 
 @pytest.fixture
@@ -67,6 +68,29 @@ def test_a_path_through_a_symlink_loop_is_refused(tree: Path, rel: str) -> None:
     with pytest.raises(PathRefused, match="could not be resolved"):
         safe_join(tree, rel)
     assert not is_within(tree, tree / rel)
+
+
+@pytest.mark.parametrize("rel", ["loop1", "loop1/x", "new/../loop1"])
+def test_a_loop_that_resolves_to_itself_is_refused(tree: Path, rel: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Python 3.13's ``resolve(strict=False)`` returns a loop unchanged, so it looked fully resolved; run on any."""
+    monkeypatch.setattr(Path, "resolve", lambda self, strict=False: Path(os.path.realpath(self, strict=strict)))
+    with pytest.raises(PathRefused, match="could not be resolved"):
+        safe_join(tree, rel)
+    assert not is_within(tree, tree / rel)
+
+
+def test_a_loop_is_an_oserror_on_every_python(tree: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(OSError) as e:
+        _resolve(tree / "loop1")
+    assert e.value.errno == errno.ELOOP
+
+    def before_3_13(self: Path, strict: bool = False) -> Path:
+        raise RuntimeError("Symlink loop")
+
+    monkeypatch.setattr(Path, "resolve", before_3_13)
+    with pytest.raises(OSError) as e:
+        _resolve(tree / "sub")
+    assert e.value.errno == errno.ELOOP
 
 
 def test_tilde_is_not_expanded(tree: Path) -> None:

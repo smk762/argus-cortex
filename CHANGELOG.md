@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `fs`: on Python 3.13 and later, `safe_join` and `is_within` accepted a path through a symlink loop (`loop`, `loop/x`,
+  `loop/../link`). Such a path is refused on every version.
+- `service.install_health`: a `capabilities` callable that raises, or returns an invalid value, no longer turns
+  `/health` into a 500. The last good value is reported and a warning is logged once.
+- `BrokerCoordinator.registered()`: a registration still in flight at shutdown could land after the unregister and
+  leave the exiting process registered.
+- `read_upload` codemod: a walrus inside a comprehension unbinds the enclosing function's name, so a later read of it
+  is reported for review, not rewritten.
+
 ## [0.16.1] - 2026-11-23
 
 ### Added

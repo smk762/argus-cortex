@@ -465,7 +465,8 @@ def install_health(
       service ``degraded``.
     * *capabilities*: a list of names, or a map of every capability to whether it is on (for a service whose
       clients already read such a map), or a callable returning either for a service whose capabilities change
-      while it runs.
+      while it runs. If the callable raises, or returns a value that is not valid, the last good value is reported
+      (none at first) and a warning is logged once.
     * *readiness*: returns ``"starting"`` while the service is not ready (models loading), else ``None``. While
       starting the route answers ``503`` and runs no checks. It and *extra* are called on every request, on the
       event loop, so they must only read state.
@@ -507,6 +508,24 @@ def install_health(
             warned.add(key)
             _log.warning(message, *args)
 
+    last_capabilities: Any = static_capabilities
+
+    def current_capabilities() -> tuple[str, ...] | dict[str, bool]:
+        nonlocal last_capabilities
+        if callable(capabilities):
+            try:
+                value = _capabilities(capabilities())
+                ServiceHealth(**fixed, status="starting", capabilities=value)
+                last_capabilities = value
+            except Exception as exc:  # noqa: BLE001 - like extra: it must not take the route down
+                warn_once(
+                    "capabilities",
+                    "%s health: capabilities failed or is not valid (%s); reporting the last good value",
+                    service,
+                    type(exc).__name__,
+                )
+        return last_capabilities
+
     async def body(*, run_checks: bool) -> tuple[dict[str, Any], bool]:
         status: ServiceStatus = "ok"
         if readiness is not None:
@@ -529,7 +548,7 @@ def install_health(
             **fixed,
             "status": status,
             "checks": results,
-            "capabilities": _capabilities(capabilities()) if callable(capabilities) else static_capabilities,
+            "capabilities": current_capabilities(),
         }
         extras: dict[str, Any] = {}
         if extra is not None:

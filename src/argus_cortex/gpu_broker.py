@@ -416,11 +416,17 @@ class BrokerCoordinator:
         Fails open: an unreachable broker or a refusal is logged and answers False, and the next lease or
         :meth:`registered` loop tries again.
         """
+        return self._register_now()
+
+    def _register_now(self, stop: threading.Event | None = None) -> bool:
+        """:meth:`register`, unless *stop* was set by the time it is this call's turn to post."""
         manifest = self._registration()
         if manifest is None:
             return False
         try:
             with self._http_client() as client, self._register_lock:
+                if stop is not None and stop.is_set():
+                    return False
                 return self._registered_ok(self._post_tenant(client, manifest))
         except _Unreachable as exc:
             self._note_unreachable(exc)
@@ -481,14 +487,22 @@ class BrokerCoordinator:
         (sooner after a failure), and *unregister* says goodbye on the way out. Never blocks or raises on the
         broker's account, so a service starts whether or not the broker is up."""
         stop = threading.Event()
+        goodbye = threading.Event()
+
+        def say_goodbye() -> None:
+            with contextlib.suppress(Exception):
+                self.unregister()
 
         def loop() -> None:
             while not stop.is_set():
                 try:
-                    ok = self.register()
+                    ok = self._register_now(stop)
                 except Exception:  # noqa: BLE001 - one bad answer must not end registration for the process's life
                     _log.warning("GPU broker registration for %s failed", self.tenant, exc_info=True)
                     ok = False
+                if goodbye.is_set():  # this registration may have landed after the goodbye, undoing it
+                    say_goodbye()
+                    return
                 stop.wait(self._next_registration(ok, interval_s))
 
         thread = threading.Thread(target=loop, daemon=True, name="gpu-broker-register")
@@ -497,10 +511,11 @@ class BrokerCoordinator:
             yield
         finally:
             stop.set()
-            thread.join(timeout=self.request_timeout_s)
+            # httpx applies the timeout to each phase (pool, connect, write, read), so one POST can take four of them.
+            thread.join(timeout=4 * self.request_timeout_s)
             if unregister:
-                with contextlib.suppress(Exception):
-                    self.unregister()
+                goodbye.set()
+                say_goodbye()
 
     @contextlib.asynccontextmanager
     async def aregistered(self, *, interval_s: float = REREGISTER_S, unregister: bool = True) -> AsyncIterator[None]:
