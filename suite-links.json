@@ -1,0 +1,191 @@
+{
+  "links_version": "1.0",
+  "precedence": [
+    "docs",
+    "pypi",
+    "demo",
+    "github"
+  ],
+  "packages": {
+    "argus-cortex": {
+      "docs": "https://docs.dragonhound.dev/packages/cortex/",
+      "pypi": "https://pypi.org/project/argus-cortex/",
+      "demo": null,
+      "github": "https://github.com/smk762/argus-cortex",
+      "best": {
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/cortex/"
+      }
+    },
+    "argus-quarry": {
+      "docs": "https://docs.dragonhound.dev/packages/quarry/",
+      "pypi": "https://pypi.org/project/argus-quarry/",
+      "demo": "https://quarry.dragonhound.dev",
+      "github": "https://github.com/smk762/argus-quarry",
+      "best": {
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/quarry/"
+      }
+    },
+    "argus-curator": {
+      "docs": "https://docs.dragonhound.dev/packages/curator/",
+      "pypi": "https://pypi.org/project/argus-curator/",
+      "demo": "https://cull.dragonhound.dev",
+      "github": "https://github.com/smk762/argus-curator",
+      "best": {
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/curator/"
+      }
+    },
+    "argus-lens": {
+      "docs": "https://docs.dragonhound.dev/packages/lens/",
+      "pypi": "https://pypi.org/project/argus-lens/",
+      "demo": "https://lightbox.dragonhound.dev",
+      "github": "https://github.com/smk762/argus-lens",
+      "best": {
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/lens/"
+      }
+    },
+    "argus-forge": {
+      "docs": "https://docs.dragonhound.dev/packages/forge/",
+      "pypi": "https://pypi.org/project/argus-forge/",
+      "demo": null,
+      "github": "https://github.com/smk762/argus-forge",
+      "best": {
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/forge/"
+      }
+    },
+    "argus-proof": {
+      "docs": "https://docs.dragonhound.dev/packages/proof/",
+      "pypi": "https://pypi.org/project/argus-proof/",
+      "demo": "https://proof.dragonhound.dev",
+      "github": "https://github.com/smk762/argus-proof",
+      "best": {
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/proof/"
+      }
+    },
+    "argus-atlas": {
+      "docs": "https://docs.dragonhound.dev/packages/atlas/",
+      "pypi": "https://pypi.org/project/argus-atlas/",
+      "demo": "https://atlas.dragonhound.dev",
+      "github": "https://github.com/smk762/argus-atlas",
+      "best": {
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/atlas/"
+      }
+    },
+    "argus-darkroom": {
+      "docs": "https://docs.dragonhound.dev/packages/darkroom/",
+      "pypi": "https://pypi.org/project/argus-darkroom/",
+      "demo": "https://safelight.dragonhound.dev",
+      "github": "https://github.com/smk762/argus-darkroom",
+      "best": {
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/darkroom/"
+      }
+    },
+    "argus-mint": {
+      "docs": "https://docs.dragonhound.dev/packages/mint/",
+      "pypi": "https://pypi.org/project/argus-mint/",
+      "demo": "https://assay.dragonhound.dev",
+      "github": "https://github.com/smk762/argus-mint",
+      "best": {
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/mint/"
+      }
+    },
+    "argus-survey": {
+      "docs": "https://docs.dragonhound.dev/packages/survey/",
+      "pypi": "https://pypi.org/project/argus-survey/",
+      "demo": "https://sightline.dragonhound.dev",
+      "github": "https://github.com/smk762/argus-survey",
+      "best": {
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/survey/"
+      }
+    },
+    "argus-mask": {
+      "docs": "https://docs.dragonhound.dev/packages/mask/",
+      "pypi": "https://pypi.org/project/argus-mask/",
+      "demo": "https://mask.dragonhound.dev",
+      "github": "https://github.com/smk762/argus-mask",
+      "best": {
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/mask/"
+      }
+    },
+    "argus-puppet": {
+      "docs": "https://docs.dragonhound.dev/packages/puppet/",
+      "pypi": "https://pypi.org/project/argus-puppet/",
+      "demo": null,
+      "github": "https://github.com/smk762/argus-puppet",
+      "best": {
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/puppet/"
+      }
+    },
+    "argus-echo": {
+      "docs": null,
+      "pypi": "https://pypi.org/project/argus-echo/",
+      "demo": null,
+      "github": "https://github.com/smk762/argus-echo",
+      "best": {
+        "kind": "pypi",
+        "url": "https://pypi.org/project/argus-echo/"
+      }
+    },
+    "argus-iris": {
+      "docs": null,
+      "pypi": "https://pypi.org/project/argus-iris/",
+      "demo": "https://iris.dragonhound.dev",
+      "github": "https://github.com/smk762/argus-iris",
+      "best": {
+        "kind": "pypi",
+        "url": "https://pypi.org/project/argus-iris/"
+      }
+    },
+    "argus-scout": {
+      "docs": "https://docs.dragonhound.dev/packages/scout/",
+      "pypi": "https://pypi.org/project/argus-scout/",
+      "demo": null,
+      "github": "https://github.com/smk762/argus-scout",
+      "best": {
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/scout/"
+      }
+    },
+    "argus-herald": {
+      "docs": null,
+      "pypi": "https://pypi.org/project/argus-herald/",
+      "demo": null,
+      "github": "https://github.com/smk762/argus-herald",
+      "best": {
+        "kind": "pypi",
+        "url": "https://pypi.org/project/argus-herald/"
+      }
+    },
+    "argus-studio": {
+      "docs": null,
+      "pypi": null,
+      "demo": "https://studio.dragonhound.dev",
+      "github": "https://github.com/smk762/argus-studio",
+      "best": {
+        "kind": "demo",
+        "url": "https://studio.dragonhound.dev"
+      }
+    },
+    "ai-code-auditor": {
+      "docs": null,
+      "pypi": null,
+      "demo": null,
+      "github": "https://github.com/smk762/ai-code-auditor",
+      "best": {
+        "kind": "github",
+        "url": "https://github.com/smk762/ai-code-auditor"
+      }
+    }
+  }
+}
