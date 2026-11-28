@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `suite_links`: every package's links (docs, PyPI, demo, GitHub) and the one to use, in that order (`link_for`,
+  `PACKAGES`), committed as `suite-links.json` for non-Python readers such as dragonhound.dev.
+
 ### Fixed
 - `fs`: on Python 3.13 and later, `safe_join` and `is_within` accepted a path through a symlink loop (`loop`, `loop/x`,
   `loop/../link`). Such a path is refused on every version.
