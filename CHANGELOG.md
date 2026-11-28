@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- `PEER_NAME_PATTERN` now lives in the stdlib-only `peer_names` module, so `service` no longer imports `peers`.
+  `from argus_cortex.peers import PEER_NAME_PATTERN` still works.
 - `gpu`: the lease contract (`GpuCoordinator`, `GpuLease`, `GpuLeaseTimeout`, `GpuLeaseRefused`, `NullCoordinator`,
   `DEFAULT_TIMEOUT_S`) moved to the new `gpu_lease` module, which `gpu` and `gpu_broker` both import, so the two no
   longer import each other. Every name still imports from `argus_cortex.gpu`; the classes' `__module__` is now

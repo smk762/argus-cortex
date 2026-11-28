@@ -54,7 +54,7 @@ from typing import Annotated, Any, Literal, get_args
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictBool, ValidationError, field_validator
 
 from argus_cortex.gpu_wire import RoutePath, Slug
-from argus_cortex.peers import PEER_NAME_PATTERN
+from argus_cortex.peer_names import PEER_NAME_PATTERN
 from argus_cortex.wire import make_versioned_base, render_schema
 
 __all__ = [
