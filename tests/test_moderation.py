@@ -21,7 +21,9 @@ import pytest
 from PIL import Image
 
 from argus_cortex.moderation import (
+    CONTENT_RATINGS,
     DEFAULT_EXPOSED_LABELS,
+    SUGGESTIVE_LABELS,
     GuardCheckFailed,
     GuardResult,
     ModerationConfigError,
@@ -38,6 +40,7 @@ from argus_cortex.moderation import (
     nudenet,
     ocr,
     policy_name,
+    rate_content,
     rule_letter,
     rule_matches,
     singguard,
@@ -229,6 +232,46 @@ def test_exposed_set_is_the_five_exposed_nudity_classes() -> None:
     labels = {"FEET_EXPOSED": 0.9, "MALE_BREAST_EXPOSED": 0.9, "BUTTOCKS_EXPOSED": 0.3}
     assert exposed_score(labels) == 0.3
     assert exposed_score(labels, ["MALE_BREAST_EXPOSED"]) == 0.9
+
+
+def _rated(**labels: float) -> NsfwResult:
+    return NsfwResult(labels=labels, exposed_score=exposed_score(labels))
+
+
+@pytest.mark.parametrize(
+    ("labels", "rating"),
+    [
+        ({}, "safe"),
+        ({"FACE_FEMALE": 0.9, "BELLY_EXPOSED": 0.8, "MALE_BREAST_EXPOSED": 0.7, "FEET_EXPOSED": 0.6}, "safe"),
+        ({"BELLY_COVERED": 0.9, "ARMPITS_COVERED": 0.9, "FEET_COVERED": 0.9}, "safe"),  # covered, but not intimate
+        ({"BUTTOCKS_COVERED": 0.3}, "suggestive"),
+        ({"FEMALE_BREAST_COVERED": 0.25, "FACE_FEMALE": 0.9}, "suggestive"),
+        ({"FEMALE_BREAST_EXPOSED": 0.21, "BUTTOCKS_COVERED": 0.9}, "explicit"),  # exposed wins over covered
+        ({"MALE_GENITALIA_EXPOSED": 0.5}, "explicit"),
+    ],
+)
+def test_content_rating_from_detections(labels: dict[str, float], rating: str) -> None:
+    assert rate_content(_rated(**labels)) == rating
+
+
+def test_content_rating_starts_at_nudenets_floor_and_an_unchecked_image_has_none() -> None:
+    floor = nudenet.MIN_REPORTED_SCORE
+    just_below = round(floor - 0.01, 2)
+    assert rate_content(_rated(FEMALE_BREAST_EXPOSED=just_below)) == "safe"
+    assert rate_content(_rated(FEMALE_BREAST_EXPOSED=floor)) == "explicit"
+    assert rate_content(_rated(BUTTOCKS_COVERED=just_below)) == "safe"
+    assert rate_content(_rated(BUTTOCKS_COVERED=floor)) == "suggestive"
+    assert rate_content(None) is None  # not "safe": nobody looked
+    assert rate_content(NsfwResult()) == "safe"
+
+
+def test_content_ratings_are_ordered_and_the_two_label_sets_are_apart() -> None:
+    assert CONTENT_RATINGS == ("safe", "suggestive", "explicit")
+    assert set(SUGGESTIVE_LABELS) == {
+        "FEMALE_BREAST_COVERED", "FEMALE_GENITALIA_COVERED", "BUTTOCKS_COVERED", "ANUS_COVERED",
+    }  # fmt: skip
+    assert not set(SUGGESTIVE_LABELS) & set(DEFAULT_EXPOSED_LABELS)
+    assert set(SUGGESTIVE_LABELS) <= set(nudenet.NUDENET_LABELS)
 
 
 # ---------------------------------------------------------------------------

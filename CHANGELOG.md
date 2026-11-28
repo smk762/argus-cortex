@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `moderation.rate_content`: the suite's one content rating, read off a NudeNet result: `explicit` when an exposed
+  class reached NudeNet's 0.2 floor, else `suggestive` when a covered intimate class did (`SUGGESTIVE_LABELS`), else
+  `safe`; `None` for an image nobody checked. With `ContentRating` and `CONTENT_RATINGS` (least to most). Moved from
+  argus-curator unchanged, so a stage that needs a word for an image, not a score, uses the same rubric as curator's
+  ratings and its `argus:ContentRating` XMP field.
 - `suite_links`: every package's links (docs, PyPI, demo, GitHub) and the one to use, in that order (`link_for`,
   `PACKAGES`), committed as `suite-links.json` for non-Python readers such as dragonhound.dev. argus-echo, argus-iris and
   argus-herald link to their docs pages (smk762/argus-handbook#28, #29, #30), and argus-retina has an entry.
