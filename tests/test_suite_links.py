@@ -30,7 +30,7 @@ def test_precedence_is_docs_then_pypi_then_demo_then_github():
 
 def test_known_fallbacks():
     assert link_for("argus-cortex") == "https://docs.dragonhound.dev/packages/cortex/"
-    assert link_for("argus-herald") == "https://pypi.org/project/argus-herald/"  # no docs page yet
+    assert link_for("argus-herald") == "https://docs.dragonhound.dev/packages/herald/"
     assert link_for("argus-studio") == "https://studio.dragonhound.dev"  # not on PyPI
     assert link_for("ai-code-auditor") == "https://github.com/smk762/ai-code-auditor"
     with pytest.raises(KeyError):

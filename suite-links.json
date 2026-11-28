@@ -158,13 +158,23 @@
       }
     },
     "argus-herald": {
-      "docs": null,
+      "docs": "https://docs.dragonhound.dev/packages/herald/",
       "pypi": "https://pypi.org/project/argus-herald/",
       "demo": null,
       "github": "https://github.com/smk762/argus-herald",
       "best": {
-        "kind": "pypi",
-        "url": "https://pypi.org/project/argus-herald/"
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/herald/"
+      }
+    },
+    "argus-retina": {
+      "docs": "https://docs.dragonhound.dev/packages/retina/",
+      "pypi": null,
+      "demo": null,
+      "github": "https://github.com/smk762/argus-retina",
+      "best": {
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/retina/"
       }
     },
     "argus-studio": {
