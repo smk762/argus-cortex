@@ -32,7 +32,7 @@ def test_known_fallbacks():
     assert link_for("argus-cortex") == "https://docs.dragonhound.dev/packages/cortex/"
     assert link_for("argus-herald") == "https://docs.dragonhound.dev/packages/herald/"
     assert link_for("argus-studio") == "https://studio.dragonhound.dev"  # not on PyPI
-    assert link_for("ai-code-auditor") == "https://github.com/smk762/ai-code-auditor"
+    assert link_for("ai-code-auditor") == "https://docs.dragonhound.dev/packages/auditor/"  # not on PyPI
     with pytest.raises(KeyError):
         link_for("argus-nonexistent")
 

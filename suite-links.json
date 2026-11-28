@@ -188,13 +188,13 @@
       }
     },
     "ai-code-auditor": {
-      "docs": null,
+      "docs": "https://docs.dragonhound.dev/packages/auditor/",
       "pypi": null,
       "demo": null,
       "github": "https://github.com/smk762/ai-code-auditor",
       "best": {
-        "kind": "github",
-        "url": "https://github.com/smk762/ai-code-auditor"
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/auditor/"
       }
     }
   }
