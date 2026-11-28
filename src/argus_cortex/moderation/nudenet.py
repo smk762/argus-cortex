@@ -15,6 +15,11 @@ This module is also the suite's one definition of what counts as nudity:
 belly, armpits or male chest are detected too but do not count towards
 :attr:`NsfwResult.exposed_score`.
 
+It is the suite's one content rating too: :func:`rate_content` reads an image's
+detections as ``safe``, ``suggestive`` or ``explicit`` (:data:`ContentRating`).
+A stage that needs a word for an image, not a score, uses that rubric and keeps
+no cutoff of its own.
+
 API: ``POST /infer`` with each image as a multipart field ``f1``, ``f2``, …,
 answered by ``{"prediction": [[{"class", "score", "box"}, ...], ...],
 "success": true}`` in field order. ``box`` is ``[x, y, w, h]`` in source
@@ -76,6 +81,19 @@ DEFAULT_EXPOSED_LABELS: tuple[NudeNetLabel, ...] = (
 # NudeNet servers report nothing scoring under this.
 MIN_REPORTED_SCORE = 0.2
 
+# A content rating read off NudeNet's detections (see rate_content). "explicit": an exposed class was reported (the
+# five DEFAULT_EXPOSED_LABELS, from NudeNet's 0.2 floor). "suggestive": otherwise, a covered intimate class was
+# (lingerie, swimwear). "safe": neither. Ordered from least to most.
+ContentRating = Literal["safe", "suggestive", "explicit"]
+CONTENT_RATINGS: tuple[ContentRating, ...] = ContentRating.__args__
+# The covered classes that make an image suggestive. A covered belly, feet or armpits do not.
+SUGGESTIVE_LABELS: tuple[NudeNetLabel, ...] = (
+    "FEMALE_BREAST_COVERED",
+    "FEMALE_GENITALIA_COVERED",
+    "BUTTOCKS_COVERED",
+    "ANUS_COVERED",
+)
+
 
 class NsfwDetection(BaseModel):
     """One NudeNet detection."""
@@ -119,6 +137,25 @@ class NudeNetCheckFailed(CheckFailed):
 def exposed_score(labels: dict[str, float], exposed: tuple[str, ...] | list[str] = DEFAULT_EXPOSED_LABELS) -> float:
     """The highest score among the *exposed* classes (0.0 when none was detected)."""
     return max((labels[c] for c in exposed if c in labels), default=0.0)
+
+
+def rate_content(nsfw: NsfwResult | None) -> ContentRating | None:
+    """*nsfw*'s :data:`ContentRating`, or ``None`` when NudeNet did not check the image.
+
+    ``explicit`` when a class in :data:`DEFAULT_EXPOSED_LABELS` reached :data:`MIN_REPORTED_SCORE`, else
+    ``suggestive`` when a class in :data:`SUGGESTIVE_LABELS` did, else ``safe``. ``None`` is not ``safe``: an image
+    nobody checked has no rating, and a caller that filters on ratings should leave it out.
+
+    The cutoff is NudeNet's reporting floor, tuned on the 640m detector; 320n scores differently (see the module
+    docstring). Moved from argus-curator, where it was written.
+    """
+    if nsfw is None:
+        return None
+    if exposed_score(nsfw.labels) >= MIN_REPORTED_SCORE:
+        return "explicit"
+    if any(nsfw.labels.get(label, 0.0) >= MIN_REPORTED_SCORE for label in SUGGESTIVE_LABELS):
+        return "suggestive"
+    return "safe"
 
 
 def to_result(raw: list) -> NsfwResult:

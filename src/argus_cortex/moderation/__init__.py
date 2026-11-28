@@ -11,8 +11,11 @@ from __future__ import annotations
 
 from argus_cortex.moderation._http import CheckFailed, ModerationConfigError
 from argus_cortex.moderation.nudenet import (
+    CONTENT_RATINGS,
     DEFAULT_EXPOSED_LABELS,
     NUDENET_LABELS,
+    SUGGESTIVE_LABELS,
+    ContentRating,
     NsfwDetection,
     NsfwResult,
     NudeNetCheckFailed,
@@ -20,6 +23,7 @@ from argus_cortex.moderation.nudenet import (
     NudeNetInfo,
     NudeNetLabel,
     exposed_score,
+    rate_content,
 )
 from argus_cortex.moderation.ocr import (
     OcrCheckFailed,
@@ -41,11 +45,14 @@ from argus_cortex.moderation.singguard import (
 )
 
 __all__ = [
+    "CONTENT_RATINGS",
     "DEFAULT_EXPOSED_LABELS",
     "INPUT_ROLES",
     "NUDENET_LABELS",
+    "SUGGESTIVE_LABELS",
     "THINKING_MODES",
     "CheckFailed",
+    "ContentRating",
     "GuardCheckFailed",
     "GuardResult",
     "ModerationConfigError",
@@ -64,6 +71,7 @@ __all__ = [
     "exposed_score",
     "normalize_text",
     "policy_name",
+    "rate_content",
     "rule_letter",
     "rule_matches",
 ]
