@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   leave the exiting process registered.
 - `read_upload` codemod: a walrus inside a comprehension unbinds the enclosing function's name, so a later read of it
   is reported for review, not rewritten.
+- `read_upload` codemod: a name a `for` or `while` loop rebinds anywhere in its body (or a `while` test) is no upload
+  anywhere in that loop, so a read before the rebinding, which sees the new value from the second pass, is reported
+  for review, not rewritten.
 
 ## [0.16.1] - 2026-11-23
 

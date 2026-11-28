@@ -57,6 +57,69 @@ def _is_upload_list(annotation: cst.BaseExpression) -> bool:
     return False
 
 
+def _target_names(target: cst.CSTNode | None) -> set[str]:
+    """The names a binding target binds (``a``, ``a, *b``, ``[a, b]``; attributes and subscripts bind none)."""
+    if isinstance(target, cst.Name):
+        return {target.value}
+    if isinstance(target, cst.Tuple | cst.List):
+        return set().union(*(_target_names(e.value) for e in target.elements))
+    if isinstance(target, cst.StarredElement):
+        return _target_names(target.value)
+    return set()
+
+
+class _Bound(cst.CSTVisitor):
+    """Every name a loop's body (or a ``while`` test) binds, wherever in it: an assignment after a read still rebinds
+    the name before the read runs again on the next pass. A nested function or class binds in its own scope; a
+    comprehension's targets are its own, but a walrus in it binds here (PEP 572)."""
+
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
+        self.names.add(node.name.value)
+        return False
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> bool:
+        self.names.add(node.name.value)
+        return False
+
+    def visit_Lambda(self, node: cst.Lambda) -> bool:
+        return False
+
+    def visit_Assign(self, node: cst.Assign) -> None:
+        for t in node.targets:
+            self.names |= _target_names(t.target)
+
+    def visit_AnnAssign(self, node: cst.AnnAssign) -> None:
+        if node.value is not None:  # a bare ``file: UploadFile`` binds nothing
+            self.names |= _target_names(node.target)
+
+    def visit_AugAssign(self, node: cst.AugAssign) -> None:
+        self.names |= _target_names(node.target)
+
+    def visit_NamedExpr(self, node: cst.NamedExpr) -> None:
+        self.names |= _target_names(node.target)
+
+    def visit_WithItem(self, node: cst.WithItem) -> None:
+        if node.asname is not None:
+            self.names |= _target_names(node.asname.name)
+
+    def visit_ExceptHandler(self, node: cst.ExceptHandler) -> None:
+        if node.name is not None:
+            self.names |= _target_names(node.name.name)
+
+    def visit_For(self, node: cst.For) -> None:
+        self.names |= _target_names(node.target)
+
+
+def _bound_in(*nodes: cst.CSTNode) -> set[str]:
+    bound = _Bound()
+    for node in nodes:
+        node.visit(bound)
+    return bound.names
+
+
 class _Rewrite(cst.CSTTransformer):
     METADATA_DEPENDENCIES = (cst.metadata.PositionProvider, cst.metadata.ParentNodeProvider)
 
@@ -64,6 +127,7 @@ class _Rewrite(cst.CSTTransformer):
         self.report = report
         self.scopes: list[tuple[set[str], set[str]]] = []  # (uploads, lists of uploads) per function
         self._comp_pushed: list[bool] = []  # whether each open comprehension pushed a scope
+        self._loop_rebound: list[set[str]] = []  # per open loop: names its body rebinds (left for review in it)
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
         # A nested function (a helper, a closure) still sees the enclosing function's uploads,
@@ -143,6 +207,27 @@ class _Rewrite(cst.CSTTransformer):
 
     def visit_For(self, node: cst.For) -> None:
         self._loop(node.iter, node.target)
+        # The target is bound afresh before each pass, so a body rebinding it never reaches the next pass's reads.
+        self._enter_loop(_bound_in(node.body) - _target_names(node.target))
+
+    def leave_For(self, original: cst.For, updated: cst.For) -> cst.BaseStatement:
+        self._loop_rebound.pop()
+        return updated
+
+    def visit_While(self, node: cst.While) -> None:
+        self._enter_loop(_bound_in(node.test, node.body))
+
+    def leave_While(self, original: cst.While, updated: cst.While) -> cst.BaseStatement:
+        self._loop_rebound.pop()
+        return updated
+
+    def _enter_loop(self, rebound: set[str]) -> None:
+        # The linear pass only unbinds a name for code after the rebinding; in a loop, a read before it runs again
+        # after it. Such a name is no upload anywhere in the loop: its reads go to review, not to read_upload.
+        self._loop_rebound.append(rebound)
+        if self.scopes:
+            for names in self.scopes[-1]:
+                names.difference_update(rebound)
 
     def _comprehension(self, node: cst.BaseComp) -> None:
         # A comprehension's targets are its own: they don't outlive it, so it gets a scope of its own.
@@ -238,7 +323,12 @@ class _Rewrite(cst.CSTTransformer):
             return updated
         line = self.get_metadata(cst.metadata.PositionProvider, original).start.line
         if name not in self.scopes[-1][0]:
-            self.report.review.append(f"line {line}: await {name}.read() ({name} is not a known UploadFile)")
+            why = (
+                f"{name} is rebound in the loop around it"
+                if any(name in rebound for rebound in self._loop_rebound)
+                else f"{name} is not a known UploadFile"
+            )
+            self.report.review.append(f"line {line}: await {name}.read() ({why})")
             return updated
         self.report.rewritten.append(f"line {line}: await {name}.read()")
         new_call = cst.Call(func=cst.Name("read_upload"), args=[cst.Arg(cst.Name(name)), cst.Arg(cst.Name(CAP))])
