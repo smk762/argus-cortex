@@ -37,7 +37,7 @@ from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from argus_cortex.gpu import (
+from argus_cortex.gpu_lease import (
     DEFAULT_TIMEOUT_S,
     GpuCoordinator,
     GpuLease,
