@@ -30,7 +30,7 @@ def test_precedence_is_docs_then_pypi_then_demo_then_github():
 
 def test_known_fallbacks():
     assert link_for("argus-cortex") == "https://docs.dragonhound.dev/packages/cortex/"
-    assert link_for("argus-echo") == "https://pypi.org/project/argus-echo/"  # no docs page yet
+    assert link_for("argus-herald") == "https://pypi.org/project/argus-herald/"  # no docs page yet
     assert link_for("argus-studio") == "https://studio.dragonhound.dev"  # not on PyPI
     assert link_for("ai-code-auditor") == "https://github.com/smk762/ai-code-auditor"
     with pytest.raises(KeyError):
@@ -51,5 +51,8 @@ def test_every_link_is_https_and_every_package_has_its_repo():
 def test_json_carries_the_choice():
     doc = json.loads(suite_links_json())
     assert doc["precedence"] == list(PRECEDENCE)
-    assert doc["packages"]["argus-iris"]["best"] == {"kind": "pypi", "url": "https://pypi.org/project/argus-iris/"}
+    assert doc["packages"]["argus-iris"]["best"] == {
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/iris/",
+    }
     assert set(doc["packages"]) == set(PACKAGES)

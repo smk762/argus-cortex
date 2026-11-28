@@ -128,23 +128,23 @@
       }
     },
     "argus-echo": {
-      "docs": null,
+      "docs": "https://docs.dragonhound.dev/packages/echo/",
       "pypi": "https://pypi.org/project/argus-echo/",
       "demo": null,
       "github": "https://github.com/smk762/argus-echo",
       "best": {
-        "kind": "pypi",
-        "url": "https://pypi.org/project/argus-echo/"
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/echo/"
       }
     },
     "argus-iris": {
-      "docs": null,
+      "docs": "https://docs.dragonhound.dev/packages/iris/",
       "pypi": "https://pypi.org/project/argus-iris/",
       "demo": "https://iris.dragonhound.dev",
       "github": "https://github.com/smk762/argus-iris",
       "best": {
-        "kind": "pypi",
-        "url": "https://pypi.org/project/argus-iris/"
+        "kind": "docs",
+        "url": "https://docs.dragonhound.dev/packages/iris/"
       }
     },
     "argus-scout": {
