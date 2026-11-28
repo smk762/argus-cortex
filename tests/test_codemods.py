@@ -277,6 +277,53 @@ def test_a_rebound_upload_name_is_no_longer_an_upload(rebinding: str) -> None:
     assert [r.split(": ", 1)[1] for r in report.review] == ["await file.read() (file is not a known UploadFile)"]
 
 
+@pytest.mark.parametrize(
+    "loop",
+    [
+        "while True:\n        data = await file.read()\n        file = await next_part()",
+        "for part in parts:\n        data = await file.read()\n        file = part",
+        "while True:\n        data = await file.read()\n        if data:\n            file, rest = await split(data)",
+        "while True:\n        data = await file.read()\n        async with opener() as file:\n            pass",
+        "while True:\n        data = await file.read()\n        for file in parts:\n            pass",
+        "while (data := await file.read()) and (file := await next_part()):\n        pass",
+        "while True:\n        data = await file.read()\n        file = await file.read()",  # the rebinding value too
+    ],
+)
+def test_an_upload_rebound_later_in_a_loop_is_not_rewritten_earlier_in_it(loop: str) -> None:
+    """From the second pass, the read sees whatever the loop bound the name to: reviewed, never rewritten."""
+    code = f"async def f(file: UploadFile, parts):\n    {loop}\n"
+    new, report = read_upload.transform(code)
+    assert (new, report.rewritten) == (code, [])
+    assert report.review and all("file is rebound in the loop around it" in r for r in report.review)
+
+
+def test_a_loop_that_rebinds_other_names_or_its_own_target_still_caps_the_upload() -> None:
+    code = textwrap.dedent(
+        """\
+        async def f(file: UploadFile, files: list[UploadFile]):
+            before = await file.read()
+            while more():
+                data = await file.read()
+                total = len(data)
+                def helper():
+                    file = None
+            for up in files:
+                head = await up.read()
+                up = head
+        """
+    )
+    new, report = read_upload.transform(code)
+    assert report.review == [] and len(report.rewritten) == 3
+    assert "data = await read_upload(file, MAX_UPLOAD_BYTES)" in new
+    assert "head = await read_upload(up, MAX_UPLOAD_BYTES)" in new
+
+
+def test_after_the_loop_a_name_it_rebound_is_no_upload() -> None:
+    code = "async def f(file: UploadFile):\n    while x:\n        file = await nxt()\n    return await file.read()\n"
+    new, report = read_upload.transform(code)
+    assert (new, report.rewritten) == (code, [])
+
+
 def test_an_upload_reassigned_to_a_file_handle_is_not_rewritten() -> None:
     code = "async def f(file: UploadFile, path):\n    file = open(path, 'rb')\n    return await file.read()\n"
     new, report = read_upload.transform(code)

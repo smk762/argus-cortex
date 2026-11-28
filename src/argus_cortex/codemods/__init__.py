@@ -21,7 +21,8 @@ Run one over a repo's source, then review the diff::
   (:mod:`argus_cortex.limits`), adding the import and a ``MAX_UPLOAD_BYTES`` constant when the module
   has none. Mapping ``TooLarge`` to 413 and ``BadInput`` to 400 is left to the caller, and the summary
   says so. A read it leaves alone is listed as **REVIEW**: ``await x.read()`` where ``x`` isn't a known
-  upload, and an upload's ``read()`` with no ``await`` of its own (``asyncio.gather(*(f.read() for f in files))``).
+  upload (including one a surrounding loop rebinds anywhere in its body, which the read sees from the second pass),
+  and an upload's ``read()`` with no ``await`` of its own (``asyncio.gather(*(f.read() for f in files))``).
 
 ``net`` and ``auth`` have no codemod: their local shapes vary too much to rewrite without changing
 behaviour, and the argus-ci suite rules point at the helper instead.
