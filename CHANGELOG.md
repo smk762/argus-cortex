@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `PEER_NAME_PATTERN` now lives in the stdlib-only `peer_names` module, so `service` no longer imports `peers`.
+  `from argus_cortex.peers import PEER_NAME_PATTERN` still works.
+
 ### Fixed
 - `fs`: on Python 3.13 and later, `safe_join` and `is_within` accepted a path through a symlink loop (`loop`, `loop/x`,
   `loop/../link`). Such a path is refused on every version.

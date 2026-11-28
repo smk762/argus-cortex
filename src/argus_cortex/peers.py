@@ -41,6 +41,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from argus_cortex import settings
+from argus_cortex.peer_names import PEER_NAME_PATTERN
 
 __all__ = [
     "OFF",
@@ -57,8 +58,6 @@ __all__ = [
 _log = logging.getLogger(__name__)
 
 OFF = frozenset({"off", "none"})
-PEER_NAME_PATTERN = r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-"""A peer name: lower-case letters and digits, in words joined by single hyphens (``nudenet``, ``echo-xtts``)."""
 _PEER_NAME = re.compile(PEER_NAME_PATTERN)
 
 
@@ -181,7 +180,7 @@ def _client_kwargs(token: str) -> dict[str, Any]:
 
 def _from_reply(name: str, status: int, body: Callable[[], Any]) -> tuple[Peer | None, str | None]:
     """The peer a directory reply names, or the reason there is none."""
-    from argus_cortex.service import PeerLookup  # noqa: PLC0415 - service imports this module
+    from argus_cortex.service import PeerLookup  # noqa: PLC0415 - peers stays pydantic-free without discovery
 
     if status == 404:
         return None, "the directory lists no reachable one"
