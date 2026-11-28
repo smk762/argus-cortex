@@ -15,7 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ratings and its `argus:ContentRating` XMP field.
 - `suite_links`: every package's links (docs, PyPI, demo, GitHub) and the one to use, in that order (`link_for`,
   `PACKAGES`), committed as `suite-links.json` for non-Python readers such as dragonhound.dev. argus-echo, argus-iris and
-  argus-herald link to their docs pages (smk762/argus-handbook#28, #29, #30), and argus-retina has an entry.
+  argus-herald link to their docs pages (smk762/argus-handbook#28, #29, #30), argus-retina has an entry, and
+  ai-code-auditor links to its docs page (smk762/argus-handbook#35).
 ### Changed
 - `PEER_NAME_PATTERN` now lives in the stdlib-only `peer_names` module, so `service` no longer imports `peers`.
   `from argus_cortex.peers import PEER_NAME_PATTERN` still works.
