@@ -89,7 +89,8 @@ PACKAGES: dict[str, PackageLinks] = {
         _package("argus-echo", docs="echo"),
         _package("argus-iris", docs="iris", demo="iris"),
         _package("argus-scout", docs="scout"),
-        _package("argus-herald"),
+        _package("argus-herald", docs="herald"),
+        _package("argus-retina", docs="retina", pypi=False),
         _package("argus-studio", pypi=False, demo="studio"),
         _package("ai-code-auditor", pypi=False),
     )
